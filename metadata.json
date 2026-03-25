@@ -1,0 +1,5 @@
+{
+  "name": "HudumaLink Kenya",
+  "description": "A digital marketplace platform connecting service providers and sellers with customers in Kenya.",
+  "requestFramePermissions": ["geolocation"]
+}

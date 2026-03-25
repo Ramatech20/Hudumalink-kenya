@@ -1,0 +1,164 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the platform (Customer, Provider, or Seller)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phoneNumber": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "provider", "seller", "admin"] },
+        "location": {
+          "type": "object",
+          "properties": {
+            "county": { "type": "string" },
+            "town": { "type": "string" }
+          }
+        },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "isVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Listing": {
+      "title": "Listing",
+      "description": "A service or product listing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "type": { "type": "string", "enum": ["service", "product"] },
+        "category": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "location": {
+          "type": "object",
+          "properties": {
+            "county": { "type": "string" },
+            "town": { "type": "string" }
+          }
+        },
+        "contact": {
+          "type": "object",
+          "properties": {
+            "phone": { "type": "string" },
+            "whatsapp": { "type": "string" }
+          }
+        },
+        "status": { "type": "string", "enum": ["active", "pending", "sold", "removed"] },
+        "isFeatured": { "type": "boolean" },
+        "viewCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "title", "type", "category", "status"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A review for a user or listing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorId": { "type": "string" },
+        "targetId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "targetId", "rating"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "A conversation between two users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message in a chat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "chatId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["chatId", "senderId", "text"]
+    },
+    "UserKYC": {
+      "title": "UserKYC",
+      "description": "Sensitive identity verification data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "idType": { "type": "string" },
+        "idNumber": { "type": "string" },
+        "idFrontUrl": { "type": "string" },
+        "idBackUrl": { "type": "string" },
+        "selfieUrl": { "type": "string" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "rejectionReason": { "type": "string" }
+      },
+      "required": ["uid", "idType", "idNumber", "idFrontUrl", "selfieUrl", "submittedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification for a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error", "message", "request"] },
+        "read": { "type": "boolean" },
+        "link": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/users/{userId}/kyc/data": {
+      "schema": "UserKYC",
+      "description": "Sensitive KYC data"
+    },
+    "/listings/{listingId}": {
+      "schema": "Listing",
+      "description": "Marketplace listings"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "User and listing reviews"
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Chat sessions"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a chat"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications"
+    }
+  }
+}

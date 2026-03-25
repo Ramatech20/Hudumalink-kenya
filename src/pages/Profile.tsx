@@ -1,0 +1,677 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../AuthContext';
+import { db, storage } from '../firebase';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Listing, User, Transaction } from '../types';
+import { formatPrice, formatDate, cn } from '../lib/utils';
+import { Link, useNavigate } from 'react-router-dom';
+import { Settings, Package, Briefcase, Star, MapPin, Edit3, ShieldCheck, Trash2, Camera, Loader2, Zap, Gift, Shield, TrendingUp, ShoppingBag, Truck, ChevronRight, CheckCircle2, Clock, X, Wallet, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'motion/react';
+import { KENYAN_COUNTIES, TOWNS } from '../constants';
+
+const Profile = () => {
+  const { user } = useAuth();
+  const [myListings, setMyListings] = useState<Listing[]>([]);
+  const [myOrders, setMyOrders] = useState<Transaction[]>([]);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawMethod, setWithdrawMethod] = useState<'mpesa' | 'bank'>('mpesa');
+  const [withdrawDetails, setWithdrawDetails] = useState({ phoneNumber: '', bankName: '', accountNumber: '' });
+  const [submittingWithdraw, setSubmittingWithdraw] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editData, setEditData] = useState({
+    displayName: user?.displayName || '',
+    phoneNumber: user?.phoneNumber || '',
+    county: user?.location?.county || '',
+    town: user?.location?.town || '',
+    role: user?.role || 'customer',
+    photoURL: user?.photoURL || ''
+  });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return;
+      try {
+        // Fetch Listings
+        const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
+        const listingsSnapshot = await getDocs(listingsQ);
+        setMyListings(listingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing)));
+
+        // Fetch Orders (Transactions as Buyer)
+        const ordersQ = query(collection(db, 'transactions'), where('buyerId', '==', user.uid));
+        const ordersSnapshot = await getDocs(ordersQ);
+        setMyOrders(ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction)));
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [user]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploading(true);
+    try {
+      const storageRef = ref(storage, `profiles/${user.uid}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      setEditData(prev => ({ ...prev, photoURL: downloadURL }));
+      
+      // If not in editing mode, update immediately
+      if (!isEditing) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          photoURL: downloadURL
+        });
+        toast.success('Profile picture updated!');
+      }
+    } catch (error: any) {
+      toast.error('Failed to upload image: ' + error.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        displayName: editData.displayName,
+        phoneNumber: editData.phoneNumber,
+        location: {
+          county: editData.county,
+          town: editData.town
+        },
+        role: editData.role,
+        photoURL: editData.photoURL
+      });
+      toast.success('Profile updated successfully!');
+      setIsEditing(false);
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !withdrawAmount) return;
+
+    const amount = parseFloat(withdrawAmount);
+    if (amount > ((user as any).escrowBalance || 0)) {
+      toast.error('Insufficient balance');
+      return;
+    }
+
+    setSubmittingWithdraw(true);
+    try {
+      const withdrawalData = {
+        userId: user.uid,
+        userName: user.displayName,
+        amount,
+        method: withdrawMethod,
+        details: withdrawMethod === 'mpesa' 
+          ? { phoneNumber: withdrawDetails.phoneNumber }
+          : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber },
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, 'withdrawals'), withdrawalData);
+      
+      toast.success('Withdrawal request submitted. Processing takes 24-48 hours.');
+      setShowWithdrawModal(false);
+      setWithdrawAmount('');
+    } catch (error: any) {
+      toast.error('Failed to submit withdrawal: ' + error.message);
+    } finally {
+      setSubmittingWithdraw(false);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Sidebar */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-gray-100 dark:border-neutral-800 shadow-sm text-center transition-colors">
+            <div className="relative inline-block mb-4 group">
+              <div className="relative w-24 h-24 mx-auto">
+                {uploading ? (
+                  <div className="w-24 h-24 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center border-4 border-gray-50 dark:border-neutral-800">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                ) : user.photoURL || editData.photoURL ? (
+                  <img src={editData.photoURL || user.photoURL} alt={user.displayName} className="w-24 h-24 rounded-full object-cover border-4 border-gray-50 dark:border-neutral-800" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-24 h-24 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center text-gray-400 dark:text-gray-500 border-4 border-gray-50 dark:border-neutral-800 transition-colors">
+                    <Star className="w-10 h-10" />
+                  </div>
+                )}
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full border-2 border-white dark:border-neutral-900 shadow-lg hover:scale-110 transition-transform"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+              </div>
+              <input 
+                type="file" 
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
+              {user.isVerified && (
+                <div className="absolute top-0 right-0 bg-primary text-white p-1 rounded-full border-2 border-white dark:border-neutral-900">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{user.displayName}</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{user.role}</p>
+            <div className="flex items-center justify-center mt-2 text-yellow-500">
+              <Star className="w-4 h-4 fill-current" />
+              <span className="text-sm font-bold ml-1">{user.rating || 'New'}</span>
+            </div>
+
+            <Link 
+              to="/seller-dashboard"
+              className="mt-4 w-full flex items-center justify-center space-x-2 bg-primary/10 text-primary py-3 rounded-xl text-sm font-bold hover:bg-primary/20 transition-all"
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>View Seller Analytics</span>
+            </Link>
+
+            {/* Referral & Escrow Stats */}
+            <div className="mt-6 pt-6 border-t border-gray-100 dark:border-neutral-800 grid grid-cols-1 gap-4 text-left">
+              <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-2xl">
+                <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
+                  <Gift className="w-3 h-3 mr-1" /> Referral Code
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-gray-900 dark:text-white font-mono">{(user as any).referralCode}</span>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText((user as any).referralCode);
+                      toast.success('Code copied!');
+                    }}
+                    className="text-[10px] text-primary font-bold uppercase hover:underline"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+              <div className="bg-primary/5 p-4 rounded-2xl">
+                <div className="flex items-center text-primary text-xs mb-1 font-bold">
+                  <Shield className="w-3 h-3 mr-1" /> Escrow Balance
+                </div>
+                <div className="flex items-end justify-between">
+                  <span className="text-xl font-bold text-gray-900 dark:text-white">
+                    {formatPrice((user as any).escrowBalance || 0)}
+                  </span>
+                  <button 
+                    onClick={() => setShowWithdrawModal(true)}
+                    className="text-[10px] text-primary font-bold uppercase hover:underline"
+                  >
+                    Withdraw
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">Funds from completed sales</p>
+              </div>
+              <div className="bg-secondary/5 p-4 rounded-2xl">
+                <div className="flex items-center text-secondary text-xs mb-1 font-bold">
+                  <Gift className="w-3 h-3 mr-1" /> Referral Earnings
+                </div>
+                <span className="text-xl font-bold text-gray-900 dark:text-white">
+                  {formatPrice((user as any).referralEarnings || 0)}
+                </span>
+              </div>
+              <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-2xl">
+                <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
+                  <Shield className="w-3 h-3 mr-1" /> Identity Verification
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={cn(
+                    "text-xs font-bold uppercase",
+                    user.kycStatus === 'verified' ? "text-green-500" : 
+                    user.kycStatus === 'pending' ? "text-yellow-500" : 
+                    user.kycStatus === 'rejected' ? "text-red-500" : "text-gray-400"
+                  )}>
+                    {user.kycStatus || 'Not Verified'}
+                  </span>
+                  {user.kycStatus !== 'verified' && (
+                    <Link to="/kyc" className="text-[10px] text-primary font-bold uppercase hover:underline">
+                      {user.kycStatus === 'pending' ? 'View' : 'Verify'}
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setIsEditing(!isEditing)}
+              className="mt-6 w-full flex items-center justify-center space-x-2 border border-gray-200 dark:border-neutral-800 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-neutral-800 text-gray-700 dark:text-gray-300 transition-all"
+            >
+              <Settings className="w-4 h-4" />
+              <span>Edit Profile</span>
+            </button>
+          </div>
+
+          <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">Account Stats</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 dark:text-gray-400 text-sm">Total Listings</span>
+                <span className="font-bold text-gray-900 dark:text-gray-100">{myListings.length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 dark:text-gray-400 text-sm">Member Since</span>
+                <span className="font-bold text-gray-900 dark:text-gray-100">{new Date(user.createdAt).getFullYear()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="lg:col-span-3 space-y-8">
+          {isEditing ? (
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+              <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-900 dark:text-gray-100">
+                <Edit3 className="w-6 h-6 mr-2 text-primary" /> Edit Profile
+              </h2>
+              <form onSubmit={handleUpdateProfile} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Display Name</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.displayName}
+                    onChange={(e) => setEditData({...editData, displayName: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
+                  <input 
+                    type="tel" 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.phoneNumber}
+                    onChange={(e) => setEditData({...editData, phoneNumber: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">County</label>
+                  <select 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.county}
+                    onChange={(e) => setEditData({...editData, county: e.target.value, town: ''})}
+                  >
+                    <option value="" className="dark:bg-neutral-900">Select County</option>
+                    {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Town</label>
+                  <select 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.town}
+                    onChange={(e) => setEditData({...editData, town: e.target.value})}
+                  >
+                    <option value="" className="dark:bg-neutral-900">Select Town</option>
+                    {editData.county && TOWNS[editData.county]?.map(t => <option key={t} value={t} className="dark:bg-neutral-900">{t}</option>)}
+                  </select>
+                </div>
+                <div className="md:col-span-2 flex space-x-4 pt-4">
+                  <button type="submit" className="bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all">
+                    Save Changes
+                  </button>
+                  <button type="button" onClick={() => setIsEditing(false)} className="bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-300 px-8 py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Listings Management */}
+              <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-bold flex items-center text-gray-900 dark:text-gray-100">
+                    <Package className="w-6 h-6 mr-2 text-primary" /> My Listings
+                  </h2>
+                  <Link to="/create-listing" className="text-primary font-bold hover:underline">
+                    + Post New Listing
+                  </Link>
+                </div>
+
+                {loading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-50 dark:bg-neutral-800 animate-pulse rounded-xl"></div>)}
+                  </div>
+                ) : myListings.length > 0 ? (
+                  <div className="space-y-4">
+                    {myListings.map((listing) => (
+                      <div key={listing.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800 hover:border-primary dark:hover:border-primary transition-all">
+                        <div className="flex items-center space-x-4">
+                          <img src={listing.images[0]} alt="" className="w-16 h-16 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                          <div>
+                            <h3 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1">{listing.title}</h3>
+                            <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase mr-2",
+                                listing.status === 'active' ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-gray-200 dark:bg-neutral-700 text-gray-600 dark:text-gray-400"
+                              )}>
+                                {listing.status}
+                              </span>
+                              {listing.isPromoted && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase mr-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 flex items-center">
+                                  <Zap className="w-3 h-3 mr-1" /> PROMOTED
+                                </span>
+                              )}
+                              <span>{formatDate(listing.createdAt)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {listing.status === 'active' && !listing.isPromoted && (
+                            <button 
+                              onClick={async () => {
+                                try {
+                                  // In a real app, this would trigger M-Pesa STK Push
+                                  await updateDoc(doc(db, 'listings', listing.id), { isPromoted: true });
+                                  setMyListings(prev => prev.map(l => l.id === listing.id ? { ...l, isPromoted: true } : l));
+                                  toast.success('Listing promoted! It will now appear higher in search results.');
+                                } catch (error) {
+                                  toast.error('Failed to promote listing');
+                                }
+                              }}
+                              className="px-3 py-1 bg-yellow-500 text-white rounded-lg text-xs font-bold hover:bg-yellow-600 transition-colors flex items-center"
+                            >
+                              <Zap className="w-3 h-3 mr-1" /> Promote
+                            </button>
+                          )}
+                          {listing.status === 'active' && (
+                            <button 
+                              onClick={async () => {
+                                try {
+                                  await updateDoc(doc(db, 'listings', listing.id), { status: 'sold' });
+                                  setMyListings(prev => prev.map(l => l.id === listing.id ? { ...l, status: 'sold' } : l));
+                                  toast.success('Listing marked as sold!');
+                                } catch (error) {
+                                  toast.error('Failed to update listing');
+                                }
+                              }}
+                              className="px-3 py-1 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 transition-colors"
+                            >
+                              Mark Sold
+                            </button>
+                          )}
+                          <Link to={`/listing/${listing.id}`} className="p-2 text-gray-400 hover:text-primary transition-colors">
+                            <Edit3 className="w-5 h-5" />
+                          </Link>
+                          <button 
+                            onClick={async () => {
+                              if (window.confirm('Are you sure you want to delete this listing?')) {
+                                try {
+                                  await updateDoc(doc(db, 'listings', listing.id), { status: 'removed' });
+                                  setMyListings(prev => prev.map(l => l.id === listing.id ? { ...l, status: 'removed' } : l));
+                                  toast.success('Listing removed');
+                                } catch (error) {
+                                  toast.error('Failed to remove listing');
+                                }
+                              }
+                            }}
+                            className="p-2 text-gray-400 hover:text-secondary transition-colors"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p>You haven't posted any listings yet.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Reviews Section */}
+              <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+                <h2 className="text-2xl font-bold mb-8 flex items-center text-gray-900 dark:text-gray-100">
+                  <Star className="w-6 h-6 mr-2 text-yellow-500" /> Reviews & Ratings
+                </h2>
+                <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                  <p>No reviews yet. Complete transactions to build your reputation!</p>
+                </div>
+              </div>
+
+              {/* Orders & Tracking */}
+              <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-bold flex items-center text-gray-900 dark:text-gray-100">
+                    <ShoppingBag className="w-6 h-6 mr-2 text-primary" /> My Orders & Tracking
+                  </h2>
+                </div>
+
+                {loading ? (
+                  <div className="space-y-4">
+                    {[1, 2].map(i => <div key={i} className="h-20 bg-gray-50 dark:bg-neutral-800 animate-pulse rounded-xl"></div>)}
+                  </div>
+                ) : myOrders.length > 0 ? (
+                  <div className="space-y-4">
+                    {myOrders.map((order) => (
+                      <div key={order.id} className="p-6 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800 hover:border-primary dark:hover:border-primary transition-all">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex items-center space-x-4">
+                            <div className="p-3 bg-primary/10 rounded-xl">
+                              <Package className="w-6 h-6 text-primary" />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-gray-900 dark:text-gray-100">Order #{order.id.slice(0, 8)}</h3>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Amount: {formatPrice(order.amount)} • {formatDate(order.createdAt)}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-3">
+                            <div className={cn(
+                              "flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase",
+                              order.status === 'completed' ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
+                              order.status === 'deposited' ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" :
+                              "bg-gray-200 dark:bg-neutral-700 text-gray-600 dark:text-gray-400"
+                            )}>
+                              {order.status === 'completed' ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <Clock className="w-3 h-3 mr-1" />}
+                              {order.status}
+                            </div>
+                            
+                            {(order as any).delivery && (
+                              <div className="flex items-center text-xs font-bold text-secondary">
+                                <Truck className="w-4 h-4 mr-1" />
+                                <span>{(order as any).delivery.provider}</span>
+                              </div>
+                            )}
+                            
+                            <Link to={`/listing/${order.listingId}`} className="p-2 text-gray-400 hover:text-primary transition-colors">
+                              <ChevronRight className="w-5 h-5" />
+                            </Link>
+                          </div>
+                        </div>
+                        
+                        {(order as any).milestones && (
+                          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-neutral-800">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Milestone Progress</p>
+                            <div className="flex gap-2">
+                              {(order as any).milestones.map((m: any, idx: number) => (
+                                <div key={idx} className="flex-1 h-1.5 bg-gray-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+                                  <div className={cn(
+                                    "h-full transition-all",
+                                    m.status === 'released' ? "bg-green-500 w-full" :
+                                    m.status === 'completed' ? "bg-blue-500 w-full" : "bg-gray-300 dark:bg-neutral-600 w-0"
+                                  )} />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <ShoppingBag className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p>No orders yet. Start shopping to see your tracking info here!</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      {/* Withdrawal Modal */}
+      <AnimatePresence>
+        {showWithdrawModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowWithdrawModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white dark:bg-neutral-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 dark:border-neutral-800 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                  <Wallet className="w-5 h-5 mr-2 text-primary" /> Withdraw Funds
+                </h3>
+                <button onClick={() => setShowWithdrawModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <form onSubmit={handleWithdraw} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount (KSh)</label>
+                  <input 
+                    type="number"
+                    required
+                    min="100"
+                    max={user?.escrowBalance || 0}
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    placeholder="Enter amount to withdraw"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
+                  />
+                  <p className="text-[10px] text-neutral-500 mt-1">Available: KSh {user?.escrowBalance?.toLocaleString() || 0}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Withdrawal Method</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setWithdrawMethod('mpesa')}
+                      className={cn(
+                        "py-3 rounded-xl border font-medium transition-all",
+                        withdrawMethod === 'mpesa' 
+                          ? "bg-primary/10 border-primary text-primary" 
+                          : "border-gray-200 dark:border-neutral-800 text-gray-500"
+                      )}
+                    >
+                      M-Pesa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWithdrawMethod('bank')}
+                      className={cn(
+                        "py-3 rounded-xl border font-medium transition-all",
+                        withdrawMethod === 'bank' 
+                          ? "bg-primary/10 border-primary text-primary" 
+                          : "border-gray-200 dark:border-neutral-800 text-gray-500"
+                      )}
+                    >
+                      Bank Transfer
+                    </button>
+                  </div>
+                </div>
+
+                {withdrawMethod === 'mpesa' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">M-Pesa Phone Number</label>
+                    <input 
+                      type="tel"
+                      required
+                      value={withdrawDetails.phoneNumber}
+                      onChange={(e) => setWithdrawDetails({...withdrawDetails, phoneNumber: e.target.value})}
+                      placeholder="e.g. 0712345678"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bank Name</label>
+                      <input 
+                        type="text"
+                        required
+                        value={withdrawDetails.bankName}
+                        onChange={(e) => setWithdrawDetails({...withdrawDetails, bankName: e.target.value})}
+                        placeholder="e.g. Equity Bank"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Account Number</label>
+                      <input 
+                        type="text"
+                        required
+                        value={withdrawDetails.accountNumber}
+                        onChange={(e) => setWithdrawDetails({...withdrawDetails, accountNumber: e.target.value})}
+                        placeholder="Enter account number"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <button 
+                    type="submit"
+                    disabled={submittingWithdraw || !withdrawAmount}
+                    className="w-full bg-primary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {submittingWithdraw ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      'Submit Request'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default Profile;
