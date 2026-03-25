@@ -36,39 +36,81 @@ const Home = () => {
   return (
     <div className="space-y-16 pb-20">
       {/* Hero Section */}
-      <section className="relative h-[500px] flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img 
-            src="https://images.unsplash.com/photo-1523800503107-5bc3ba2a6f81?auto=format&fit=crop&w=1920&q=80" 
-            alt="Nairobi Skyline" 
-            className="w-full h-full object-cover brightness-50"
-            referrerPolicy="no-referrer"
-          />
+      <section className="relative min-h-[600px] flex items-center justify-center overflow-hidden bg-neutral-950">
+        {/* Background Image Grid */}
+        <div className="absolute inset-0 z-0 grid grid-cols-2 md:grid-cols-4 opacity-50">
+          <div className="relative h-full overflow-hidden border-r border-white/5">
+            <img 
+              src="https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&q=80&w=800" 
+              alt="Kenyan Technician" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent opacity-60"></div>
+          </div>
+          <div className="relative h-full overflow-hidden border-r border-white/5">
+            <img 
+              src="https://images.unsplash.com/photo-1556740738-b6a63e27c4df?auto=format&fit=crop&q=80&w=800" 
+              alt="Kenyan Seller" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent opacity-60"></div>
+          </div>
+          <div className="relative h-full overflow-hidden border-r border-white/5">
+            <img 
+              src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=800" 
+              alt="Kenyan Buyer" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent opacity-60"></div>
+          </div>
+          <div className="relative h-full overflow-hidden">
+            <img 
+              src="https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&q=80&w=800" 
+              alt="Kenyan Freelancer" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent opacity-60"></div>
+          </div>
         </div>
+
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-neutral-950/40 z-5"></div>
         
-        <div className="relative z-10 max-w-4xl mx-auto px-4 text-center text-white">
+        <div className="relative z-10 max-w-5xl mx-auto px-4 text-center text-white py-20">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full text-sm font-bold mb-8"
+          >
+            <Zap className="w-4 h-4 text-secondary" />
+            <span>Kenya's #1 Trusted Marketplace</span>
+          </motion.div>
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6"
+            className="text-5xl md:text-7xl font-black tracking-tight mb-8 leading-[1.1]"
           >
-            Find Anything, Hire Anyone in <span className="text-secondary">Kenya</span>
+            Find Anything, Hire Anyone in <span className="text-primary">Kenya</span> 🇰🇪
           </motion.h1>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-lg md:text-xl text-gray-200 mb-8 max-w-2xl mx-auto"
+            className="text-xl md:text-2xl text-gray-200 mb-12 max-w-3xl mx-auto font-medium leading-relaxed"
           >
-            The digital marketplace connecting service providers and sellers with customers across all 47 counties.
+            Connecting skilled fundis, local sellers, and digital freelancers with customers across all 47 counties.
           </motion.p>
 
           <motion.form 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             onSubmit={handleSearch}
-            className="bg-white dark:bg-neutral-900 p-2 rounded-2xl shadow-2xl flex flex-col md:flex-row items-center gap-2 transition-colors"
+            className="bg-white dark:bg-neutral-900 p-3 rounded-[2rem] shadow-2xl flex flex-col md:flex-row items-center gap-3 transition-all max-w-4xl mx-auto border border-white/10"
           >
             <div className="flex-grow flex items-center px-4 w-full">
               <Search className="w-5 h-5 text-gray-400 mr-2" />
