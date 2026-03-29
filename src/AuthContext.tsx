@@ -54,23 +54,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unsubscribeSnapshot = onSnapshot(doc(db, 'users', firebaseUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
             const userData = docSnap.data() as User;
-            setUser(userData);
+            
+            // One-time upgrade for bootstrap admin
+            if (firebaseUser.email === 'ramadhanwambia83@gmail.com' && userData.role !== 'admin') {
+              try {
+                await updateDoc(doc(db, 'users', firebaseUser.uid), {
+                  role: 'admin',
+                  isVerified: true
+                });
+                setUser({ ...userData, role: 'admin', isVerified: true });
+              } catch (error) {
+                console.error("Failed to upgrade admin role:", error);
+                setUser(userData);
+              }
+            } else {
+              setUser(userData);
+            }
           } else {
             // Create a default profile if it doesn't exist
+            const isAdminEmail = firebaseUser.email === 'ramadhanwambia83@gmail.com';
             const newUser: User = {
               uid: firebaseUser.uid,
               displayName: firebaseUser.displayName || 'Anonymous User',
               email: firebaseUser.email || '',
               photoURL: firebaseUser.photoURL || '',
-              role: 'customer',
-              isVerified: false,
-              referralCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+              role: isAdminEmail ? 'admin' : 'customer',
+              isVerified: isAdminEmail, // Auto-verify the admin
+              referralCode: firebaseUser.uid.substring(0, 6).toUpperCase(),
               referralEarnings: 0,
               escrowBalance: 0,
               emailVerified: firebaseUser.emailVerified,
               createdAt: new Date().toISOString(),
             };
-            await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+            await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
             setUser(newUser);
           }
           setLoading(false);

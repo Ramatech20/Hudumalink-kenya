@@ -32,18 +32,20 @@ const Auth = () => {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (!userDoc.exists()) {
         const newReferralCode = user.uid.substring(0, 6).toUpperCase();
+        const isAdminEmail = user.email === 'ramadhanwambia83@gmail.com';
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
-          displayName: user.displayName,
+          displayName: user.displayName || 'Anonymous User',
           email: user.email,
-          photoURL: user.photoURL,
-          role: 'customer',
+          photoURL: user.photoURL || '',
+          role: isAdminEmail ? 'admin' : 'customer',
+          isVerified: isAdminEmail,
           referralCode: newReferralCode,
           referralEarnings: 0,
           escrowBalance: 0,
           emailVerified: user.emailVerified,
           createdAt: new Date().toISOString(),
-        });
+        }, { merge: true });
       }
       toast.success('Successfully signed in!');
       navigate('/');
@@ -85,19 +87,22 @@ const Auth = () => {
 
         const result = await createUserWithEmailAndPassword(auth, email, password);
         const newReferralCode = result.user.uid.substring(0, 6).toUpperCase();
+        const isAdminEmail = email === 'ramadhanwambia83@gmail.com';
         
         await setDoc(doc(db, 'users', result.user.uid), {
           uid: result.user.uid,
-          displayName,
+          displayName: displayName || 'Anonymous User',
           email,
-          role,
+          photoURL: '',
+          role: isAdminEmail ? 'admin' : role,
+          isVerified: isAdminEmail,
           referralCode: newReferralCode,
           referredBy,
           referralEarnings: 0,
           escrowBalance: 0,
           emailVerified: false,
           createdAt: new Date().toISOString(),
-        });
+        }, { merge: true });
 
         await sendEmailVerification(result.user);
         toast.success('Account created! Please check your email for verification.');
