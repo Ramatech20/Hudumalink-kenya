@@ -1,295 +1,413 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-import { db, auth } from '../firebase';
-import { Listing, Transaction, SellerStats } from '../types';
-import { formatPrice } from '../lib/utils';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  LineChart, Line, PieChart, Pie, Cell 
-} from 'recharts';
-import { 
-  TrendingUp, Users, ShoppingBag, DollarSign, Eye, MessageSquare, 
-  ArrowUpRight, ArrowDownRight, Calendar, Package, ChevronRight 
-} from 'lucide-react';
-import { motion } from 'motion/react';
+import { useAuth } from '../AuthContext';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, orderBy, limit, addDoc } from 'firebase/firestore';
+import { Listing, Transaction, Appeal } from '../types';
+import { formatPrice, formatDate, cn } from '../lib/utils';
+import { TrendingUp, ShoppingBag, Eye, MousePointer2, Package, ArrowUpRight, ArrowDownRight, Loader2, Calendar, Zap, AlertTriangle, Scale, X } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const SellerDashboard = () => {
-  const [stats, setStats] = useState<SellerStats>({
+  const { user } = useAuth();
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [sales, setSales] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAppealModal, setShowAppealModal] = useState(false);
+  const [appealReason, setAppealReason] = useState('');
+  const [submittingAppeal, setSubmittingAppeal] = useState(false);
+  const [stats, setStats] = useState({
+    totalEarnings: 0,
     totalViews: 0,
-    totalInquiries: 0,
     totalSales: 0,
-    revenue: 0,
     activeListings: 0
   });
-  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      if (!auth.currentUser) return;
-
+    const fetchData = async () => {
+      if (!user) return;
       try {
-        // Fetch listings to get total views and active count
-        const listingsQuery = query(
-          collection(db, 'listings'),
-          where('authorId', '==', auth.currentUser.uid)
-        );
-        const listingsSnapshot = await getDocs(listingsQuery);
-        const listings = listingsSnapshot.docs.map(doc => doc.data() as Listing);
-        
-        const totalViews = listings.reduce((acc, curr) => acc + (curr.viewCount || 0), 0);
-        const activeListings = listings.filter(l => l.status === 'active').length;
+        // Fetch Listings
+        const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
+        const listingsSnapshot = await getDocs(listingsQ);
+        const fetchedListings = listingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
+        setListings(fetchedListings);
 
-        // Fetch transactions for sales and revenue
-        const transactionsQuery = query(
-          collection(db, 'transactions'),
-          where('sellerId', '==', auth.currentUser.uid),
+        // Fetch Sales
+        const salesQ = query(
+          collection(db, 'transactions'), 
+          where('sellerId', '==', user.uid),
+          where('status', '==', 'completed'),
           orderBy('createdAt', 'desc')
         );
-        const transactionsSnapshot = await getDocs(transactionsQuery);
-        const transactions = transactionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-        
-        const totalSales = transactions.filter(t => t.status === 'completed' || t.status === 'released').length;
-        const revenue = transactions
-          .filter(t => t.status === 'completed' || t.status === 'released')
-          .reduce((acc, curr) => acc + curr.amount, 0);
+        const salesSnapshot = await getDocs(salesQ);
+        const fetchedSales = salesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+        setSales(fetchedSales);
+
+        // Calculate Stats
+        const totalEarnings = fetchedSales.reduce((sum, sale) => sum + sale.amount, 0);
+        const totalViews = fetchedListings.reduce((sum, l) => sum + (l.viewCount || 0), 0);
+        const activeListings = fetchedListings.filter(l => l.status === 'active').length;
 
         setStats({
+          totalEarnings,
           totalViews,
-          totalInquiries: totalViews * 0.15, // Mock inquiry rate
-          totalSales,
-          revenue,
+          totalSales: fetchedSales.length,
           activeListings
         });
-        setRecentTransactions(transactions.slice(0, 5));
       } catch (error) {
-        console.error("Error fetching dashboard stats:", error);
+        console.error(error);
       } finally {
         setLoading(false);
       }
     };
+    fetchData();
+  }, [user]);
 
-    fetchStats();
-  }, []);
-
+  // Mock data for the chart
   const chartData = [
-    { name: 'Mon', views: 400, sales: 240 },
-    { name: 'Tue', views: 300, sales: 139 },
-    { name: 'Wed', views: 200, sales: 980 },
-    { name: 'Thu', views: 278, sales: 390 },
-    { name: 'Fri', views: 189, sales: 480 },
-    { name: 'Sat', views: 239, sales: 380 },
-    { name: 'Sun', views: 349, sales: 430 },
+    { name: 'Mon', views: 400, earnings: 2400 },
+    { name: 'Tue', views: 300, earnings: 1398 },
+    { name: 'Wed', views: 200, earnings: 9800 },
+    { name: 'Thu', views: 278, earnings: 3908 },
+    { name: 'Fri', views: 189, earnings: 4800 },
+    { name: 'Sat', views: 239, earnings: 3800 },
+    { name: 'Sun', views: 349, earnings: 4300 },
   ];
 
-  const COLORS = ['#00C49F', '#FFBB28', '#FF8042', '#0088FE'];
+  const handleAppeal = async () => {
+    if (!user || !appealReason.trim()) return;
+    setSubmittingAppeal(true);
+    try {
+      const appeal: Omit<Appeal, 'id'> = {
+        userId: user.uid,
+        reason: appealReason,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'appeals'), appeal);
+      toast.success('Appeal submitted successfully. Our team will review it.');
+      setShowAppealModal(false);
+      setAppealReason('');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to submit appeal');
+    } finally {
+      setSubmittingAppeal(false);
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 dark:text-white">Seller Dashboard</h1>
-          <p className="text-gray-500 dark:text-gray-400">Track your business performance and growth.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Seller Dashboard</h1>
+          <p className="text-gray-500 dark:text-gray-400">Track your performance and earnings</p>
         </div>
-        <div className="flex items-center gap-2 bg-white dark:bg-neutral-900 p-2 rounded-2xl border border-gray-100 dark:border-neutral-800">
-          <Calendar className="w-5 h-5 text-gray-400 ml-2" />
-          <select className="bg-transparent border-none text-sm font-bold text-gray-700 dark:text-gray-300 focus:ring-0">
-            <option>Last 7 Days</option>
-            <option>Last 30 Days</option>
-            <option>All Time</option>
-          </select>
+        <div className="flex items-center space-x-3">
+          <button className="flex items-center space-x-2 px-4 py-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all">
+            <Calendar className="w-4 h-4" />
+            <span>Last 7 Days</span>
+          </button>
+          <Link to="/create-listing" className="bg-primary text-white px-6 py-2 rounded-xl font-bold hover:bg-opacity-90 transition-all">
+            Post New Listing
+          </Link>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: 'Total Revenue', value: formatPrice(stats.revenue), icon: <DollarSign />, color: 'text-green-500', trend: '+12.5%' },
-          { label: 'Total Views', value: stats.totalViews.toLocaleString(), icon: <Eye />, color: 'text-blue-500', trend: '+5.2%' },
-          { label: 'Total Sales', value: stats.totalSales, icon: <ShoppingBag />, color: 'text-primary', trend: '+8.1%' },
-          { label: 'Active Listings', value: stats.activeListings, icon: <Package />, color: 'text-accent', trend: '0%' },
-        ].map((stat, i) => (
-          <motion.div 
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div className={`p-3 rounded-2xl bg-gray-50 dark:bg-neutral-800 ${stat.color}`}>
-                {stat.icon}
-              </div>
-              <div className={`flex items-center text-xs font-bold ${stat.trend.startsWith('+') ? 'text-green-500' : 'text-gray-400'}`}>
-                {stat.trend.startsWith('+') ? <ArrowUpRight className="w-3 h-3 mr-1" /> : <TrendingUp className="w-3 h-3 mr-1" />}
-                {stat.trend}
-              </div>
+      {/* Flagged Warning */}
+      {user?.isFlagged && (
+        <div className="mb-8 p-6 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600">
+              <AlertTriangle className="w-6 h-6" />
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{stat.label}</p>
-            <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{stat.value}</p>
-          </motion.div>
-        ))}
+            <div>
+              <h3 className="text-lg font-bold text-red-900 dark:text-red-400">Account Flagged</h3>
+              <p className="text-sm text-red-700 dark:text-red-500/80">
+                Reason: {user.flagReason || 'Excessive cancellations'}. Your listings may have reduced visibility.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setShowAppealModal(true)}
+            className="px-6 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all flex items-center"
+          >
+            <Scale className="w-4 h-4 mr-2" /> Submit Appeal
+          </button>
+        </div>
+      )}
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-2xl">
+              <TrendingUp className="w-6 h-6 text-green-600" />
+            </div>
+            <span className="flex items-center text-xs font-bold text-green-600">
+              <ArrowUpRight className="w-3 h-3 mr-1" /> +12.5%
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Total Earnings</p>
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatPrice(stats.totalEarnings)}</h3>
+        </div>
+
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
+              <Eye className="w-6 h-6 text-blue-600" />
+            </div>
+            <span className="flex items-center text-xs font-bold text-blue-600">
+              <ArrowUpRight className="w-3 h-3 mr-1" /> +8.2%
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Total Views</p>
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.totalViews.toLocaleString()}</h3>
+        </div>
+
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-2xl">
+              <ShoppingBag className="w-6 h-6 text-purple-600" />
+            </div>
+            <span className="flex items-center text-xs font-bold text-purple-600">
+              <ArrowUpRight className="w-3 h-3 mr-1" /> +5.4%
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Total Sales</p>
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.totalSales}</h3>
+        </div>
+
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-2xl">
+              <Package className="w-6 h-6 text-orange-600" />
+            </div>
+            <span className="text-xs font-bold text-gray-400">Current</span>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Active Listings</p>
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.activeListings}</h3>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-neutral-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Performance Overview</h3>
-            <div className="flex items-center gap-4 text-xs font-bold">
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-primary rounded-full"></div>
-                <span className="text-gray-500">Views</span>
+        {/* Chart Section */}
+        <div className="lg:col-span-2 space-y-8">
+          <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Performance Overview</h2>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-primary rounded-full mr-2" />
+                  <span className="text-xs text-gray-500">Earnings</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full mr-2" />
+                  <span className="text-xs text-gray-500">Views</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-secondary rounded-full"></div>
-                <span className="text-gray-500">Sales</span>
+            </div>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#FF6321" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#FF6321" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 12, fill: '#9CA3AF' }} 
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 12, fill: '#9CA3AF' }} 
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      borderRadius: '16px', 
+                      border: 'none', 
+                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                      backgroundColor: '#fff'
+                    }} 
+                  />
+                  <Area type="monotone" dataKey="earnings" stroke="#FF6321" strokeWidth={3} fillOpacity={1} fill="url(#colorEarnings)" />
+                  <Area type="monotone" dataKey="views" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#colorViews)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Manage My Listings */}
+          <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Manage My Listings</h2>
+              <Link to="/create-listing" className="text-sm font-bold text-primary hover:underline">Add New</Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {listings.slice(0, 6).map((listing) => (
+                <div key={listing.id} className="flex flex-col p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800">
+                  <div className="flex items-center space-x-4 mb-4">
+                    <div className="relative">
+                      <img src={listing.images[0]} alt="" className="w-16 h-16 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                      {listing.isPromoted && (
+                        <div className="absolute -top-1 -right-1 bg-yellow-400 text-black p-1 rounded-full shadow-md">
+                          <Zap className="w-3 h-3 fill-current" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1">{listing.title}</h4>
+                      <p className="text-xs text-gray-500">{formatPrice(listing.price)}</p>
+                      <div className="flex items-center mt-1 space-x-2">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                          listing.status === 'active' ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-600"
+                        )}>
+                          {listing.status}
+                        </span>
+                        {listing.isPromoted && (
+                          <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">
+                            Featured
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-auto">
+                    <Link 
+                      to={`/listing/${listing.id}`} 
+                      className="flex-1 py-2 text-center text-xs font-bold bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all"
+                    >
+                      View
+                    </Link>
+                    {!listing.isPromoted && (
+                      <Link 
+                        to={`/listing/${listing.id}?promote=true`}
+                        className="flex-1 py-2 text-center text-xs font-bold bg-yellow-400 text-black rounded-lg hover:bg-yellow-500 transition-all flex items-center justify-center"
+                      >
+                        <Zap className="w-3 h-3 mr-1 fill-current" /> Promote
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {listings.length > 6 && (
+              <button className="w-full mt-6 py-3 text-sm font-bold text-gray-500 hover:text-primary transition-colors">
+                View All Listings ({listings.length})
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Recent Sales */}
+        <div className="lg:col-span-1">
+          <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors h-full">
+            <h2 className="text-xl font-bold mb-6 text-gray-900 dark:text-gray-100">Recent Sales</h2>
+            {sales.length > 0 ? (
+              <div className="space-y-6">
+                {sales.slice(0, 8).map((sale) => (
+                  <div key={sale.id} className="flex items-start space-x-4">
+                    <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                      <ShoppingBag className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">Order #{sale.id.slice(0, 8)}</p>
+                      <p className="text-xs text-gray-500">{formatDate(sale.createdAt)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-green-600">+{formatPrice(sale.amount)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <ShoppingBag className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p>No sales yet.</p>
+              </div>
+            )}
+            <button className="w-full mt-8 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all">
+              View All Transactions
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Appeal Modal */}
+      {showAppealModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-neutral-900 w-full max-w-lg rounded-[2.5rem] overflow-hidden shadow-2xl border border-gray-100 dark:border-neutral-800">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <Scale className="w-6 h-6" />
+                  </div>
+                  <h2 className="text-2xl font-black text-gray-900 dark:text-white">Submit Appeal</h2>
+                </div>
+                <button onClick={() => setShowAppealModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
+                  <X className="w-6 h-6 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Explain why your account should be unflagged. Provide context for the cancellations if possible.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300 ml-1">Reason for Appeal</label>
+                  <textarea 
+                    value={appealReason}
+                    onChange={(e) => setAppealReason(e.target.value)}
+                    placeholder="Describe your situation..."
+                    className="w-full px-6 py-4 bg-gray-50 dark:bg-neutral-800 border-none rounded-2xl focus:ring-2 focus:ring-primary transition-all text-gray-900 dark:text-white resize-none"
+                    rows={5}
+                  ></textarea>
+                </div>
+
+                <button 
+                  onClick={handleAppeal}
+                  disabled={submittingAppeal || !appealReason.trim()}
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:hover:scale-100"
+                >
+                  {submittingAppeal ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Scale className="w-5 h-5" />
+                      Submit Appeal
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#9ca3af', fontSize: 12 }} 
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#9ca3af', fontSize: 12 }} 
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#171717', 
-                    border: 'none', 
-                    borderRadius: '12px',
-                    color: '#fff'
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="views" 
-                  stroke="#FF6321" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: '#FF6321', strokeWidth: 2, stroke: '#fff' }}
-                  activeDot={{ r: 6 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="sales" 
-                  stroke="#00FF00" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: '#00FF00', strokeWidth: 2, stroke: '#fff' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
         </div>
-
-        {/* Sales Distribution */}
-        <div className="bg-white dark:bg-neutral-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-8">Sales by Category</h3>
-          <div className="h-[250px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Services', value: 400 },
-                    { name: 'Products', value: 300 },
-                    { name: 'Other', value: 100 },
-                  ]}
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="space-y-3 mt-4">
-            {[
-              { label: 'Services', value: '50%', color: 'bg-green-500' },
-              { label: 'Products', value: '35%', color: 'bg-yellow-500' },
-              { label: 'Other', value: '15%', color: 'bg-orange-500' },
-            ].map((item, i) => (
-              <div key={i} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
-                  <span className="text-gray-500 dark:text-gray-400">{item.label}</span>
-                </div>
-                <span className="font-bold text-gray-900 dark:text-white">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Transactions */}
-      <div className="bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-gray-50 dark:border-neutral-800 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white">Recent Transactions</h3>
-          <button className="text-primary text-sm font-bold hover:underline flex items-center">
-            View All <ChevronRight className="w-4 h-4 ml-1" />
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-xs uppercase tracking-wider text-gray-400 font-bold">
-                <th className="px-8 py-4">Transaction ID</th>
-                <th className="px-8 py-4">Amount</th>
-                <th className="px-8 py-4">Status</th>
-                <th className="px-8 py-4">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-neutral-800">
-              {recentTransactions.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors">
-                  <td className="px-8 py-4 font-mono text-xs text-gray-500">#{t.id.slice(0, 8)}</td>
-                  <td className="px-8 py-4 font-bold text-gray-900 dark:text-white">{formatPrice(t.amount)}</td>
-                  <td className="px-8 py-4">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                      t.status === 'completed' || t.status === 'released' 
-                        ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' 
-                        : 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
-                    }`}>
-                      {t.status}
-                    </span>
-                  </td>
-                  <td className="px-8 py-4 text-sm text-gray-500">
-                    {new Date(t.createdAt).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-              {recentTransactions.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-8 py-12 text-center text-gray-500">
-                    No transactions yet. Start selling to see data here!
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

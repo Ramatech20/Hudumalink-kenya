@@ -19,6 +19,8 @@ const Home = () => {
       const q = query(
         collection(db, 'listings'),
         where('status', '==', 'active'),
+        orderBy('isPromoted', 'desc'),
+        orderBy('createdAt', 'desc'),
         limit(8)
       );
       const snapshot = await getDocs(q);
@@ -227,6 +229,11 @@ const Home = () => {
                   referrerPolicy="no-referrer"
                 />
                 <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                  {listing.isPromoted && (
+                    <div className="bg-yellow-400 text-black px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse">
+                      <Zap className="w-3 h-3 mr-1 fill-current" /> FEATURED
+                    </div>
+                  )}
                   <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-primary">
                     {listing.type === 'service' ? 'SERVICE' : 'PRODUCT'}
                   </div>

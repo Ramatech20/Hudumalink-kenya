@@ -65,9 +65,21 @@ const CreateListing = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      setSelectedFiles(prev => [...prev, ...files]);
+      const MAX_SIZE = 3 * 1024 * 1024; // 3MB
       
-      const newPreviews = files.map(file => URL.createObjectURL(file));
+      const validFiles = files.filter(file => {
+        if (file.size > MAX_SIZE) {
+          toast.error(`Image "${file.name}" is too large. Max size is 3MB.`);
+          return false;
+        }
+        return true;
+      });
+
+      if (validFiles.length === 0) return;
+
+      setSelectedFiles(prev => [...prev, ...validFiles]);
+      
+      const newPreviews = validFiles.map(file => URL.createObjectURL(file));
       setPreviews(prev => [...prev, ...newPreviews]);
     }
   };
@@ -384,7 +396,7 @@ const CreateListing = () => {
                 accept="image/*"
                 className="hidden"
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400">Upload high-quality images to attract more buyers.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Upload high-quality images to attract more buyers. Max size: 3MB per image.</p>
             </div>
           </section>
 

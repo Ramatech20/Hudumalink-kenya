@@ -46,46 +46,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeSnapshot: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Fetch user profile from Firestore
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as User;
-          // Sync emailVerified
-          if (firebaseUser.emailVerified && !userData.emailVerified) {
-            await updateDoc(doc(db, 'users', firebaseUser.uid), {
-              emailVerified: true
-            });
-            setUser({ ...userData, emailVerified: true });
-          } else {
+        // Set up real-time listener for user profile
+        unsubscribeSnapshot = onSnapshot(doc(db, 'users', firebaseUser.uid), async (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = docSnap.data() as User;
             setUser(userData);
+          } else {
+            // Create a default profile if it doesn't exist
+            const newUser: User = {
+              uid: firebaseUser.uid,
+              displayName: firebaseUser.displayName || 'Anonymous User',
+              email: firebaseUser.email || '',
+              photoURL: firebaseUser.photoURL || '',
+              role: 'customer',
+              isVerified: false,
+              referralCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+              referralEarnings: 0,
+              escrowBalance: 0,
+              emailVerified: firebaseUser.emailVerified,
+              createdAt: new Date().toISOString(),
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+            setUser(newUser);
           }
-        } else {
-          // Create a default profile if it doesn't exist
-          const newUser: User = {
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName || 'Anonymous User',
-            email: firebaseUser.email || '',
-            photoURL: firebaseUser.photoURL || '',
-            role: 'customer',
-            referralCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
-            referralEarnings: 0,
-            escrowBalance: 0,
-            emailVerified: firebaseUser.emailVerified,
-            createdAt: new Date().toISOString(),
-          };
-          await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
-          setUser(newUser);
-        }
+          setLoading(false);
+          setIsAuthReady(true);
+        });
       } else {
+        if (unsubscribeSnapshot) unsubscribeSnapshot();
         setUser(null);
+        setLoading(false);
+        setIsAuthReady(true);
       }
-      setLoading(false);
-      setIsAuthReady(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
   }, []);
 
   return (

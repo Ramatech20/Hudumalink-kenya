@@ -53,6 +53,7 @@ The system leverages Firebase for a serverless, scalable, and secure backend.
 
 ### Storage (Firebase Storage)
 - **Media Hosting**: Secure storage for user profile pictures, listing images, and KYC documents (ID/Selfie).
+- **Image Size Limit**: Enforced 3MB maximum file size for all user-uploaded images to ensure performance and cost-efficiency.
 
 ---
 
@@ -61,7 +62,10 @@ The system leverages Firebase for a serverless, scalable, and secure backend.
 ### User Features:
 - **KYC Verification**: Users can upload National ID and a selfie for verification. Verified status increases trust and visibility.
 - **Escrow System**: Secure payment flow where funds are held by HudumaLink until the buyer confirms receipt.
-- **Withdrawals**: Users can request to withdraw their escrow balance via M-Pesa or Bank Transfer.
+- **Withdrawals**: Users can request to withdraw their escrow balance via M-Pesa (KES 15 fee) or Bank Transfer (KES 50 fee). Minimum withdrawal is KES 100.
+- **Social Media Integration**: Added links for WhatsApp, Facebook, Instagram, TikTok, and X (formerly Twitter) in the footer.
+- **AI Chatbot**: Implemented a floating AI Assistant powered by Google Gemini for site navigation and safety tips.
+- **Social Sharing**: Built-in sharing functionality for listings via Web Share API (WhatsApp, Facebook, etc.) or direct link copying.
 - **Messaging**: Real-time chat between buyers and sellers.
 - **Notifications**: In-app alerts for new messages, order updates, and administrative actions.
 - **Search & Filter**: Advanced search by category, keyword, and location (County/Town).

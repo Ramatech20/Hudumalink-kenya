@@ -4,7 +4,7 @@ import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDoc
 import { db } from '../firebase';
 import { Listing } from '../types';
 import { formatPrice, cn } from '../lib/utils';
-import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
+import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap } from 'lucide-react';
 import { KENYAN_COUNTIES, CATEGORIES } from '../constants';
 
 const LISTINGS_PER_PAGE = 12;
@@ -69,9 +69,16 @@ const Listings = () => {
       const snapshot = await getDocs(q);
       const newDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
       
+      // Sort by promoted status first, then by the chosen sort order
+      const sortedDocs = [...newDocs].sort((a, b) => {
+        const aPromoted = a.isPromoted ? 1 : 0;
+        const bPromoted = b.isPromoted ? 1 : 0;
+        if (aPromoted !== bPromoted) return bPromoted - aPromoted;
+        return 0; // Keep original sort order for items with same promoted status
+      });
+
       // Client-side search for keyword (Firestore limitation)
-      // Note: In a real production app with 10k+ listings, we would use Algolia here.
-      let filteredDocs = newDocs;
+      let filteredDocs = sortedDocs;
       if (qParam) {
         filteredDocs = newDocs.filter(doc => 
           doc.title.toLowerCase().includes(qParam.toLowerCase()) || 
@@ -249,6 +256,11 @@ const Listings = () => {
                         referrerPolicy="no-referrer"
                       />
                       <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                        {listing.isPromoted && (
+                          <div className="bg-yellow-400 text-black px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse">
+                            <Zap className="w-3 h-3 mr-1 fill-current" /> FEATURED
+                          </div>
+                        )}
                         <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-primary">
                           {listing.type === 'service' ? 'SERVICE' : 'PRODUCT'}
                         </div>

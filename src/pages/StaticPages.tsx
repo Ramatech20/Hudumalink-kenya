@@ -331,17 +331,35 @@ export const Terms = () => (
           <section>
             <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-3">
               <Handshake className="w-6 h-6 text-secondary" />
-              3. Transactions & Our Role
+              3. Transactions & Platform Integrity
             </h2>
             <div className="bg-secondary/5 dark:bg-secondary/10 p-8 rounded-3xl border border-secondary/10">
               <p className="text-gray-700 dark:text-gray-300 font-medium mb-4 italic">
-                "HudumaLink is a marketplace connector, not a middleman."
+                "Strictly On-Platform Transactions"
               </p>
               <div className="space-y-4 text-gray-600 dark:text-gray-400">
-                <p>• We provide the platform for you to find each other.</p>
-                <p>• We do not handle physical deliveries directly.</p>
-                <p>• Any agreement you make is strictly between you and the other user.</p>
-                <p>• We are not liable for any losses or disputes arising from your transactions.</p>
+                <p>• <strong>Mandatory Escrow:</strong> All payments for services and products MUST be made through the HudumaLink platform. This ensures your money is protected until the job is done.</p>
+                <p>• <strong>Off-Platform Risks:</strong> Transactions made outside HudumaLink (e.g., direct M-Pesa to a seller) are NOT protected by our Escrow or dispute resolution systems. We are not liable for any losses in such cases.</p>
+                <p>• <strong>Policy Enforcement:</strong> Attempting to bypass the platform's payment system may result in permanent account suspension.</p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 text-red-500" />
+              4. Cancellations & Provider Performance
+            </h2>
+            <div className="bg-red-50 dark:bg-red-900/10 p-8 rounded-3xl border border-red-100 dark:border-red-900/20">
+              <div className="space-y-4 text-gray-600 dark:text-gray-400">
+                <p>• <strong>Cancellation with Reason:</strong> Buyers may cancel a service order before completion, but a valid reason must be provided. This reason is recorded and reviewed.</p>
+                <div>• <strong>Provider Accountability:</strong> We monitor provider cancellations to ensure reliability.
+                  <ul className="list-disc ml-6 mt-2 space-y-1">
+                    <li><strong>3 Cancellations:</strong> The provider receives a formal warning.</li>
+                    <li><strong>5 Cancellations:</strong> The provider's account is automatically flagged and may be suspended.</li>
+                  </ul>
+                </div>
+                <p>• <strong>Appeals Process:</strong> Flagged providers have the right to appeal. Appeals are reviewed by our admin team, and accounts may be restored if the cancellations were justified.</p>
               </div>
             </div>
           </section>
@@ -414,6 +432,7 @@ export const Privacy = () => (
               {[
                 { label: "Basic Info", val: "Name, email, and phone number." },
                 { label: "Location", val: "Your county and town for local listings." },
+                { label: "Transactions", val: "Payment history and cancellation reasons." },
                 { label: "Profile", val: "Your bio and profile picture." },
                 { label: "Usage", val: "How you use the app to help us improve." }
               ].map((item, i) => (
@@ -528,7 +547,7 @@ export const Safety = () => (
               },
               { 
                 title: "The 'No Upfront Payment' Rule 💸", 
-                desc: "Never send money via M-Pesa before seeing the item. Scammers often ask for 'commitment fees' or 'delivery charges' upfront.",
+                desc: "Never send money directly to a seller before seeing the item. ALWAYS use the HudumaLink 'Order' button to pay into Escrow. This is the only way to guarantee your money is safe.",
                 icon: <AlertTriangle className="w-6 h-6" />
               }
             ].map((tip, i) => (

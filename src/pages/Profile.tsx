@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { db, storage } from '../firebase';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, increment, orderBy, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Listing, User, Transaction } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
@@ -15,6 +15,7 @@ const Profile = () => {
   const { user } = useAuth();
   const [myListings, setMyListings] = useState<Listing[]>([]);
   const [myOrders, setMyOrders] = useState<Transaction[]>([]);
+  const [myWithdrawals, setMyWithdrawals] = useState<any[]>([]);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawMethod, setWithdrawMethod] = useState<'mpesa' | 'bank'>('mpesa');
@@ -46,6 +47,16 @@ const Profile = () => {
         const ordersQ = query(collection(db, 'transactions'), where('buyerId', '==', user.uid));
         const ordersSnapshot = await getDocs(ordersQ);
         setMyOrders(ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction)));
+
+        // Fetch Withdrawals
+        const withdrawalsQ = query(
+          collection(db, 'withdrawals'),
+          where('userId', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(10)
+        );
+        const withdrawalsSnapshot = await getDocs(withdrawalsQ);
+        setMyWithdrawals(withdrawalsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       } catch (error) {
         console.error(error);
       } finally {
@@ -58,6 +69,12 @@ const Profile = () => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
+
+    const MAX_SIZE = 3 * 1024 * 1024; // 3MB
+    if (file.size > MAX_SIZE) {
+      toast.error('Image is too large. Max size is 3MB.');
+      return;
+    }
 
     setUploading(true);
     try {
@@ -107,28 +124,54 @@ const Profile = () => {
     if (!user || !withdrawAmount) return;
 
     const amount = parseFloat(withdrawAmount);
-    if (amount > ((user as any).escrowBalance || 0)) {
-      toast.error('Insufficient balance');
+    const fee = withdrawMethod === 'mpesa' ? 15 : 50;
+    const totalToDeduct = amount + fee;
+
+    if (totalToDeduct > ((user as any).escrowBalance || 0)) {
+      toast.error(`Insufficient balance. You need ${formatPrice(totalToDeduct)} (including ${formatPrice(fee)} fee)`);
+      return;
+    }
+
+    if (amount < 100) {
+      toast.error('Minimum withdrawal is KES 100');
       return;
     }
 
     setSubmittingWithdraw(true);
     try {
-      const withdrawalData = {
-        userId: user.uid,
-        userName: user.displayName,
-        amount,
-        method: withdrawMethod,
-        details: withdrawMethod === 'mpesa' 
-          ? { phoneNumber: withdrawDetails.phoneNumber }
-          : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber },
-        status: 'pending',
-        createdAt: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, 'withdrawals'), withdrawalData);
+      const userRef = doc(db, 'users', user.uid);
       
-      toast.success('Withdrawal request submitted. Processing takes 24-48 hours.');
+      // Use a transaction to ensure balance is deducted and withdrawal is recorded
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("User not found");
+        
+        const currentBalance = userDoc.data().escrowBalance || 0;
+        if (currentBalance < totalToDeduct) throw new Error("Insufficient balance");
+
+        // 1. Deduct from balance
+        transaction.update(userRef, {
+          escrowBalance: increment(-totalToDeduct)
+        });
+
+        // 2. Add withdrawal record
+        const withdrawalRef = doc(collection(db, 'withdrawals'));
+        transaction.set(withdrawalRef, {
+          userId: user.uid,
+          userName: user.displayName,
+          amount,
+          fee,
+          totalDeducted: totalToDeduct,
+          method: withdrawMethod,
+          details: withdrawMethod === 'mpesa' 
+            ? { phoneNumber: withdrawDetails.phoneNumber }
+            : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber },
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        });
+      });
+      
+      toast.success('Withdrawal request submitted! Funds have been moved to pending.');
       setShowWithdrawModal(false);
       setWithdrawAmount('');
     } catch (error: any) {
@@ -162,6 +205,7 @@ const Profile = () => {
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   className="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full border-2 border-white dark:border-neutral-900 shadow-lg hover:scale-110 transition-transform"
+                  title="Max size: 3MB"
                 >
                   <Camera className="w-4 h-4" />
                 </button>
@@ -535,6 +579,48 @@ const Profile = () => {
                   </div>
                 )}
               </div>
+              {/* Withdrawal History */}
+              <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-bold flex items-center text-gray-900 dark:text-gray-100">
+                    <Wallet className="w-6 h-6 mr-2 text-primary" /> Withdrawal History
+                  </h2>
+                </div>
+
+                {myWithdrawals.length > 0 ? (
+                  <div className="space-y-4">
+                    {myWithdrawals.map((w) => (
+                      <div key={w.id} className="p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="font-bold text-gray-900 dark:text-white">{formatPrice(w.amount)}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {w.method === 'mpesa' ? `M-Pesa: ${w.details.phoneNumber}` : `Bank: ${w.details.bankName}`}
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-1">{formatDate(w.createdAt)}</p>
+                          </div>
+                          <div className={cn(
+                            "px-3 py-1 rounded-full text-[10px] font-bold uppercase",
+                            w.status === 'completed' ? "bg-green-100 text-green-700" :
+                            w.status === 'rejected' ? "bg-red-100 text-red-700" :
+                            "bg-yellow-100 text-yellow-700"
+                          )}>
+                            {w.status}
+                          </div>
+                        </div>
+                        {w.rejectionReason && (
+                          <p className="mt-2 text-xs text-red-500 italic">Reason: {w.rejectionReason}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <Wallet className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p>No withdrawal history yet.</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -578,6 +664,11 @@ const Profile = () => {
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                   />
                   <p className="text-[10px] text-neutral-500 mt-1">Available: KSh {user?.escrowBalance?.toLocaleString() || 0}</p>
+                  <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/30">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-300 font-medium">
+                      Note: A fee of {withdrawMethod === 'mpesa' ? 'KES 15' : 'KES 50'} applies for {withdrawMethod === 'mpesa' ? 'M-Pesa' : 'Bank'} withdrawals.
+                    </p>
+                  </div>
                 </div>
 
                 <div>

@@ -1,0 +1,26 @@
+{
+  "name": "HudumaLink Kenya",
+  "short_name": "HudumaLink",
+  "description": "Connecting Kenya's Best Service Providers & Sellers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#006633",
+  "theme_color": "#006633",
+  "icons": [
+    {
+      "src": "https://ais-dev-2wd2towy3s7uhmaglkokxy-496692811581.europe-west2.run.app/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "https://picsum.photos/seed/hudumalink/192/192",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://picsum.photos/seed/hudumalink/512/512",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

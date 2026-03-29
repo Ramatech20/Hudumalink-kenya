@@ -64,6 +64,49 @@ service cloud.firestore {
     //   - text: string (required, max 1000)
     //   - createdAt: string (ISO 8601)
 
+    // Collection: transactions
+    // Document ID: {transactionId}
+    // Fields:
+    //   - id: string
+    //   - listingId: string (required)
+    //   - buyerId: string (required)
+    //   - sellerId: string (required)
+    //   - amount: number (positive)
+    //   - status: string (enum: pending, deposited, completed, released, cancelled)
+    //   - createdAt: string (ISO 8601)
+    //   - updatedAt: string (ISO 8601)
+    //
+    // Collection: disputes
+    // Document ID: {disputeId}
+    // Fields:
+    //   - id: string
+    //   - transactionId: string (required)
+    //   - raisedById: string (required)
+    //   - reason: string (required)
+    //   - details: string
+    //   - evidenceUrls: list of strings
+    //   - status: string (enum: open, under_review, resolved, refunded)
+    //   - createdAt: string (ISO 8601)
+    //
+    // Collection: withdrawals
+    // Document ID: {withdrawalId}
+    // Fields:
+    //   - id: string
+    //   - userId: string (required)
+    //   - amount: number (positive)
+    //   - method: string (enum: mpesa, bank)
+    //   - status: string (enum: pending, processing, completed, rejected)
+    //   - createdAt: string (ISO 8601)
+    //
+    // Collection: appeals
+    // Document ID: {appealId}
+    // Fields:
+    //   - id: string
+    //   - userId: string (required)
+    //   - reason: string (required)
+    //   - status: string (enum: pending, approved, rejected)
+    //   - createdAt: string (ISO 8601)
+
     // ===============================================================
     // Helper Functions
     // ===============================================================
@@ -76,9 +119,11 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "ramadhanwambia83@gmail.com" && request.auth.token.email_verified == true));
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "ramadhanwambia83@gmail.com" && request.auth.token.email_verified == true)
+      );
     }
 
     function isValidEmail(email) {
@@ -105,7 +150,11 @@ service cloud.firestore {
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 50)) &&
              (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500)) &&
              (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 15)) &&
-             (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']);
+             (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']) &&
+             (!('isVerified' in data) || data.isVerified is bool) &&
+             (!('isFlagged' in data) || data.isFlagged is bool) &&
+             (!('cancellationCount' in data) || data.cancellationCount is number) &&
+             (!('flagReason' in data) || data.flagReason == null || (data.flagReason is string && data.flagReason.size() <= 500));
     }
 
     function isValidListing(data) {
@@ -143,6 +192,41 @@ service cloud.firestore {
              isValidDateString(data.createdAt);
     }
 
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['listingId', 'buyerId', 'sellerId', 'amount', 'status', 'createdAt']) &&
+             (data.buyerId == request.auth.uid || data.sellerId == request.auth.uid) &&
+             data.amount is number && data.amount > 0 &&
+             data.status in ['pending', 'deposited', 'completed', 'released', 'cancelled'] &&
+             isValidDateString(data.createdAt) &&
+             (!('cancellationReason' in data) || (data.cancellationReason is string && data.cancellationReason.size() <= 500)) &&
+             (!('cancelledBy' in data) || data.cancelledBy is string);
+    }
+
+    function isValidDispute(data) {
+      return data.keys().hasAll(['transactionId', 'raisedById', 'reason', 'status', 'createdAt']) &&
+             data.raisedById == request.auth.uid &&
+             data.reason is string && data.reason.size() > 0 &&
+             data.status in ['open', 'under_review', 'resolved', 'refunded'] &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidWithdrawal(data) {
+      return data.keys().hasAll(['userId', 'amount', 'method', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.amount is number && data.amount > 0 &&
+             data.method in ['mpesa', 'bank'] &&
+             data.status == 'pending' &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidAppeal(data) {
+      return data.keys().hasAll(['userId', 'reason', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.reason is string && data.reason.size() > 0 &&
+             data.status == 'pending' &&
+             isValidDateString(data.createdAt);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -153,14 +237,21 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
-                      request.resource.data.role != 'admin' && 
-                      request.resource.data.isVerified == false;
+                      request.resource.data.role != 'admin';
                       
-      allow update: if (isOwner(userId) && 
+      allow update: if isAdmin() || (
+                       isOwner(userId) && 
                        isValidUser(request.resource.data) && 
-                       request.resource.data.role == resource.data.role &&
-                       request.resource.data.isVerified == resource.data.isVerified) || 
-                      isAdmin();
+                       request.resource.data.role == resource.data.role
+                     ) || (
+                       // Allow cancellation updates by other users (e.g. customers updating provider stats)
+                       isAuthenticated() &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancellationCount', 'isFlagged', 'flagReason']) &&
+                       (
+                         (!('cancellationCount' in resource.data) && request.resource.data.cancellationCount == 1) ||
+                         (request.resource.data.cancellationCount == resource.data.cancellationCount + 1)
+                       )
+                     );
 
       match /kyc/data {
         allow read: if isOwner(userId) || isAdmin();
@@ -176,11 +267,12 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidListing(request.resource.data) && 
                       request.resource.data.status == 'pending'; // All new listings must be pending
                       
-      allow update: if (isOwner(resource.data.authorId) && 
+      allow update: if isAdmin() || 
+                      (isOwner(resource.data.authorId) && 
                        isValidListing(request.resource.data) && 
                        // Owners can't approve their own listings if they were pending/removed
-                       (resource.data.status == 'active' || request.resource.data.status == 'pending' || request.resource.data.status == 'sold')) || 
-                      isAdmin();
+                       (resource.data.status == 'active' || request.resource.data.status == 'pending' || request.resource.data.status == 'sold')) ||
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'reportsCount']));
                       
       allow delete: if isOwner(resource.data.authorId) || isAdmin();
     }
@@ -212,6 +304,36 @@ service cloud.firestore {
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && 
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidTransaction(request.resource.data) && request.resource.data.buyerId == request.auth.uid;
+      allow update: if isAdmin() || (
+                       isAuthenticated() && 
+                       (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid) && 
+                       isValidTransaction(request.resource.data) &&
+                       request.resource.data.buyerId == resource.data.buyerId &&
+                       request.resource.data.sellerId == resource.data.sellerId
+                     );
+    }
+
+    match /disputes/{disputeId} {
+      allow read: if isAuthenticated() && (resource.data.raisedById == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidDispute(request.resource.data);
+      allow update: if isAdmin();
+    }
+
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidWithdrawal(request.resource.data);
+      allow update: if isAdmin();
+    }
+
+    match /appeals/{appealId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidAppeal(request.resource.data);
+      allow update: if isAdmin();
     }
   }
 }

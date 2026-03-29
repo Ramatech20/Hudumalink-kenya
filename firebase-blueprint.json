@@ -20,6 +20,9 @@
         },
         "rating": { "type": "number" },
         "reviewCount": { "type": "number" },
+        "cancellationCount": { "type": "number" },
+        "isFlagged": { "type": "boolean" },
+        "flagReason": { "type": "string" },
         "isVerified": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -53,7 +56,10 @@
           }
         },
         "status": { "type": "string", "enum": ["active", "pending", "sold", "removed"] },
-        "isFeatured": { "type": "boolean" },
+        "isPromoted": { "type": "boolean" },
+        "featuredUntil": { "type": "string", "format": "date-time" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
         "viewCount": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -114,6 +120,54 @@
       },
       "required": ["uid", "idType", "idNumber", "idFrontUrl", "selfieUrl", "submittedAt"]
     },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "An escrow transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "listingId": { "type": "string" },
+        "buyerId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "deposited", "completed", "released", "cancelled"] },
+        "cancellationReason": { "type": "string" },
+        "cancelledBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["listingId", "buyerId", "sellerId", "amount", "status"]
+    },
+    "Dispute": {
+      "title": "Dispute",
+      "description": "A dispute over a transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "raisedById": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": { "type": "string" },
+        "evidenceUrls": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["open", "under_review", "resolved", "refunded"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["transactionId", "raisedById", "reason", "status"]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "A request to withdraw funds",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["mpesa", "bank"] },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "method", "status"]
+    },
     "Notification": {
       "title": "Notification",
       "description": "A notification for a user",
@@ -129,6 +183,19 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "title", "message", "type", "read", "createdAt"]
+    },
+    "Appeal": {
+      "title": "Appeal",
+      "description": "An appeal for a flagged account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "reason", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -159,6 +226,22 @@
     "/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "User notifications"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Escrow transactions"
+    },
+    "/disputes/{disputeId}": {
+      "schema": "Dispute",
+      "description": "Transaction disputes"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": "WithdrawalRequest",
+      "description": "Withdrawal requests"
+    },
+    "/appeals/{appealId}": {
+      "schema": "Appeal",
+      "description": "Account appeals"
     }
   }
 }

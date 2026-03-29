@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, User, LogOut, Menu, X, PlusCircle, MessageSquare, Heart, Moon, Sun, Shield, AlertCircle, Bell } from 'lucide-react';
+import { Search, User, LogOut, Menu, X, PlusCircle, MessageSquare, Heart, Moon, Sun, Shield, AlertCircle, Bell, Facebook, Instagram, Twitter, MessageCircle } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { auth, db } from '../firebase';
 import { cn } from '../lib/utils';
@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { sendEmailVerification } from 'firebase/auth';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { toast } from 'sonner';
+import { Chatbot } from './Chatbot';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, refreshUser } = useAuth();
@@ -262,6 +263,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         {children}
       </main>
 
+      {/* AI Chatbot */}
+      <Chatbot />
+
       {/* Footer */}
       <footer className="bg-accent text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -273,6 +277,25 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <p className="mt-4 text-gray-400 max-w-xs">
                 The most trusted digital marketplace in Kenya. Connecting millions of buyers and sellers across all 47 counties.
               </p>
+              <div className="mt-6 flex space-x-4">
+                <a href="https://facebook.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-primary transition-colors">
+                  <Facebook className="w-5 h-5" />
+                </a>
+                <a href="https://instagram.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-secondary transition-colors">
+                  <Instagram className="w-5 h-5" />
+                </a>
+                <a href="https://tiktok.com/@hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-black transition-colors">
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.17-2.89-.6-4.13-1.47V18.77a6.738 6.738 0 01-6.74 6.74c-1.4-.01-2.82-.44-3.99-1.25a6.744 6.744 0 01-2.75-5.49c-.01-1.4.44-2.82 1.25-3.99a6.744 6.744 0 015.49-2.75c.01 0 .01 0 .02 0v4.03c-1.49.06-2.71 1.28-2.77 2.77-.06 1.49 1.28 2.71 2.77 2.77 1.49.06 2.71-1.28 2.77-2.77V.02z" />
+                  </svg>
+                </a>
+                <a href="https://x.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-neutral-800 transition-colors">
+                  <Twitter className="w-5 h-5" />
+                </a>
+                <a href="https://wa.me/254700000000" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-green-500 transition-colors">
+                  <MessageCircle className="w-5 h-5" />
+                </a>
+              </div>
             </div>
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-300">Quick Links</h3>

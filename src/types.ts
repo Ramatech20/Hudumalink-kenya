@@ -21,6 +21,9 @@ export interface User {
   isVerified?: boolean;
   emailVerified?: boolean;
   kycStatus?: KYCStatus;
+  cancellationCount?: number;
+  isFlagged?: boolean;
+  flagReason?: string;
   referralCode: string;
   referredBy?: string;
   referralEarnings: number;
@@ -58,7 +61,10 @@ export interface Listing {
   specifications?: { [key: string]: string };
   status: ListingStatus;
   isFeatured?: boolean;
+  featuredUntil?: string;
   isPromoted?: boolean;
+  rating?: number;
+  reviewCount?: number;
   escrowEnabled?: boolean;
   reportsCount?: number;
   aiModerationResult?: {
@@ -86,6 +92,8 @@ export interface Transaction {
   sellerId: string;
   amount: number;
   status: TransactionStatus;
+  cancellationReason?: string;
+  cancelledBy?: string;
   milestones?: Milestone[];
   delivery?: {
     provider: string;
@@ -103,7 +111,7 @@ export interface Dispute {
   raisedById: string;
   reason: string;
   details: string;
-  evidence: string[]; // URLs to images
+  evidenceUrls: string[]; // URLs to images
   status: 'open' | 'under_review' | 'resolved' | 'refunded';
   resolution?: string;
   createdAt: string;
@@ -121,6 +129,14 @@ export interface WithdrawalRequest {
   };
   status: 'pending' | 'processing' | 'completed' | 'rejected';
   rejectionReason?: string;
+  createdAt: string;
+}
+
+export interface Appeal {
+  id: string;
+  userId: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
 }
 

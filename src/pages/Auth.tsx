@@ -14,10 +14,15 @@ const Auth = () => {
   const [displayName, setDisplayName] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [role, setRole] = useState<'customer' | 'provider' | 'seller'>('customer');
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleGoogleSignIn = async () => {
+    if (!isLogin && !agreeToTerms) {
+      toast.error('Please agree to our Terms, Privacy Policy, and Safety Tips to continue.');
+      return;
+    }
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
@@ -49,6 +54,10 @@ const Auth = () => {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLogin && !agreeToTerms) {
+      toast.error('Please agree to our Terms, Privacy Policy, and Safety Tips to continue.');
+      return;
+    }
     setLoading(true);
     if (!isLogin && password !== confirmPassword) {
       toast.error('Passwords do not match');
@@ -185,6 +194,25 @@ const Auth = () => {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
+            </div>
+          )}
+
+          {!isLogin && (
+            <div className="flex items-start space-x-3 py-2">
+              <input 
+                id="terms"
+                type="checkbox" 
+                required
+                className="mt-1 w-5 h-5 rounded border-gray-200 dark:border-neutral-700 text-primary focus:ring-primary transition-all cursor-pointer"
+                checked={agreeToTerms}
+                onChange={(e) => setAgreeToTerms(e.target.checked)}
+              />
+              <label htmlFor="terms" className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed cursor-pointer select-none">
+                I have read and agree to the{' '}
+                <a href="/terms" target="_blank" className="text-primary font-bold hover:underline">Terms of Service</a>,{' '}
+                <a href="/privacy" target="_blank" className="text-primary font-bold hover:underline">Privacy Policy</a>, and{' '}
+                <a href="/safety" target="_blank" className="text-primary font-bold hover:underline">Safety Tips</a>.
+              </label>
             </div>
           )}
 

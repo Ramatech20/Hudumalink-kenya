@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, limit, addDoc, updateDoc, increment, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { Listing, User, Review, Transaction, Milestone } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
 import { sendNotification } from '../lib/notifications';
@@ -24,13 +25,18 @@ const ListingDetail = () => {
   const [newComment, setNewComment] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
   const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [disputeReason, setDisputeReason] = useState('');
   const [disputeDetails, setDisputeDetails] = useState('');
+  const [disputeEvidence, setDisputeEvidence] = useState<File | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
   const [reportDetails, setReportDetails] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
   const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [submittingCancel, setSubmittingCancel] = useState(false);
   const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [hasCompletedTransaction, setHasCompletedTransaction] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [requestingService, setRequestingService] = useState(false);
   const [deliveryQuotes, setDeliveryQuotes] = useState<DeliveryQuote[]>([]);
@@ -83,11 +89,19 @@ const ListingDetail = () => {
 
     setSubmittingDispute(true);
     try {
+      let evidenceUrl = '';
+      if (disputeEvidence) {
+        const storageRef = ref(storage, `disputes/${transaction.id}/${Date.now()}_${disputeEvidence.name}`);
+        const snapshot = await uploadBytes(storageRef, disputeEvidence);
+        evidenceUrl = await getDownloadURL(snapshot.ref);
+      }
+
       const disputeData = {
         transactionId: transaction.id,
         raisedById: user.uid,
         reason: disputeReason,
         details: disputeDetails,
+        evidenceUrls: evidenceUrl ? [evidenceUrl] : [],
         status: 'open',
         createdAt: new Date().toISOString()
       };
@@ -100,14 +114,93 @@ const ListingDetail = () => {
         updatedAt: new Date().toISOString()
       });
 
-      toast.success('Dispute raised. Our team will review the case.');
+      toast.success('Dispute raised. Our team will review the evidence.');
       setShowDisputeModal(false);
       setDisputeReason('');
       setDisputeDetails('');
+      setDisputeEvidence(null);
     } catch (error: any) {
       toast.error('Failed to raise dispute: ' + error.message);
     } finally {
       setSubmittingDispute(false);
+    }
+  };
+
+  const handleCancelOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !transaction || !author || !id) return;
+    setSubmittingCancel(true);
+
+    try {
+      // Update transaction
+      await updateDoc(doc(db, 'transactions', transaction.id), {
+        status: 'cancelled',
+        cancellationReason: cancelReason,
+        cancelledBy: user.uid,
+        updatedAt: new Date().toISOString()
+      });
+
+      // Update provider's cancellation count
+      const newCount = (author.cancellationCount || 0) + 1;
+      let updateData: any = { cancellationCount: newCount };
+
+      if (newCount >= 5) {
+        updateData.isFlagged = true;
+        updateData.flagReason = 'Excessive cancellations (5 or more)';
+      }
+
+      await updateDoc(doc(db, 'users', listing?.authorId || ''), updateData);
+
+      // Send notifications
+      await addDoc(collection(db, 'notifications'), {
+        userId: listing?.authorId,
+        title: 'Order Cancelled',
+        message: `An order for "${listing?.title}" was cancelled. Reason: ${cancelReason}`,
+        type: 'warning',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+
+      if (newCount === 3) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: listing?.authorId,
+          title: 'Account Warning',
+          message: 'You have reached 3 cancellations. Further cancellations may lead to account flagging.',
+          type: 'error',
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      if (newCount >= 5) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: listing?.authorId,
+          title: 'Account Flagged',
+          message: 'Your account has been flagged due to excessive cancellations. You can appeal this decision.',
+          type: 'error',
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      toast.success('Order cancelled successfully.');
+      setShowCancelModal(false);
+      setCancelReason('');
+      
+      // Refresh transaction state
+      const txQuery = query(
+        collection(db, 'transactions'), 
+        where('listingId', '==', id),
+        where('buyerId', '==', user.uid)
+      );
+      const txSnap = await getDocs(txQuery);
+      if (!txSnap.empty) {
+        setTransaction({ id: txSnap.docs[0].id, ...txSnap.docs[0].data() } as Transaction);
+      }
+    } catch (error: any) {
+      toast.error('Error cancelling order: ' + error.message);
+    } finally {
+      setSubmittingCancel(false);
     }
   };
 
@@ -135,9 +228,18 @@ const ListingDetail = () => {
             );
             const txSnap = await getDocs(txQuery);
             if (!txSnap.empty) {
-              setTransaction({ id: txSnap.docs[0].id, ...txSnap.docs[0].data() } as Transaction);
+              const txData = { id: txSnap.docs[0].id, ...txSnap.docs[0].data() } as Transaction;
+              setTransaction(txData);
+              if (txData.status === 'completed') {
+                setHasCompletedTransaction(true);
+              }
             }
           }
+
+          // Increment view count
+          await updateDoc(doc(db, 'listings', id), {
+            viewCount: increment(1)
+          });
 
           // Fetch reviews for the author
           const reviewsQuery = query(
@@ -334,6 +436,31 @@ const ListingDetail = () => {
     }
   };
 
+  const handleShare = async () => {
+    const shareData = {
+      title: listing.title,
+      text: `Check out this ${listing.type} on HudumaLink: ${listing.title}`,
+      url: window.location.href,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        toast.success('Shared successfully!');
+      } catch (err) {
+        console.error('Error sharing:', err);
+      }
+    } else {
+      // Fallback: Copy to clipboard
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success('Link copied to clipboard!');
+      } catch (err) {
+        toast.error('Failed to copy link');
+      }
+    }
+  };
+
   if (loading) return <div className="max-w-7xl mx-auto px-4 py-20 text-center">Loading...</div>;
   if (!listing) return null;
 
@@ -378,7 +505,11 @@ const ListingDetail = () => {
                 <button className="p-2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur rounded-full shadow-lg hover:text-secondary transition-colors text-gray-900 dark:text-gray-100">
                   <Heart className="w-5 h-5" />
                 </button>
-                <button className="p-2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur rounded-full shadow-lg hover:text-primary transition-colors text-gray-900 dark:text-gray-100">
+                <button 
+                  onClick={handleShare}
+                  className="p-2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur rounded-full shadow-lg hover:text-primary transition-colors text-gray-900 dark:text-gray-100"
+                  title="Share Listing"
+                >
                   <Share2 className="w-5 h-5" />
                 </button>
                 {user && user.uid !== listing.authorId && (
@@ -505,7 +636,7 @@ const ListingDetail = () => {
             </h2>
 
             {/* Review Form */}
-            {user && user.uid !== listing.authorId && (
+            {user && user.uid !== listing.authorId && hasCompletedTransaction && (
               <form onSubmit={handleLeaveReview} className="mb-10 p-6 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800">
                 <h3 className="font-bold mb-4 text-gray-900 dark:text-gray-100">Leave a Review</h3>
                 <div className="flex items-center space-x-2 mb-4">
@@ -541,6 +672,12 @@ const ListingDetail = () => {
 
             {/* Review List */}
             <div className="space-y-6">
+              {!hasCompletedTransaction && user && user.uid !== listing.authorId && (
+                <div className="mb-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/30 text-sm text-blue-700 dark:text-blue-400 flex items-center">
+                  <Info className="w-4 h-4 mr-2" />
+                  <span>Only buyers who have completed a transaction can leave a review.</span>
+                </div>
+              )}
               {reviews.length > 0 ? (
                 reviews.map((review) => (
                   <div key={review.id} className="border-b border-gray-100 dark:border-neutral-800 pb-6 last:border-0">
@@ -749,6 +886,13 @@ const ListingDetail = () => {
                         >
                           <AlertTriangle className="w-5 h-5" />
                         </button>
+                        <button 
+                          onClick={() => setShowCancelModal(true)}
+                          className="p-4 bg-gray-500/10 text-gray-500 rounded-2xl hover:bg-gray-500/20 transition-all"
+                          title="Cancel Order"
+                        >
+                          <CloseIcon className="w-5 h-5" />
+                        </button>
                       </div>
                     </div>
                   ) : transaction?.status === 'completed' ? (
@@ -955,6 +1099,16 @@ const ListingDetail = () => {
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload Evidence (Optional)</label>
+                  <input 
+                    type="file" 
+                    accept="image/*,video/*"
+                    onChange={(e) => setDisputeEvidence(e.target.files?.[0] || null)}
+                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Upload photos or videos to support your dispute.</p>
+                </div>
                 <div className="pt-2">
                   <button 
                     type="submit"
@@ -968,6 +1122,74 @@ const ListingDetail = () => {
                       </>
                     ) : (
                       'Raise Dispute'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Cancel Modal */}
+      <AnimatePresence>
+        {showCancelModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCancelModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white dark:bg-neutral-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 dark:border-neutral-800 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                  <CloseIcon className="w-5 h-5 mr-2 text-red-500" /> Cancel Order
+                </h3>
+                <button onClick={() => setShowCancelModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
+                  <CloseIcon className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <form onSubmit={handleCancelOrder} className="p-6 space-y-4">
+                <div className="bg-red-50 dark:bg-red-900/10 p-4 rounded-xl border border-red-100 dark:border-red-900/20 text-xs text-red-700 dark:text-red-400">
+                  <p className="font-bold mb-1">Warning:</p>
+                  <p>Cancelling orders frequently may lead to account penalties. Please provide a valid reason.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reason for cancellation</label>
+                  <select 
+                    required
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
+                  >
+                    <option value="">Select a reason</option>
+                    <option value="change_of_mind">Changed my mind</option>
+                    <option value="found_better_price">Found a better price</option>
+                    <option value="seller_not_responding">Seller not responding</option>
+                    <option value="delivery_delay">Delivery delay</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div className="pt-2">
+                  <button 
+                    type="submit"
+                    disabled={submittingCancel || !cancelReason}
+                    className="w-full bg-red-600 text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {submittingCancel ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Cancelling...
+                      </>
+                    ) : (
+                      'Confirm Cancellation'
                     )}
                   </button>
                 </div>
