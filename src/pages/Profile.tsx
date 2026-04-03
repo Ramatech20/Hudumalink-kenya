@@ -31,6 +31,8 @@ const Profile = () => {
     phoneNumber: user?.phoneNumber || '',
     county: user?.location?.county || '',
     town: user?.location?.town || '',
+    lat: user?.location?.lat || undefined as number | undefined,
+    lng: user?.location?.lng || undefined as number | undefined,
     role: user?.role || 'customer',
     photoURL: user?.photoURL || '',
     completedPaymentsCount: (user as any).completedPaymentsCount || 0
@@ -122,6 +124,35 @@ const Profile = () => {
     }
   };
 
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser');
+      return;
+    }
+
+    toast.promise(
+      new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setEditData(prev => ({
+              ...prev,
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            }));
+            resolve(position);
+          },
+          (error) => reject(error),
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }),
+      {
+        loading: 'Getting your location...',
+        success: 'Location captured successfully!',
+        error: 'Failed to get location. Please ensure location access is enabled.'
+      }
+    );
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -131,7 +162,9 @@ const Profile = () => {
         phoneNumber: editData.phoneNumber,
         location: {
           county: editData.county,
-          town: editData.town
+          town: editData.town,
+          lat: editData.lat,
+          lng: editData.lng
         },
         role: editData.role,
         photoURL: editData.photoURL
@@ -434,6 +467,20 @@ const Profile = () => {
                     <option value="" className="dark:bg-neutral-900">Select Town</option>
                     {editData.county && TOWNS[editData.county]?.map(t => <option key={t} value={t} className="dark:bg-neutral-900">{t}</option>)}
                   </select>
+                </div>
+                <div className="md:col-span-2">
+                  <button
+                    type="button"
+                    onClick={handleGetLocation}
+                    className={cn(
+                      "w-full py-3 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 transition-all font-bold text-sm",
+                      editData.lat ? "bg-green-50 dark:bg-green-900/10 border-green-500 text-green-600" : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+                    )}
+                  >
+                    <MapPin className="w-4 h-4" />
+                    {editData.lat ? 'Location Captured ✓' : 'Use My Current Location for Proximity Search'}
+                  </button>
+                  <p className="text-[10px] text-gray-400 mt-2 font-medium">Providing your location helps us recommend sellers and services closer to you.</p>
                 </div>
                 <div className="md:col-span-2 flex space-x-4 pt-4">
                   <button type="submit" className="bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all">

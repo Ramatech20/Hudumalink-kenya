@@ -4,7 +4,7 @@ import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDoc
 import { db } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
-import { formatPrice, cn } from '../lib/utils';
+import { formatPrice, cn, getDistance } from '../lib/utils';
 import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap, Tag, DollarSign, ShoppingBag } from 'lucide-react';
 import { KENYAN_COUNTIES, CATEGORIES } from '../constants';
 import { motion } from 'motion/react';
@@ -20,6 +20,8 @@ const Listings = () => {
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [sortBy, setSortBy] = useState('newest');
+  const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const qParam = searchParams.get('q') || '';
   const countyParam = searchParams.get('county') || '';
@@ -30,7 +32,21 @@ const Listings = () => {
 
   useEffect(() => {
     fetchListings(true);
-  }, [qParam, countyParam, categoryParam, typeParam, sortBy, minPriceParam, maxPriceParam]);
+  }, [qParam, countyParam, categoryParam, typeParam, sortBy, minPriceParam, maxPriceParam, userLocation]);
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+        setSortBy('distance');
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { timeout: 10000 }
+    );
+  };
 
   const fetchListings = async (isInitial = false) => {
     if (isInitial) {
@@ -71,6 +87,9 @@ const Listings = () => {
         q = query(q, orderBy('price', 'asc'));
       } else if (sortBy === 'price_high') {
         q = query(q, orderBy('price', 'desc'));
+      } else if (sortBy === 'distance' && userLocation) {
+        // Distance sorting is done client-side below
+        q = query(q, orderBy('createdAt', 'desc'));
       }
 
       if (!isInitial && lastDoc) {
@@ -96,6 +115,13 @@ const Listings = () => {
         const bTier = b.isPromoted ? (tierOrder[b.promotionTier || 'basic'] || 1) : 0;
         
         if (aTier !== bTier) return bTier - aTier;
+
+        if (sortBy === 'distance' && userLocation) {
+          const distA = a.location.lat && a.location.lng ? getDistance(userLocation.lat, userLocation.lng, a.location.lat, a.location.lng) : Infinity;
+          const distB = b.location.lat && b.location.lng ? getDistance(userLocation.lat, userLocation.lng, b.location.lat, b.location.lng) : Infinity;
+          return distA - distB;
+        }
+
         return 0; // Keep original sort order for items with same promoted status
       });
 
@@ -282,7 +308,16 @@ const Listings = () => {
                 <option value="newest">Newest First</option>
                 <option value="price_low">Price: Low to High</option>
                 <option value="price_high">Price: High to Low</option>
+                <option value="distance">Nearest to Me</option>
               </select>
+              {sortBy === 'distance' && !userLocation && (
+                <button 
+                  onClick={handleGetLocation}
+                  className="text-[10px] font-bold text-primary hover:underline ml-2 uppercase"
+                >
+                  {locating ? 'Locating...' : 'Enable Location'}
+                </button>
+              )}
             </div>
           </div>
 

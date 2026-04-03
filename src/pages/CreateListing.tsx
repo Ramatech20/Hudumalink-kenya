@@ -86,6 +86,8 @@ const CreateListing = () => {
     stock: '',
     sizes: [] as string[],
     specifications: [] as { key: string, value: string }[],
+    lat: undefined as number | undefined,
+    lng: undefined as number | undefined,
   });
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -147,6 +149,35 @@ const CreateListing = () => {
     return Promise.all(uploadPromises);
   };
 
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser');
+      return;
+    }
+
+    toast.promise(
+      new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setFormData(prev => ({
+              ...prev,
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            }));
+            resolve(position);
+          },
+          (error) => reject(error),
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }),
+      {
+        loading: 'Getting your location...',
+        success: 'Location captured successfully!',
+        error: 'Failed to get location. Please ensure location access is enabled.'
+      }
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -174,7 +205,9 @@ const CreateListing = () => {
           images: imageUrls,
           location: {
             county: formData.county,
-            town: formData.town
+            town: formData.town,
+            lat: formData.lat,
+            lng: formData.lng
           },
           contact: {
             phone: formData.phone,
@@ -444,6 +477,20 @@ const CreateListing = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-neutral-800">
+                <div className="col-span-full">
+                  <button
+                    type="button"
+                    onClick={handleGetLocation}
+                    className={cn(
+                      "w-full py-4 rounded-2xl border-2 border-dashed flex items-center justify-center gap-3 transition-all font-bold text-sm mb-4",
+                      formData.lat ? "bg-green-50 dark:bg-green-900/10 border-green-500 text-green-600" : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+                    )}
+                  >
+                    <MapPin className="w-5 h-5" />
+                    {formData.lat ? 'Location Captured ✓' : 'Use My Current Location for Proximity Search'}
+                  </button>
+                  <p className="text-[10px] text-gray-400 font-medium mb-4">Capturing your precise location helps buyers find you when they search for sellers nearby.</p>
+                </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">County <span className="text-red-500">*</span></label>
                   <select 

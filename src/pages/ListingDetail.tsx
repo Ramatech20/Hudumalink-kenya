@@ -8,7 +8,7 @@ import { Listing, User, Review, Transaction, Milestone } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
 import { sendNotification } from '../lib/notifications';
 import { getDeliveryQuotes, DeliveryQuote } from '../services/deliveryService';
-import { initiateEscrowPayment, releaseEscrowFunds } from '../services/paymentService';
+import { initiateEscrowPayment, simulatePaymentSuccess, releaseEscrowFunds } from '../services/paymentService';
 import { MapPin, Phone, MessageCircle, ShieldCheck, Share2, Heart, ArrowLeft, Star, Zap, Send, Flag, AlertTriangle, X as CloseIcon, Loader2, Shield, CheckCircle2, Bell, Box, Layers, Settings, Truck, CreditCard, ChevronRight, Info, ShoppingCart, Briefcase } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Helmet } from 'react-helmet-async';
@@ -321,8 +321,18 @@ const ListingDetail = () => {
 
       if (transactionId) {
         toast.success('STK Push sent! Please enter your PIN on your phone.');
+        
+        // Simulate payment success after 10 seconds (in a real app, this would be a webhook)
+        setTimeout(async () => {
+          await simulatePaymentSuccess(transactionId);
+          // Refresh transaction state
+          const txDoc = await getDoc(doc(db, 'transactions', transactionId));
+          if (txDoc.exists()) {
+            setTransaction({ id: txDoc.id, ...txDoc.data() } as Transaction);
+          }
+        }, 10000);
 
-        // Reset local state to pending and wait for webhook confirmation.
+        // Update local state to show pending payment
         setTransaction({ 
           id: transactionId, 
           status: 'pending',

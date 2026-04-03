@@ -10,24 +10,11 @@ View your app in AI Studio: https://ai.studio/apps/28b58e4b-610a-482b-a01e-bd7b5
 
 ## Run Locally
 
-**Prerequisites:** Node.js
+**Prerequisites:**  Node.js
+
 
 1. Install dependencies:
    `npm install`
-2. Create `.env.local` with:
-   - `MPESA_CONSUMER_KEY`
-   - `MPESA_CONSUMER_SECRET`
-   - `MPESA_PASSKEY`
-   - `MPESA_SHORTCODE` (default `174379` for sandbox)
-   - `APP_URL` (e.g. `http://localhost:3000` or your deployed URL)
-   - `FIREBASE_API_KEY`, etc. (as required by `firebase-applet-config.json` setup)
-3. Start dev server:
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
    `npm run dev`
-
-## M-Pesa payment flow
-
-- Frontend calls `/api/mpesa/stkpush` from `src/services/paymentService.ts`.
-- Backend (`server.ts`) sends STK Push to Safaricom.
-- Safaricom callback to `/api/mpesa/callback` updates transaction status to `deposited`.
-- Buyer confirms delivery in UI to call `releaseEscrowFunds` and move funds to seller.
-

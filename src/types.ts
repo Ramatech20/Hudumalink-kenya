@@ -6,6 +6,8 @@ export type KYCStatus = 'none' | 'pending' | 'verified' | 'rejected';
 export interface Location {
   county: string;
   town: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface User {

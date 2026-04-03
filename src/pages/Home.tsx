@@ -5,7 +5,7 @@ import { collection, query, where, limit, getDocs, orderBy } from 'firebase/fire
 import { db } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
-import { formatPrice, cn } from '../lib/utils';
+import { formatPrice, cn, getDistance } from '../lib/utils';
 import { motion } from 'motion/react';
 import { CATEGORIES, KENYAN_COUNTIES } from '../constants';
 import { useAuth } from '../AuthContext';
@@ -13,16 +13,15 @@ import { useAuth } from '../AuthContext';
 const Home = () => {
   const { user } = useAuth();
   const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
+  const [nearbyListings, setNearbyListings] = useState<Listing[]>([]);
+  const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [loadingNearby, setLoadingNearby] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCounty, setSelectedCounty] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchFeatured = async () => {
-      setLoading(true);
-      setError(null);
       try {
         const q = query(
           collection(db, 'listings'),
@@ -35,15 +34,54 @@ const Home = () => {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
         setFeaturedListings(docs);
       } catch (error) {
-        console.error('Failed to load featured listings:', error);
-        setError('Failed to load listings. Please check your internet connection.');
         handleGeneralError(error, 'Failed to load featured listings');
-      } finally {
-        setLoading(false);
       }
     };
     fetchFeatured();
   }, []);
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) return;
+    setLoadingNearby(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const loc = { lat: position.coords.latitude, lng: position.coords.longitude };
+        setUserLocation(loc);
+        fetchNearby(loc);
+      },
+      () => setLoadingNearby(false),
+      { timeout: 10000 }
+    );
+  };
+
+  const fetchNearby = async (loc: { lat: number, lng: number }) => {
+    try {
+      // Since Firestore doesn't support geo-queries easily without third-party libs,
+      // we fetch recent active listings and sort them client-side for the MVP.
+      const q = query(
+        collection(db, 'listings'),
+        where('status', '==', 'active'),
+        orderBy('createdAt', 'desc'),
+        limit(50)
+      );
+      const snapshot = await getDocs(q);
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
+      
+      // Filter for those with coordinates and sort by distance
+      const withCoords = docs.filter(d => d.location.lat && d.location.lng);
+      const sorted = withCoords.sort((a, b) => {
+        const distA = getDistance(loc.lat, loc.lng, a.location.lat!, a.location.lng!);
+        const distB = getDistance(loc.lat, loc.lng, b.location.lat!, b.location.lng!);
+        return distA - distB;
+      });
+
+      setNearbyListings(sorted.slice(0, 4));
+    } catch (error) {
+      console.error('Failed to fetch nearby:', error);
+    } finally {
+      setLoadingNearby(false);
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,8 +192,75 @@ const Home = () => {
               Search
             </button>
           </motion.form>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="mt-8 flex flex-wrap justify-center gap-4"
+          >
+            <button 
+              onClick={handleGetLocation}
+              className="flex items-center space-x-2 bg-white/10 backdrop-blur-md border border-white/20 px-6 py-3 rounded-full text-sm font-bold hover:bg-white/20 transition-all"
+            >
+              <MapPin className="w-4 h-4 text-secondary" />
+              <span>{loadingNearby ? 'Locating...' : 'Find Sellers Near Me'}</span>
+            </button>
+          </motion.div>
         </div>
       </section>
+
+      {/* Nearby Listings */}
+      {nearbyListings.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-end mb-8">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Nearby You</h2>
+              <p className="text-gray-500 dark:text-gray-400 mt-2">Services and products in your immediate area</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {nearbyListings.map((listing) => (
+              <Link 
+                key={listing.id} 
+                to={`/listing/${listing.id}`}
+                className="group bg-white dark:bg-neutral-900 rounded-2xl overflow-hidden border border-gray-100 dark:border-neutral-800 hover:shadow-xl transition-all"
+              >
+                <div className="relative h-48 overflow-hidden">
+                  <img 
+                    src={listing.images[0]} 
+                    alt={listing.title}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute top-2 left-2 bg-primary text-white px-2 py-1 rounded-lg text-[10px] font-bold flex items-center shadow-lg">
+                    <MapPin className="w-3 h-3 mr-1" />
+                    {userLocation && listing.location.lat && listing.location.lng ? 
+                      `${getDistance(userLocation.lat, userLocation.lng, listing.location.lat, listing.location.lng).toFixed(1)} km away` : 
+                      'Nearby'
+                    }
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    <MapPin className="w-3 h-3 mr-1" />
+                    {listing.location.town}, {listing.location.county}
+                  </div>
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1 group-hover:text-primary transition-colors">
+                    {listing.title}
+                  </h3>
+                  <div className="mt-4 flex justify-between items-center">
+                    <span className="text-lg font-extrabold text-primary">
+                      {listing.price ? formatPrice(listing.price) : 'Contact for Price'}
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Categories Grid */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -269,33 +374,7 @@ const Home = () => {
           </Link>
         </div>
 
-        {loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => (
-              <div 
-                key={i} 
-                className="bg-gray-200 dark:bg-neutral-800 rounded-2xl h-64 animate-pulse"
-              ></div>
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-6 text-red-800 dark:text-red-300">
-            <p className="font-semibold">Error loading listings</p>
-            <p className="text-sm mt-1">{error}</p>
-          </div>
-        )}
-
-        {!loading && !error && featuredListings.length === 0 && (
-          <div className="text-center py-12">
-            <ShoppingBag className="w-16 h-16 text-gray-300 dark:text-neutral-700 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400 text-lg">No listings yet. Check back soon!</p>
-          </div>
-        )}
-
-        {!loading && !error && featuredListings.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {featuredListings.map((listing) => (
             <Link 
               key={listing.id} 
@@ -349,8 +428,12 @@ const Home = () => {
               </div>
             </Link>
           ))}
+          {featuredListings.length === 0 && (
+            <div className="col-span-full py-20 text-center text-gray-500 dark:text-gray-400">
+              No listings found. Be the first to post!
+            </div>
+          )}
         </div>
-        )}
       </section>
 
       {/* CTA Section */}

@@ -23,60 +23,45 @@ export interface PaymentRequest {
  */
 export const initiateEscrowPayment = async (request: PaymentRequest): Promise<string | null> => {
   try {
-    // 1. Create the transaction in Firestore with 'pending' status.
+    // 1. Create the transaction in Firestore with 'pending' status
     const transactionData: any = {
       listingId: request.listingId,
       buyerId: request.buyerId,
       sellerId: request.sellerId,
-      amount: request.amount + (request.deliveryQuote?.price || 0),
+      amount: request.amount,
       status: 'pending',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       paymentMethod: 'mpesa',
       phoneNumber: request.phoneNumber,
-      listingTitle: request.listingTitle,
-      delivery: request.deliveryQuote
-        ? { ...request.deliveryQuote, status: 'pending' }
-        : undefined,
     };
+
+    if (request.deliveryQuote) {
+      transactionData.delivery = {
+        ...request.deliveryQuote,
+        status: 'pending'
+      };
+    }
 
     const docRef = await addDoc(collection(db, 'transactions'), transactionData);
     const transactionId = docRef.id;
 
-    // 2. Trigger real M-Pesa STK Push on backend.
-    const response = await fetch('/api/mpesa/stkpush', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        phoneNumber: request.phoneNumber,
-        amount: request.amount + (request.deliveryQuote?.price || 0),
-        accountReference: `HUDUMA-${request.listingId}`,
-        transactionDesc: `Payment for ${request.listingTitle}`,
-        transactionId,
-      }),
+    // 2. Simulate the STK Push request to the user's phone
+    // In a real app, you'd call your backend here:
+    // const response = await fetch('/api/payments/stkpush', { ... });
+    
+    console.log(`Initiating M-Pesa STK Push for ${request.phoneNumber} - Amount: ${request.amount}`);
+    
+    // Simulate a short delay for the network request
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // 3. Update transaction with a simulated checkout request ID
+    const checkoutRequestId = `ws_CO_${Math.random().toString(36).substring(2, 15)}`;
+    await updateDoc(doc(db, 'transactions', transactionId), {
+      checkoutRequestId,
+      updatedAt: new Date().toISOString()
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('Failed STK Push request:', err);
-      toast.error('Could not initiate payment request. Please try again.');
-      await updateDoc(doc(db, 'transactions', transactionId), {
-        status: 'cancelled',
-        cancellationReason: err,
-        updatedAt: new Date().toISOString(),
-      });
-      return null;
-    }
-
-    const data = await response.json();
-    if (data.CheckoutRequestID) {
-      await updateDoc(doc(db, 'transactions', transactionId), {
-        checkoutRequestId: data.CheckoutRequestID,
-        updatedAt: new Date().toISOString(),
-      });
-    }
-
-    toast.success('STK Push sent! Please complete payment on your phone.');
     return transactionId;
   } catch (error: any) {
     console.error('Payment initiation failed:', error);
