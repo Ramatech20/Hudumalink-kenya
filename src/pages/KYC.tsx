@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { db, storage } from '../firebase';
+import { handleGeneralError } from '../lib/error-handler';
 import { doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { toast } from 'sonner';
@@ -28,7 +29,7 @@ const KYC = () => {
             setRejectionReason(dataDoc.data().rejectionReason || null);
           }
         } catch (error) {
-          console.error('Error fetching KYC data:', error);
+          handleGeneralError(error, 'Error fetching KYC data');
         }
       }
     };
@@ -40,7 +41,7 @@ const KYC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!frontImage || !selfieImage || !idNumber) {
-      toast.error('Please provide all required documents and ID number');
+      handleGeneralError(new Error('Please provide all required documents and ID number'), 'Validation Error');
       return;
     }
 
@@ -49,9 +50,19 @@ const KYC = () => {
       const frontRef = ref(storage, `kyc/${user.uid}/front_${Date.now()}`);
       const selfieRef = ref(storage, `kyc/${user.uid}/selfie_${Date.now()}`);
       
+      const uploadWithTimeout = async (storageRef: any, file: File) => {
+        const uploadPromise = uploadBytes(storageRef, file);
+        const timeoutPromise = new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error(`Upload timed out for ${file.name}`)), 30000)
+        );
+        const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
+        if (!snapshot) throw new Error(`Upload failed for ${file.name}`);
+        return snapshot;
+      };
+
       const [frontSnap, selfieSnap] = await Promise.all([
-        uploadBytes(frontRef, frontImage),
-        uploadBytes(selfieRef, selfieImage)
+        uploadWithTimeout(frontRef, frontImage),
+        uploadWithTimeout(selfieRef, selfieImage)
       ]);
 
       const [frontUrl, selfieUrl] = await Promise.all([
@@ -62,7 +73,7 @@ const KYC = () => {
       let backUrl = '';
       if (backImage) {
         const backRef = ref(storage, `kyc/${user.uid}/back_${Date.now()}`);
-        const backSnap = await uploadBytes(backRef, backImage);
+        const backSnap = await uploadWithTimeout(backRef, backImage);
         backUrl = await getDownloadURL(backSnap.ref);
       }
 
@@ -84,7 +95,7 @@ const KYC = () => {
       toast.success('KYC documents submitted successfully! Our team will review them.');
       navigate('/profile');
     } catch (error: any) {
-      toast.error('Submission failed: ' + error.message);
+      handleGeneralError(error, 'Submission failed');
     } finally {
       setLoading(false);
     }

@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, limit, addDoc, updateDoc, increment, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase';
+import { db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { handleApiError, handleNetworkError, handleGeneralError } from '../lib/error-handler';
 import { Listing, User, Review, Transaction, Milestone } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
 import { sendNotification } from '../lib/notifications';
 import { getDeliveryQuotes, DeliveryQuote } from '../services/deliveryService';
-import { MapPin, Phone, MessageCircle, ShieldCheck, Share2, Heart, ArrowLeft, Star, Zap, Send, Flag, AlertTriangle, X as CloseIcon, Loader2, Shield, CheckCircle2, Bell, Box, Layers, Settings, Truck, CreditCard, ChevronRight, Info } from 'lucide-react';
+import { initiateEscrowPayment, simulatePaymentSuccess, releaseEscrowFunds } from '../services/paymentService';
+import { MapPin, Phone, MessageCircle, ShieldCheck, Share2, Heart, ArrowLeft, Star, Zap, Send, Flag, AlertTriangle, X as CloseIcon, Loader2, Shield, CheckCircle2, Bell, Box, Layers, Settings, Truck, CreditCard, ChevronRight, Info, ShoppingCart, Briefcase } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
@@ -77,7 +79,7 @@ const ListingDetail = () => {
       setReportReason('');
       setReportDetails('');
     } catch (error: any) {
-      toast.error('Failed to submit report: ' + error.message);
+      handleFirestoreError(error, OperationType.CREATE, 'reports');
     } finally {
       setSubmittingReport(false);
     }
@@ -110,7 +112,7 @@ const ListingDetail = () => {
       
       // Update transaction status to indicate dispute
       await updateDoc(doc(db, 'transactions', transaction.id), {
-        status: 'cancelled', // Or a new 'disputed' status
+        status: 'disputed',
         updatedAt: new Date().toISOString()
       });
 
@@ -120,7 +122,7 @@ const ListingDetail = () => {
       setDisputeDetails('');
       setDisputeEvidence(null);
     } catch (error: any) {
-      toast.error('Failed to raise dispute: ' + error.message);
+      handleFirestoreError(error, OperationType.CREATE, 'disputes');
     } finally {
       setSubmittingDispute(false);
     }
@@ -198,7 +200,7 @@ const ListingDetail = () => {
         setTransaction({ id: txSnap.docs[0].id, ...txSnap.docs[0].data() } as Transaction);
       }
     } catch (error: any) {
-      toast.error('Error cancelling order: ' + error.message);
+      handleFirestoreError(error, OperationType.UPDATE, `transactions/${transaction?.id}`);
     } finally {
       setSubmittingCancel(false);
     }
@@ -220,7 +222,7 @@ const ListingDetail = () => {
           }
 
           // Fetch transaction if user is logged in
-          if (user) {
+          if (user && user.uid) {
             const txQuery = query(
               collection(db, 'transactions'), 
               where('listingId', '==', id),
@@ -242,14 +244,16 @@ const ListingDetail = () => {
           });
 
           // Fetch reviews for the author
-          const reviewsQuery = query(
-            collection(db, 'reviews'),
-            where('targetId', '==', listingData.authorId),
-            orderBy('createdAt', 'desc'),
-            limit(10)
-          );
-          const reviewsSnapshot = await getDocs(reviewsQuery);
-          setReviews(reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review)));
+          if (listingData.authorId) {
+            const reviewsQuery = query(
+              collection(db, 'reviews'),
+              where('targetId', '==', listingData.authorId),
+              orderBy('createdAt', 'desc'),
+              limit(10)
+            );
+            const reviewsSnapshot = await getDocs(reviewsQuery);
+            setReviews(reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review)));
+          }
         } else {
           toast.error('Listing not found');
           navigate('/listings');
@@ -282,48 +286,66 @@ const ListingDetail = () => {
   }, [listing, user]);
 
   const handleEscrowPayment = async () => {
-    if (!user || !listing) return;
+    if (!user || !listing) {
+      toast.error('Please login to continue');
+      navigate('/auth');
+      return;
+    }
+    
+    // Ask for phone number if not in profile
+    let phoneNumber = user.phoneNumber;
+    if (!phoneNumber) {
+      phoneNumber = window.prompt('Please enter your M-Pesa phone number (e.g., 2547XXXXXXXX):') || '';
+    }
+    
+    if (!phoneNumber || phoneNumber.length < 10) {
+      toast.error('A valid phone number is required for M-Pesa payment');
+      return;
+    }
+
     setProcessingPayment(true);
     try {
-      // Simulate M-Pesa Payment
-      const newTx: any = {
+      const transactionId = await initiateEscrowPayment({
+        phoneNumber: phoneNumber.replace(/\+/g, ''),
+        amount: listing.price || 0,
         listingId: listing.id,
         buyerId: user.uid,
         sellerId: listing.authorId,
-        amount: listing.price || 0,
-        status: 'deposited',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (useMilestones && listing.type === 'service') {
-        newTx.milestones = milestones;
-      }
-
-      if (selectedQuote && listing.type === 'product') {
-        newTx.delivery = {
+        listingTitle: listing.title,
+        type: listing.type,
+        deliveryQuote: selectedQuote ? {
           provider: selectedQuote.provider,
-          price: selectedQuote.price,
-          status: 'pending'
-        };
-        newTx.amount += selectedQuote.price;
-      }
-      
-      const docRef = await addDoc(collection(db, 'transactions'), newTx);
-      setTransaction({ id: docRef.id, ...newTx } as Transaction);
-      
-      // Send notification to seller
-      await sendNotification(
-        listing.authorId,
-        'New Escrow Payment',
-        `${user.displayName} has deposited ${formatPrice(newTx.amount)} into Escrow for your listing: ${listing.title}`,
-        'success',
-        `/profile`
-      );
+          price: selectedQuote.price
+        } : undefined
+      });
 
-      toast.success('Payment deposited into Escrow! Seller has been notified.');
+      if (transactionId) {
+        toast.success('STK Push sent! Please enter your PIN on your phone.');
+        
+        // Simulate payment success after 10 seconds (in a real app, this would be a webhook)
+        setTimeout(async () => {
+          await simulatePaymentSuccess(transactionId);
+          // Refresh transaction state
+          const txDoc = await getDoc(doc(db, 'transactions', transactionId));
+          if (txDoc.exists()) {
+            setTransaction({ id: txDoc.id, ...txDoc.data() } as Transaction);
+          }
+        }, 10000);
+
+        // Update local state to show pending payment
+        setTransaction({ 
+          id: transactionId, 
+          status: 'pending',
+          listingId: listing.id,
+          buyerId: user.uid,
+          sellerId: listing.authorId,
+          amount: (listing.price || 0) + (selectedQuote?.price || 0),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        } as Transaction);
+      }
     } catch (error: any) {
-      toast.error('Payment failed: ' + error.message);
+      handleGeneralError(error, 'Payment failed');
     } finally {
       setProcessingPayment(false);
     }
@@ -332,31 +354,11 @@ const ListingDetail = () => {
   const handleConfirmDelivery = async () => {
     if (!transaction || !listing) return;
     try {
-      await updateDoc(doc(db, 'transactions', transaction.id), { 
-        status: 'completed',
-        updatedAt: new Date().toISOString()
-      });
-      
-      // Release funds to seller
-      const sellerRef = doc(db, 'users', listing.authorId);
-      await updateDoc(sellerRef, { 
-        escrowBalance: increment(transaction.amount) 
-      });
-
-      // Handle referral payout if amount >= 1000
-      if (transaction.amount >= 1000) {
-        const sellerDoc = await getDoc(sellerRef);
-        const sellerData = sellerDoc.data() as User;
-        if (sellerData.referredBy) {
-          const referrerRef = doc(db, 'users', sellerData.referredBy);
-          await updateDoc(referrerRef, { 
-            referralEarnings: increment(100) // Fixed 100 KES bonus
-          });
-        }
+      const success = await releaseEscrowFunds(transaction.id);
+      if (success) {
+        setTransaction(prev => prev ? { ...prev, status: 'released' } : null);
+        setHasCompletedTransaction(true);
       }
-
-      setTransaction(prev => prev ? { ...prev, status: 'completed' } : null);
-      toast.success('Delivery confirmed! Funds released to seller.');
     } catch (error: any) {
       toast.error('Error confirming delivery: ' + error.message);
     }
@@ -543,18 +545,37 @@ const ListingDetail = () => {
                   {listing.isPromoted && (
                     <>
                       <span className="text-gray-300 dark:text-neutral-700">•</span>
-                      <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded text-[10px] flex items-center">
-                        <Zap className="w-3 h-3 mr-1" /> PROMOTED
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[10px] flex items-center font-bold uppercase",
+                        listing.promotionTier === 'elite' ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400" :
+                        listing.promotionTier === 'premium' ? "bg-primary/10 text-primary" : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+                      )}>
+                        <Zap className="w-3 h-3 mr-1" /> {listing.promotionTier || 'PROMOTED'}
                       </span>
                     </>
                   )}
                 </div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{listing.title}</h1>
-                <div className="flex items-center text-gray-500 dark:text-gray-400 mt-2">
-                  <MapPin className="w-4 h-4 mr-1" />
-                  {listing.location.town}, {listing.location.county}
-                  <span className="mx-2 text-gray-300 dark:text-neutral-700">|</span>
-                  <span>Posted {formatDate(listing.createdAt)}</span>
+                <div className="flex flex-col mt-2">
+                  <div className="flex items-center text-gray-500 dark:text-gray-400">
+                    <MapPin className="w-4 h-4 mr-1" />
+                    {listing.location.town}, {listing.location.county}
+                    <span className="mx-2 text-gray-300 dark:text-neutral-700">|</span>
+                    <span>Posted {formatDate(listing.createdAt)}</span>
+                  </div>
+                  {user?.uid === listing.authorId && !listing.isPromoted && (
+                    <Link 
+                      to={`/promote/${listing.id}`}
+                      className="flex items-center text-xs font-bold text-yellow-600 hover:text-yellow-700 mt-2 transition-colors"
+                    >
+                      <Zap className="w-3 h-3 mr-1 fill-current" /> Promote this listing to get more views
+                    </Link>
+                  )}
+                  {listing.isPromoted && listing.featuredUntil && (
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Promotion active until {formatDate(listing.featuredUntil)}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="text-right">
@@ -728,229 +749,158 @@ const ListingDetail = () => {
               </div>
             </div>
 
-            <div className="space-y-3">
-              {user?.uid === listing.authorId && (
-                <button 
-                  onClick={async () => {
-                    const res = await fetch('/api/mpesa/stkpush', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ phoneNumber: '254700000000', amount: 500, accountReference: listing.id })
-                    });
-                    const data = await res.json();
-                    toast.success(data.CustomerMessage);
-                  }}
-                  className="w-full flex items-center justify-center space-x-2 bg-secondary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all"
-                >
-                  <Zap className="w-5 h-5" />
-                  <span>Boost Listing (KES 500)</span>
-                </button>
-              )}
-              {user?.uid !== listing.authorId && (
-                <button 
-                  onClick={handleRequestService}
-                  disabled={requestingService}
-                  className="w-full flex items-center justify-center space-x-2 bg-secondary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50"
-                >
-                  {requestingService ? <Loader2 className="w-5 h-5 animate-spin" /> : <Bell className="w-5 h-5" />}
-                  <span>Request {listing.type === 'service' ? 'Service' : 'Product'}</span>
-                </button>
-              )}
-              <a 
-                href={`tel:${listing.contact.phone}`}
-                className="w-full flex items-center justify-center space-x-2 bg-primary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all"
-              >
-                <Phone className="w-5 h-5" />
-                <span>Call Seller</span>
-              </a>
-              {listing.contact.whatsapp && (
-                <a 
-                  href={`https://wa.me/${listing.contact.whatsapp.replace(/\+/g, '')}?text=Hi, I'm interested in your listing: ${listing.title}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center space-x-2 bg-green-500 text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all"
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  <span>WhatsApp Chat</span>
-                </a>
-              )}
-
-              {/* Escrow System */}
-              {user?.uid !== listing.authorId && (
-                <div className="pt-4 border-t border-gray-100 dark:border-neutral-800 space-y-4">
-                  {!transaction && (
-                    <>
-                      {/* Delivery Options for Products */}
-                      {listing.type === 'product' && (
-                        <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-2xl border border-gray-100 dark:border-neutral-800">
-                          <h3 className="text-sm font-bold mb-3 flex items-center text-gray-900 dark:text-white">
-                            <Truck className="w-4 h-4 mr-2 text-primary" /> Delivery Options
-                          </h3>
-                          {loadingQuotes ? (
-                            <div className="flex items-center space-x-2 text-xs text-gray-500">
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                              <span>Fetching real-time quotes...</span>
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {deliveryQuotes.map((quote, idx) => (
-                                <button
-                                  key={idx}
-                                  onClick={() => setSelectedQuote(quote)}
-                                  className={cn(
-                                    "w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left",
-                                    selectedQuote?.provider === quote.provider
-                                      ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                      : "border-gray-200 dark:border-neutral-700 hover:border-primary/50"
-                                  )}
-                                >
-                                  <div>
-                                    <p className="text-sm font-bold text-gray-900 dark:text-white">{quote.provider}</p>
-                                    <p className="text-xs text-gray-500">{quote.estimatedDays} delivery</p>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="text-sm font-bold text-primary">{formatPrice(quote.price)}</p>
-                                    {quote.trackingAvailable && (
-                                      <p className="text-[10px] text-green-500 font-bold uppercase">Tracking Incl.</p>
-                                    )}
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Milestone Payments for Services */}
-                      {listing.type === 'service' && (
-                        <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-2xl border border-gray-100 dark:border-neutral-800">
-                          <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-bold flex items-center text-gray-900 dark:text-white">
-                              <CreditCard className="w-4 h-4 mr-2 text-primary" /> Milestone Payments
-                            </h3>
-                            <button 
-                              onClick={() => setUseMilestones(!useMilestones)}
-                              className={cn(
-                                "text-[10px] font-bold px-2 py-1 rounded-full transition-all",
-                                useMilestones ? "bg-primary text-white" : "bg-gray-200 dark:bg-neutral-700 text-gray-500"
-                              )}
-                            >
-                              {useMilestones ? 'ENABLED' : 'DISABLED'}
-                            </button>
-                          </div>
-                          <p className="text-[10px] text-gray-500 mb-3">Release payments in stages as work is completed.</p>
-                          {useMilestones && (
-                            <div className="space-y-2">
-                              {milestones.map((m) => (
-                                <div key={m.id} className="flex items-center justify-between p-2 bg-white dark:bg-neutral-800 rounded-lg border border-gray-100 dark:border-neutral-700">
-                                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{m.title}</span>
-                                  <span className="text-xs font-bold text-primary">{formatPrice(m.amount)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <button 
-                        onClick={handleEscrowPayment}
-                        disabled={processingPayment}
-                        className="w-full flex items-center justify-center space-x-2 bg-accent text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50"
-                      >
-                        {processingPayment ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
-                        <span>Pay via Escrow ({formatPrice((listing.price || 0) + (selectedQuote?.price || 0))})</span>
-                      </button>
-                    </>
+            <div className="space-y-6">
+              {/* Transaction Status (Visible to both) */}
+              {transaction && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Transaction Status</h3>
+                  {transaction.status === 'pending' && (
+                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-2xl border border-yellow-100 dark:border-yellow-900/30">
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium flex items-center">
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Payment is pending...
+                      </p>
+                    </div>
+                  )}
+                  
+                  {transaction.status === 'deposited' && (
+                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-2xl border border-green-100 dark:border-green-900/30">
+                      <p className="text-sm text-green-800 dark:text-green-200 font-medium flex items-center">
+                        <ShieldCheck className="w-4 h-4 mr-2" /> Funds are safe in Escrow
+                      </p>
+                    </div>
                   )}
 
-                  {transaction?.status === 'deposited' ? (
-                    <div className="space-y-3">
-                      <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-2xl border border-green-100 dark:border-green-900/30">
-                        <div className="flex items-center text-green-700 dark:text-green-400 font-bold text-sm mb-1">
-                          <Shield className="w-4 h-4 mr-2" /> Payment in Escrow
-                        </div>
-                        <p className="text-xs text-green-600 dark:text-green-500">Your funds are safe. Confirm delivery only after you receive the item.</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={handleConfirmDelivery}
-                          className="flex-1 flex items-center justify-center space-x-2 bg-green-600 text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all"
-                        >
-                          <CheckCircle2 className="w-5 h-5" />
-                          <span>Confirm Delivery</span>
-                        </button>
-                        <button 
-                          onClick={() => setShowDisputeModal(true)}
-                          className="p-4 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500/20 transition-all"
-                          title="Raise Dispute"
-                        >
-                          <AlertTriangle className="w-5 h-5" />
-                        </button>
-                        <button 
-                          onClick={() => setShowCancelModal(true)}
-                          className="p-4 bg-gray-500/10 text-gray-500 rounded-2xl hover:bg-gray-500/20 transition-all"
-                          title="Cancel Order"
-                        >
-                          <CloseIcon className="w-5 h-5" />
-                        </button>
-                      </div>
+                  {transaction.status === 'released' && (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                      <p className="text-sm text-blue-800 dark:text-blue-200 font-medium flex items-center">
+                        <CheckCircle2 className="w-4 h-4 mr-2" /> Transaction Completed
+                      </p>
                     </div>
-                  ) : transaction?.status === 'completed' ? (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-900/30 flex items-center text-blue-700 dark:text-blue-400 font-bold text-sm">
-                      <CheckCircle2 className="w-4 h-4 mr-2" /> Transaction Completed
+                  )}
+
+                  {transaction.status === 'disputed' && (
+                    <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-100 dark:border-red-900/30">
+                      <p className="text-sm text-red-800 dark:text-red-200 font-medium flex items-center">
+                        <AlertTriangle className="w-4 h-4 mr-2" /> Transaction in Dispute
+                      </p>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               )}
 
+              {/* Buyer Actions */}
               {user?.uid !== listing.authorId && (
-                <button 
-                  onClick={async () => {
-                    if (!user) {
-                      toast.error('Please login to chat with the seller');
-                      navigate('/auth');
-                      return;
-                    }
+                <div className="space-y-4">
+                  {/* CRITICAL SAFETY WARNING */}
+                  {!transaction && (
+                    <div className="p-5 bg-red-50 dark:bg-red-900/20 border-2 border-red-600 rounded-2xl animate-pulse shadow-xl shadow-red-500/20 ring-4 ring-red-500/10">
+                      <div className="flex items-start gap-4">
+                        <div className="p-2 bg-red-600 rounded-full flex-shrink-0">
+                          <AlertTriangle className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-red-700 dark:text-red-300 uppercase tracking-tighter mb-1">
+                            STRICT SAFETY WARNING
+                          </p>
+                          <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed font-bold">
+                            NEVER pay outside HudumaLink. We are <span className="text-sm font-black underline decoration-2 underline-offset-2">NOT LIABLE</span> for any losses if you pay via M-Pesa directly or cash. 
+                            <span className="block mt-1 text-red-800 dark:text-red-200">Payment outside the platform VOIDS your buyer protection and escrow security.</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                    try {
-                      // Check if chat already exists
-                      const chatsRef = collection(db, 'chats');
-                      const q = query(
-                        chatsRef, 
-                        where('participants', 'array-contains', user.uid)
-                      );
-                      const querySnapshot = await getDocs(q);
-                      
-                      let chatId = '';
-                      querySnapshot.forEach((doc) => {
-                        const data = doc.data();
-                        if (data.participants.includes(listing.authorId)) {
-                          chatId = doc.id;
-                        }
-                      });
+                  {!transaction && (
+                    <button 
+                      onClick={handleEscrowPayment}
+                      disabled={processingPayment || listing.status !== 'active'}
+                      className="w-full flex items-center justify-center space-x-2 bg-primary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                    >
+                      {processingPayment ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : listing.type === 'product' ? (
+                        <ShoppingCart className="w-5 h-5" />
+                      ) : (
+                        <Briefcase className="w-5 h-5" />
+                      )}
+                      <span>{listing.type === 'product' ? 'Buy via Escrow' : 'Hire via Escrow'}</span>
+                    </button>
+                  )}
+                  
+                  {!transaction && (
+                    <p className="text-[10px] text-center text-gray-500 dark:text-gray-400 px-4">
+                      By clicking above, you agree to our <Link to="/terms" className="underline">Terms</Link>. Your payment is held securely in Escrow until you confirm delivery.
+                    </p>
+                  )}
 
-                      if (!chatId) {
-                        // Create new chat
-                        const newChat = await addDoc(collection(db, 'chats'), {
-                          participants: [user.uid, listing.authorId],
-                          lastMessage: '',
-                          updatedAt: new Date().toISOString(),
-                          listingId: listing.id,
-                          listingTitle: listing.title
-                        });
-                        chatId = newChat.id;
-                      }
+                  {transaction?.status === 'deposited' && (
+                    <div className="space-y-2">
+                      <button 
+                        onClick={handleConfirmDelivery}
+                        className="w-full flex items-center justify-center space-x-2 bg-primary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20"
+                      >
+                        <CheckCircle2 className="w-5 h-5" />
+                        <span>Confirm Delivery & Release Funds</span>
+                      </button>
+                      <button 
+                        onClick={() => setShowDisputeModal(true)}
+                        className="w-full flex items-center justify-center space-x-2 bg-white dark:bg-neutral-800 text-red-500 border border-red-100 dark:border-red-900/30 py-3 rounded-2xl font-bold hover:bg-red-50 dark:hover:bg-red-900/10 transition-all"
+                      >
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Raise a Dispute</span>
+                      </button>
+                    </div>
+                  )}
 
-                      navigate(`/messages?chatId=${chatId}`);
-                    } catch (error: any) {
-                      toast.error('Error starting chat: ' + error.message);
-                    }
-                  }}
-                  className="w-full flex items-center justify-center space-x-2 border border-gray-200 dark:border-neutral-800 text-gray-700 dark:text-gray-300 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all"
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  <span>In-app Chat</span>
-                </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <a 
+                      href={`tel:${listing.contact.phone}`}
+                      className="flex items-center justify-center space-x-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
+                    >
+                      <Phone className="w-4 h-4" />
+                      <span>Call</span>
+                    </a>
+                    <button 
+                      onClick={() => navigate(`/messages?listingId=${listing.id}`)}
+                      className="flex items-center justify-center space-x-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Chat</span>
+                    </button>
+                  </div>
+
+                  {listing.contact.whatsapp && (
+                    <a 
+                      href={`https://wa.me/${listing.contact.whatsapp.replace(/\+/g, '')}?text=Hi, I'm interested in your listing: ${listing.title}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center space-x-2 bg-green-500 text-white py-3 rounded-2xl font-bold hover:bg-opacity-90 transition-all"
+                    >
+                      <MessageCircle className="w-5 h-5" />
+                      <span>WhatsApp Chat</span>
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Seller Actions */}
+              {user?.uid === listing.authorId && (
+                <div className="space-y-3">
+                  <Link 
+                    to={`/promote/${listing.id}`}
+                    className="w-full flex items-center justify-center space-x-2 bg-secondary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-secondary/20"
+                  >
+                    <Zap className="w-5 h-5" />
+                    <span>Boost Visibility</span>
+                  </Link>
+                  <button 
+                    className="w-full flex items-center justify-center space-x-2 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-all"
+                  >
+                    <Settings className="w-5 h-5" />
+                    <span>Manage Listing</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -961,12 +911,29 @@ const ListingDetail = () => {
               <ShieldCheck className="w-5 h-5 mr-2" />
               Safety Tips
             </h3>
-            <ul className="text-sm text-yellow-700 dark:text-yellow-300/80 space-y-2 list-disc pl-4">
-              <li>Meet in a safe public place</li>
-              <li>Don't pay in advance, even for delivery</li>
-              <li>Inspect the item before you buy</li>
-              <li>Check the seller's profile and ratings</li>
+            <ul className="text-sm text-yellow-700 dark:text-yellow-300/80 space-y-3">
+              <li className="flex gap-2">
+                <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full mt-1.5 flex-shrink-0"></div>
+                <span>Meet in a safe public place for physical items.</span>
+              </li>
+              <li className="flex gap-2">
+                <div className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5 flex-shrink-0"></div>
+                <span className="font-bold text-red-600 dark:text-red-400">Avoid direct M-Pesa payments to sellers.</span>
+              </li>
+              <li className="flex gap-2">
+                <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full mt-1.5 flex-shrink-0"></div>
+                <span>Inspect the item or service before releasing funds.</span>
+              </li>
+              <li className="flex gap-2">
+                <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full mt-1.5 flex-shrink-0"></div>
+                <span>Check the seller's profile, ratings, and KYC status.</span>
+              </li>
             </ul>
+            <div className="mt-6 pt-4 border-t border-yellow-200 dark:border-yellow-900/30">
+              <Link to="/safety" className="text-xs font-bold text-yellow-800 dark:text-yellow-200 hover:underline flex items-center">
+                View Full Safety Guide <ChevronRight className="w-3 h-3 ml-1" />
+              </Link>
+            </div>
           </div>
         </div>
       </div>

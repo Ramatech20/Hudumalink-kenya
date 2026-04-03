@@ -1,5 +1,15 @@
 {
   "entities": {
+    "ReferralCode": {
+      "title": "ReferralCode",
+      "description": "A mapping from a referral code to a user ID",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "createdAt"]
+    },
     "User": {
       "title": "User",
       "description": "A user of the platform (Customer, Provider, or Seller)",
@@ -24,6 +34,8 @@
         "isFlagged": { "type": "boolean" },
         "flagReason": { "type": "string" },
         "isVerified": { "type": "boolean" },
+        "isOnline": { "type": "boolean" },
+        "lastSeen": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role"]
@@ -57,6 +69,7 @@
         },
         "status": { "type": "string", "enum": ["active", "pending", "sold", "removed"] },
         "isPromoted": { "type": "boolean" },
+        "promotionTier": { "type": "string", "enum": ["basic", "premium", "elite"] },
         "featuredUntil": { "type": "string", "format": "date-time" },
         "rating": { "type": "number" },
         "reviewCount": { "type": "number" },
@@ -64,6 +77,23 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["authorId", "title", "type", "category", "status"]
+    },
+    "Promotion": {
+      "title": "Promotion",
+      "description": "A record of a listing promotion payment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "listingId": { "type": "string" },
+        "userId": { "type": "string" },
+        "tier": { "type": "string", "enum": ["basic", "premium", "elite"] },
+        "amount": { "type": "number" },
+        "durationDays": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed", "expired"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["listingId", "userId", "tier", "amount", "durationDays", "status", "createdAt"]
     },
     "Review": {
       "title": "Review",
@@ -130,7 +160,8 @@
         "buyerId": { "type": "string" },
         "sellerId": { "type": "string" },
         "amount": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "deposited", "completed", "released", "cancelled"] },
+        "status": { "type": "string", "enum": ["pending", "deposited", "disputed", "completed", "released", "cancelled"] },
+        "checkoutRequestId": { "type": "string" },
         "cancellationReason": { "type": "string" },
         "cancelledBy": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
@@ -242,6 +273,14 @@
     "/appeals/{appealId}": {
       "schema": "Appeal",
       "description": "Account appeals"
+    },
+    "/promotions/{promotionId}": {
+      "schema": "Promotion",
+      "description": "Promotion payment records"
+    },
+    "/referral_codes/{code}": {
+      "schema": "ReferralCode",
+      "description": "Mapping of referral codes to user IDs"
     }
   }
 }

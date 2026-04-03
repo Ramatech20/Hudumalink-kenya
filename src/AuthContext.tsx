@@ -31,7 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
     if (userDoc.exists()) {
-      const userData = userDoc.data() as User;
+      const userData = { uid: userDoc.id, ...userDoc.data() } as User;
       
       // Sync emailVerified if it changed in Firebase Auth
       if (auth.currentUser.emailVerified && !userData.emailVerified) {
@@ -50,10 +50,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // Update online status using setDoc with merge to avoid failure if doc doesn't exist yet
+        setDoc(doc(db, 'users', firebaseUser.uid), {
+          isOnline: true,
+          lastSeen: new Date().toISOString()
+        }, { merge: true }).catch(console.error);
+
         // Set up real-time listener for user profile
         unsubscribeSnapshot = onSnapshot(doc(db, 'users', firebaseUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
-            const userData = docSnap.data() as User;
+            const userData = { uid: docSnap.id, ...docSnap.data() } as User;
             
             // One-time upgrade for bootstrap admin
             if (firebaseUser.email === 'ramadhanwambia83@gmail.com' && userData.role !== 'admin') {
@@ -80,6 +86,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               photoURL: firebaseUser.photoURL || '',
               role: isAdminEmail ? 'admin' : 'customer',
               isVerified: isAdminEmail, // Auto-verify the admin
+              isOnline: true,
+              lastSeen: new Date().toISOString(),
               referralCode: firebaseUser.uid.substring(0, 6).toUpperCase(),
               referralEarnings: 0,
               escrowBalance: 0,
@@ -93,6 +101,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsAuthReady(true);
         });
       } else {
+        if (user?.uid) {
+          // Update offline status
+          setDoc(doc(db, 'users', user.uid), {
+            isOnline: false,
+            lastSeen: new Date().toISOString()
+          }, { merge: true }).catch(console.error);
+        }
         if (unsubscribeSnapshot) unsubscribeSnapshot();
         setUser(null);
         setLoading(false);
@@ -100,9 +115,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
+    // Handle visibility changes (tab close/background)
+    const handleVisibilityChange = async () => {
+      if (auth.currentUser) {
+        const isOnline = document.visibilityState === 'visible';
+        setDoc(doc(db, 'users', auth.currentUser.uid), {
+          isOnline,
+          lastSeen: new Date().toISOString()
+        }, { merge: true }).catch(console.error);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       unsubscribeAuth();
       if (unsubscribeSnapshot) unsubscribeSnapshot();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './AuthContext';
 import { Layout } from './components/Layout';
+import ScrollToTop from './components/ScrollToTop';
 
 // Pages (to be created)
 import Home from './pages/Home';
@@ -17,7 +18,9 @@ import Messages from './pages/Messages';
 import Admin from './pages/Admin';
 import KYC from './pages/KYC';
 import SellerDashboard from './pages/SellerDashboard';
-import { About, Contact, Terms, Privacy, Safety } from './pages/StaticPages';
+import PromoteListing from './pages/PromoteListing';
+import TransactionDetail from './pages/TransactionDetail';
+import { About, Contact, Terms, Privacy, Safety, FAQ } from './pages/StaticPages';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -31,6 +34,7 @@ export default function App() {
     <HelmetProvider>
       <AuthProvider>
         <Router>
+          <ScrollToTop />
           <Layout>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -44,11 +48,14 @@ export default function App() {
               <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
               <Route path="/kyc" element={<PrivateRoute><KYC /></PrivateRoute>} />
               <Route path="/seller-dashboard" element={<PrivateRoute><SellerDashboard /></PrivateRoute>} />
+              <Route path="/promote/:id" element={<PrivateRoute><PromoteListing /></PrivateRoute>} />
+              <Route path="/transactions/:id" element={<PrivateRoute><TransactionDetail /></PrivateRoute>} />
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/safety" element={<Safety />} />
+              <Route path="/faq" element={<FAQ />} />
             </Routes>
           </Layout>
           <Toaster position="top-center" richColors />

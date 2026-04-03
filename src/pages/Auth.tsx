@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { auth, db } from '../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
+import { handleAuthError, handleGeneralError, handleValidationError } from '../lib/error-handler';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { User, Gift } from 'lucide-react';
@@ -33,83 +34,128 @@ const Auth = () => {
       if (!userDoc.exists()) {
         const newReferralCode = user.uid.substring(0, 6).toUpperCase();
         const isAdminEmail = user.email === 'ramadhanwambia83@gmail.com';
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          displayName: user.displayName || 'Anonymous User',
-          email: user.email,
-          photoURL: user.photoURL || '',
-          role: isAdminEmail ? 'admin' : 'customer',
-          isVerified: isAdminEmail,
-          referralCode: newReferralCode,
-          referralEarnings: 0,
-          escrowBalance: 0,
-          emailVerified: user.emailVerified,
-          createdAt: new Date().toISOString(),
-        }, { merge: true });
+        
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            displayName: user.displayName || 'Anonymous User',
+            email: user.email,
+            photoURL: user.photoURL || '',
+            role: isAdminEmail ? 'admin' : 'customer',
+            isVerified: isAdminEmail,
+            referralCode: newReferralCode,
+            referralEarnings: 0,
+            escrowBalance: 0,
+            emailVerified: user.emailVerified,
+            createdAt: new Date().toISOString(),
+          }, { merge: true });
+
+          // Create public referral code mapping
+          await setDoc(doc(db, 'referral_codes', newReferralCode), {
+            userId: user.uid,
+            createdAt: new Date().toISOString()
+          });
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.WRITE, 'users/referral_codes');
+          return;
+        }
       }
       toast.success('Successfully signed in!');
       navigate('/');
     } catch (error: any) {
-      toast.error(error.message);
+      handleAuthError(error);
     }
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isLogin && !agreeToTerms) {
-      toast.error('Please agree to our Terms, Privacy Policy, and Safety Tips to continue.');
+      handleValidationError('Please agree to our Terms, Privacy Policy, and Safety Tips to continue.');
       return;
     }
     setLoading(true);
     if (!isLogin && password !== confirmPassword) {
-      toast.error('Passwords do not match');
+      handleValidationError('Passwords do not match');
       setLoading(false);
       return;
     }
 
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
-        toast.success('Welcome back!');
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+          toast.success('Welcome back!');
+        } catch (error: any) {
+          handleAuthError(error);
+          setLoading(false);
+          return;
+        }
       } else {
         // Check if referral code is valid if provided
         let referredBy = null;
         if (referralCode) {
-          const q = query(collection(db, 'users'), where('referralCode', '==', referralCode.toUpperCase()));
-          const querySnapshot = await getDocs(q);
-          if (querySnapshot.empty) {
-            toast.error('Invalid referral code');
+          try {
+            const refDoc = await getDoc(doc(db, 'referral_codes', referralCode.toUpperCase()));
+            if (!refDoc.exists()) {
+              handleValidationError('Invalid referral code');
+              setLoading(false);
+              return;
+            }
+            referredBy = refDoc.data().userId;
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.GET, `referral_codes/${referralCode}`);
             setLoading(false);
             return;
           }
-          referredBy = querySnapshot.docs[0].id;
         }
 
-        const result = await createUserWithEmailAndPassword(auth, email, password);
+        let result;
+        try {
+          result = await createUserWithEmailAndPassword(auth, email, password);
+        } catch (error: any) {
+          handleAuthError(error);
+          setLoading(false);
+          return;
+        }
+
         const newReferralCode = result.user.uid.substring(0, 6).toUpperCase();
         const isAdminEmail = email === 'ramadhanwambia83@gmail.com';
         
-        await setDoc(doc(db, 'users', result.user.uid), {
-          uid: result.user.uid,
-          displayName: displayName || 'Anonymous User',
-          email,
-          photoURL: '',
-          role: isAdminEmail ? 'admin' : role,
-          isVerified: isAdminEmail,
-          referralCode: newReferralCode,
-          referredBy,
-          referralEarnings: 0,
-          escrowBalance: 0,
-          emailVerified: false,
-          createdAt: new Date().toISOString(),
-        }, { merge: true });
+        try {
+          // Create user profile
+          await setDoc(doc(db, 'users', result.user.uid), {
+            uid: result.user.uid,
+            displayName: displayName || 'Anonymous User',
+            email,
+            photoURL: '',
+            role: isAdminEmail ? 'admin' : role,
+            isVerified: isAdminEmail,
+            referralCode: newReferralCode,
+            referredBy,
+            referralEarnings: 0,
+            escrowBalance: 0,
+            emailVerified: false,
+            createdAt: new Date().toISOString(),
+          }, { merge: true });
+
+          // Create public referral code mapping
+          await setDoc(doc(db, 'referral_codes', newReferralCode), {
+            userId: result.user.uid,
+            createdAt: new Date().toISOString()
+          });
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.WRITE, 'users/referral_codes');
+          setLoading(false);
+          return;
+        }
 
         await sendEmailVerification(result.user);
         toast.success('Account created! Please check your email for verification.');
       }
       navigate('/');
     } catch (error: any) {
-      toast.error(error.message);
+      // Catch-all for unexpected errors
+      handleGeneralError(error);
     } finally {
       setLoading(false);
     }

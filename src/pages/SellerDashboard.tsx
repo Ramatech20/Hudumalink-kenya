@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
+import { handleGeneralError } from '../lib/error-handler';
 import { collection, query, where, getDocs, orderBy, limit, addDoc } from 'firebase/firestore';
 import { Listing, Transaction, Appeal } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
-import { TrendingUp, ShoppingBag, Eye, MousePointer2, Package, ArrowUpRight, ArrowDownRight, Loader2, Calendar, Zap, AlertTriangle, Scale, X } from 'lucide-react';
+import { TrendingUp, ShoppingBag, Eye, MousePointer2, Package, ArrowUpRight, ArrowDownRight, Loader2, Calendar, Zap, AlertTriangle, Scale, X, ShieldCheck, DollarSign } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -26,7 +27,7 @@ const SellerDashboard = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user) return;
+      if (!user || !user.uid) return;
       try {
         // Fetch Listings
         const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
@@ -38,15 +39,16 @@ const SellerDashboard = () => {
         const salesQ = query(
           collection(db, 'transactions'), 
           where('sellerId', '==', user.uid),
-          where('status', '==', 'completed'),
-          orderBy('createdAt', 'desc')
+          orderBy('createdAt', 'desc'),
+          limit(20)
         );
         const salesSnapshot = await getDocs(salesQ);
         const fetchedSales = salesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
         setSales(fetchedSales);
 
         // Calculate Stats
-        const totalEarnings = fetchedSales.reduce((sum, sale) => sum + sale.amount, 0);
+        const completedSales = fetchedSales.filter(s => s.status === 'released' || s.status === 'completed');
+        const totalEarnings = completedSales.reduce((sum, sale) => sum + sale.amount, 0);
         const totalViews = fetchedListings.reduce((sum, l) => sum + (l.viewCount || 0), 0);
         const activeListings = fetchedListings.filter(l => l.status === 'active').length;
 
@@ -57,7 +59,7 @@ const SellerDashboard = () => {
           activeListings
         });
       } catch (error) {
-        console.error(error);
+        handleGeneralError(error, 'Failed to fetch dashboard data');
       } finally {
         setLoading(false);
       }
@@ -91,8 +93,7 @@ const SellerDashboard = () => {
       setShowAppealModal(false);
       setAppealReason('');
     } catch (error) {
-      console.error(error);
-      toast.error('Failed to submit appeal');
+      handleGeneralError(error, 'Failed to submit appeal');
     } finally {
       setSubmittingAppeal(false);
     }
@@ -149,60 +150,145 @@ const SellerDashboard = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-2xl">
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-2xl group-hover:scale-110 transition-transform">
               <TrendingUp className="w-6 h-6 text-green-600" />
             </div>
-            <span className="flex items-center text-xs font-bold text-green-600">
+            <span className="flex items-center text-[10px] font-black text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full uppercase tracking-widest">
               <ArrowUpRight className="w-3 h-3 mr-1" /> +12.5%
             </span>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total Earnings</p>
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatPrice(stats.totalEarnings)}</h3>
+          <p className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Total Earnings</p>
+          <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">{formatPrice(stats.totalEarnings)}</h3>
+          <div className="mt-4 h-1 w-full bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+            <div className="h-full bg-green-500 w-[75%] rounded-full" />
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl group-hover:scale-110 transition-transform">
               <Eye className="w-6 h-6 text-blue-600" />
             </div>
-            <span className="flex items-center text-xs font-bold text-blue-600">
+            <span className="flex items-center text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-full uppercase tracking-widest">
               <ArrowUpRight className="w-3 h-3 mr-1" /> +8.2%
             </span>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total Views</p>
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.totalViews.toLocaleString()}</h3>
+          <p className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Profile Views</p>
+          <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">{stats.totalViews.toLocaleString()}</h3>
+          <div className="mt-4 h-1 w-full bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 w-[60%] rounded-full" />
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-2xl">
+            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-2xl group-hover:scale-110 transition-transform">
               <ShoppingBag className="w-6 h-6 text-purple-600" />
             </div>
-            <span className="flex items-center text-xs font-bold text-purple-600">
+            <span className="flex items-center text-[10px] font-black text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded-full uppercase tracking-widest">
               <ArrowUpRight className="w-3 h-3 mr-1" /> +5.4%
             </span>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total Sales</p>
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.totalSales}</h3>
+          <p className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Total Sales</p>
+          <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">{stats.totalSales}</h3>
+          <div className="mt-4 h-1 w-full bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+            <div className="h-full bg-purple-500 w-[45%] rounded-full" />
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-2xl">
+            <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-2xl group-hover:scale-110 transition-transform">
               <Package className="w-6 h-6 text-orange-600" />
             </div>
-            <span className="text-xs font-bold text-gray-400">Current</span>
+            <span className="text-[10px] font-black text-gray-400 bg-gray-50 dark:bg-neutral-800 px-2 py-1 rounded-full uppercase tracking-widest">Current</span>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Active Listings</p>
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.activeListings}</h3>
+          <p className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Active Listings</p>
+          <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">{stats.activeListings}</h3>
+          <div className="mt-4 h-1 w-full bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+            <div className="h-full bg-orange-500 w-[90%] rounded-full" />
+          </div>
         </div>
       </div>
 
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <button className="flex flex-col items-center justify-center p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800 hover:border-primary hover:bg-primary/5 transition-all group">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-3 group-hover:scale-110 transition-transform">
+            <DollarSign className="w-6 h-6" />
+          </div>
+          <span className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Withdraw</span>
+        </button>
+        <Link to="/create-listing" className="flex flex-col items-center justify-center p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800 hover:border-primary hover:bg-primary/5 transition-all group">
+          <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 mb-3 group-hover:scale-110 transition-transform">
+            <Zap className="w-6 h-6" />
+          </div>
+          <span className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Promote</span>
+        </Link>
+        <button className="flex flex-col items-center justify-center p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800 hover:border-primary hover:bg-primary/5 transition-all group">
+          <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 mb-3 group-hover:scale-110 transition-transform">
+            <TrendingUp className="w-6 h-6" />
+          </div>
+          <span className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Analytics</span>
+        </button>
+        <button className="flex flex-col items-center justify-center p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800 hover:border-primary hover:bg-primary/5 transition-all group">
+          <div className="w-12 h-12 rounded-2xl bg-green-500/10 flex items-center justify-center text-green-500 mb-3 group-hover:scale-110 transition-transform">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+          <span className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Verification</span>
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Chart Section */}
+        {/* Left Column: Active Escrows & Listings */}
         <div className="lg:col-span-2 space-y-8">
+          {/* Active Escrow Transactions */}
+          {sales.filter(s => s.status === 'deposited' || s.status === 'disputed').length > 0 && (
+            <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                  <ShieldCheck className="w-5 h-5 mr-2 text-primary" /> Active Escrow Orders
+                </h2>
+                <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold">
+                  {sales.filter(s => s.status === 'deposited' || s.status === 'disputed').length} Pending
+                </span>
+              </div>
+              <div className="space-y-4">
+                {sales.filter(s => s.status === 'deposited' || s.status === 'disputed').map((sale) => (
+                  <Link 
+                    key={sale.id} 
+                    to={`/transactions/${sale.id}`}
+                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800 hover:border-primary transition-all group"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className={cn(
+                        "p-3 rounded-xl",
+                        sale.status === 'disputed' ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
+                      )}>
+                        <Package className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 dark:text-gray-100">Order #{sale.id.slice(0, 8)}</p>
+                        <p className="text-xs text-gray-500">{formatPrice(sale.amount)} • {formatDate(sale.createdAt)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                        sale.status === 'disputed' ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
+                      )}>
+                        {sale.status}
+                      </span>
+                      <ArrowUpRight className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Performance Overview</h2>
@@ -302,7 +388,7 @@ const SellerDashboard = () => {
                     </Link>
                     {!listing.isPromoted && (
                       <Link 
-                        to={`/listing/${listing.id}?promote=true`}
+                        to={`/promote/${listing.id}`}
                         className="flex-1 py-2 text-center text-xs font-bold bg-yellow-400 text-black rounded-lg hover:bg-yellow-500 transition-all flex items-center justify-center"
                       >
                         <Zap className="w-3 h-3 mr-1 fill-current" /> Promote
@@ -323,22 +409,37 @@ const SellerDashboard = () => {
         {/* Recent Sales */}
         <div className="lg:col-span-1">
           <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors h-full">
-            <h2 className="text-xl font-bold mb-6 text-gray-900 dark:text-gray-100">Recent Sales</h2>
+            <h2 className="text-xl font-bold mb-6 text-gray-900 dark:text-gray-100">Recent Activity</h2>
             {sales.length > 0 ? (
               <div className="space-y-6">
                 {sales.slice(0, 8).map((sale) => (
-                  <div key={sale.id} className="flex items-start space-x-4">
-                    <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-xl">
-                      <ShoppingBag className="w-5 h-5 text-green-600" />
+                  <Link 
+                    key={sale.id} 
+                    to={`/transactions/${sale.id}`}
+                    className="flex items-start space-x-4 group"
+                  >
+                    <div className={cn(
+                      "p-2 rounded-xl transition-colors",
+                      sale.status === 'released' || sale.status === 'completed' ? "bg-green-50 dark:bg-green-900/20 text-green-600" :
+                      sale.status === 'cancelled' ? "bg-gray-50 dark:bg-neutral-800 text-gray-400" :
+                      "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600"
+                    )}>
+                      <ShoppingBag className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">Order #{sale.id.slice(0, 8)}</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate group-hover:text-primary transition-colors">Order #{sale.id.slice(0, 8)}</p>
                       <p className="text-xs text-gray-500">{formatDate(sale.createdAt)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-green-600">+{formatPrice(sale.amount)}</p>
+                      <p className={cn(
+                        "text-sm font-bold",
+                        sale.status === 'released' || sale.status === 'completed' ? "text-green-600" : "text-gray-400"
+                      )}>
+                        {sale.status === 'released' || sale.status === 'completed' ? '+' : ''}{formatPrice(sale.amount)}
+                      </p>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold">{sale.status}</p>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             ) : (

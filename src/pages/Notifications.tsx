@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
+import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { Notification } from '../types';
 import { formatDate } from '../lib/utils';
@@ -14,7 +15,7 @@ const Notifications = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !user.uid) return;
 
     const q = query(
       collection(db, 'notifications'),
@@ -34,7 +35,7 @@ const Notifications = () => {
     try {
       await updateDoc(doc(db, 'notifications', id), { read: true });
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      handleGeneralError(error, 'Error marking notification as read');
     }
   };
 
@@ -47,7 +48,7 @@ const Notifications = () => {
       });
       await batch.commit();
     } catch (error) {
-      console.error('Error marking all as read:', error);
+      handleGeneralError(error, 'Error marking all as read');
     }
   };
 
@@ -55,7 +56,7 @@ const Notifications = () => {
     try {
       await deleteDoc(doc(db, 'notifications', id));
     } catch (error) {
-      console.error('Error deleting notification:', error);
+      handleGeneralError(error, 'Error deleting notification');
     }
   };
 

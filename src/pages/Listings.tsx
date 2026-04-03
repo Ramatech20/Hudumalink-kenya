@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { db } from '../firebase';
+import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
 import { formatPrice, cn } from '../lib/utils';
-import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap } from 'lucide-react';
+import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap, Tag, DollarSign, ShoppingBag } from 'lucide-react';
 import { KENYAN_COUNTIES, CATEGORIES } from '../constants';
+import { motion } from 'motion/react';
 
 const LISTINGS_PER_PAGE = 12;
 
@@ -23,10 +25,12 @@ const Listings = () => {
   const countyParam = searchParams.get('county') || '';
   const categoryParam = searchParams.get('category') || '';
   const typeParam = searchParams.get('type') || '';
+  const minPriceParam = searchParams.get('minPrice') || '';
+  const maxPriceParam = searchParams.get('maxPrice') || '';
 
   useEffect(() => {
     fetchListings(true);
-  }, [qParam, countyParam, categoryParam, typeParam, sortBy]);
+  }, [qParam, countyParam, categoryParam, typeParam, sortBy, minPriceParam, maxPriceParam]);
 
   const fetchListings = async (isInitial = false) => {
     if (isInitial) {
@@ -53,6 +57,13 @@ const Listings = () => {
         q = query(q, where('location.county', '==', countyParam));
       }
 
+      if (minPriceParam) {
+        q = query(q, where('price', '>=', Number(minPriceParam)));
+      }
+      if (maxPriceParam) {
+        q = query(q, where('price', '<=', Number(maxPriceParam)));
+      }
+
       // Sorting
       if (sortBy === 'newest') {
         q = query(q, orderBy('createdAt', 'desc'));
@@ -69,16 +80,8 @@ const Listings = () => {
       const snapshot = await getDocs(q);
       const newDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
       
-      // Sort by promoted status first, then by the chosen sort order
-      const sortedDocs = [...newDocs].sort((a, b) => {
-        const aPromoted = a.isPromoted ? 1 : 0;
-        const bPromoted = b.isPromoted ? 1 : 0;
-        if (aPromoted !== bPromoted) return bPromoted - aPromoted;
-        return 0; // Keep original sort order for items with same promoted status
-      });
-
       // Client-side search for keyword (Firestore limitation)
-      let filteredDocs = sortedDocs;
+      let filteredDocs = newDocs;
       if (qParam) {
         filteredDocs = newDocs.filter(doc => 
           doc.title.toLowerCase().includes(qParam.toLowerCase()) || 
@@ -86,16 +89,26 @@ const Listings = () => {
         );
       }
 
+      // Sort by promoted status and tier first, then by the chosen sort order
+      const sortedDocs = [...filteredDocs].sort((a, b) => {
+        const tierOrder: Record<string, number> = { elite: 3, premium: 2, basic: 1 };
+        const aTier = a.isPromoted ? (tierOrder[a.promotionTier || 'basic'] || 1) : 0;
+        const bTier = b.isPromoted ? (tierOrder[b.promotionTier || 'basic'] || 1) : 0;
+        
+        if (aTier !== bTier) return bTier - aTier;
+        return 0; // Keep original sort order for items with same promoted status
+      });
+
       if (isInitial) {
-        setListings(filteredDocs);
+        setListings(sortedDocs);
       } else {
-        setListings(prev => [...prev, ...filteredDocs]);
+        setListings(prev => [...prev, ...sortedDocs]);
       }
 
       setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
       setHasMore(snapshot.docs.length === LISTINGS_PER_PAGE);
     } catch (error) {
-      console.error(error);
+      handleGeneralError(error, 'Failed to fetch listings');
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -125,22 +138,32 @@ const Listings = () => {
             <button onClick={() => setShowFilters(false)} className="text-gray-500 dark:text-gray-400"><X className="w-6 h-6" /></button>
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">Location</h3>
-            <select 
-              className="w-full p-2 border border-gray-200 dark:border-neutral-800 rounded-lg outline-none focus:ring-1 focus:ring-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-colors"
-              value={countyParam}
-              onChange={(e) => updateFilter('county', e.target.value)}
-            >
-              <option value="" className="dark:bg-neutral-900">All Counties</option>
-              {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
-            </select>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Location</h3>
+            {countyParam && (
+              <button onClick={() => updateFilter('county', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">Clear</button>
+            )}
           </div>
+          <select 
+            className="w-full p-3 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm"
+            value={countyParam}
+            onChange={(e) => updateFilter('county', e.target.value)}
+          >
+            <option value="" className="dark:bg-neutral-900">All Counties</option>
+            {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
+          </select>
 
-          <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">Category</h3>
+          <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
+                <Tag className="w-3 h-3 mr-2" /> Category
+              </h3>
+              {categoryParam && (
+                <button onClick={() => updateFilter('category', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">Clear</button>
+              )}
+            </div>
             <select 
-              className="w-full p-2 border border-gray-200 dark:border-neutral-800 rounded-lg outline-none focus:ring-1 focus:ring-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-colors"
+              className="w-full p-3 border border-gray-100 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
               value={categoryParam}
               onChange={(e) => updateFilter('category', e.target.value)}
             >
@@ -154,41 +177,72 @@ const Listings = () => {
             </select>
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">Type</h3>
-            <div className="space-y-2">
-              <label className="flex items-center space-x-2 cursor-pointer text-gray-700 dark:text-gray-300">
+          <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
+                <DollarSign className="w-3 h-3 mr-2" /> Price Range (KES)
+              </h3>
+              {(minPriceParam || maxPriceParam) && (
+                <button onClick={() => { updateFilter('minPrice', ''); updateFilter('maxPrice', ''); }} className="text-[10px] font-bold text-primary hover:underline uppercase">Clear</button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">MIN</span>
                 <input 
-                  type="radio" 
-                  name="type" 
-                  checked={!typeParam} 
-                  onChange={() => updateFilter('type', '')}
-                  className="text-primary focus:ring-primary dark:bg-neutral-800 dark:border-neutral-700"
+                  type="number" 
+                  className="w-full pl-10 pr-3 py-3 border border-gray-100 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
+                  value={minPriceParam}
+                  onChange={(e) => updateFilter('minPrice', e.target.value)}
                 />
-                <span className="text-sm">All</span>
-              </label>
-              <label className="flex items-center space-x-2 cursor-pointer text-gray-700 dark:text-gray-300">
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">MAX</span>
                 <input 
-                  type="radio" 
-                  name="type" 
-                  checked={typeParam === 'product'} 
-                  onChange={() => updateFilter('type', 'product')}
-                  className="text-primary focus:ring-primary dark:bg-neutral-800 dark:border-neutral-700"
+                  type="number" 
+                  className="w-full pl-10 pr-3 py-3 border border-gray-100 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
+                  value={maxPriceParam}
+                  onChange={(e) => updateFilter('maxPrice', e.target.value)}
                 />
-                <span className="text-sm">Products</span>
-              </label>
-              <label className="flex items-center space-x-2 cursor-pointer text-gray-700 dark:text-gray-300">
-                <input 
-                  type="radio" 
-                  name="type" 
-                  checked={typeParam === 'service'} 
-                  onChange={() => updateFilter('type', 'service')}
-                  className="text-primary focus:ring-primary dark:bg-neutral-800 dark:border-neutral-700"
-                />
-                <span className="text-sm">Services</span>
-              </label>
+              </div>
             </div>
           </div>
+
+          <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
+              <ShoppingBag className="w-3 h-3 mr-2" /> Listing Type
+            </h3>
+            <div className="flex flex-col gap-2">
+              {[
+                { id: '', label: 'All Types' },
+                { id: 'product', label: 'Products Only' },
+                { id: 'service', label: 'Services Only' }
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => updateFilter('type', t.id)}
+                  className={cn(
+                    "flex items-center justify-between px-4 py-3 rounded-xl border transition-all text-sm font-medium",
+                    typeParam === t.id 
+                      ? "bg-primary/10 border-primary text-primary shadow-sm" 
+                      : "bg-white dark:bg-neutral-900 border-gray-100 dark:border-neutral-800 text-gray-600 dark:text-gray-400 hover:border-primary/50"
+                  )}
+                >
+                  {t.label}
+                  {typeParam === t.id && <div className="w-2 h-2 bg-primary rounded-full" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {(qParam || countyParam || categoryParam || typeParam || minPriceParam || maxPriceParam) && (
+            <button 
+              onClick={() => setSearchParams({})}
+              className="w-full py-3 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
+            >
+              Reset All Filters
+            </button>
+          )}
         </aside>
 
         {/* Main Content */}
@@ -257,8 +311,13 @@ const Listings = () => {
                       />
                       <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
                         {listing.isPromoted && (
-                          <div className="bg-yellow-400 text-black px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse">
-                            <Zap className="w-3 h-3 mr-1 fill-current" /> FEATURED
+                          <div className={cn(
+                            "px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse",
+                            listing.promotionTier === 'elite' ? "bg-purple-600 text-white" :
+                            listing.promotionTier === 'premium' ? "bg-primary text-white" : "bg-yellow-400 text-black"
+                          )}>
+                            <Zap className="w-3 h-3 mr-1 fill-current" /> 
+                            {listing.promotionTier?.toUpperCase() || 'FEATURED'}
                           </div>
                         )}
                         <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-primary">
@@ -312,19 +371,49 @@ const Listings = () => {
               )}
 
               {listings.length === 0 && (
-                <div className="col-span-full py-20 text-center">
-                  <div className="bg-gray-50 dark:bg-neutral-800 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 transition-colors">
-                    <Search className="w-10 h-10 text-gray-300 dark:text-gray-600" />
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="col-span-full py-20 text-center bg-white dark:bg-neutral-900 rounded-[3rem] border border-gray-100 dark:border-neutral-800 shadow-sm px-6"
+                >
+                  <div className="bg-primary/10 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8 transition-colors">
+                    <Search className="w-10 h-10 text-primary" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">No results found</h3>
-                  <p className="text-gray-500 dark:text-gray-400 mt-2">Try adjusting your filters or search query.</p>
-                  <button 
-                    onClick={() => setSearchParams({})}
-                    className="mt-6 text-primary font-bold hover:underline"
-                  >
-                    Clear all filters
-                  </button>
-                </div>
+                  <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">No matching listings found</h3>
+                  <p className="text-gray-500 dark:text-gray-400 mt-4 max-w-md mx-auto leading-relaxed">
+                    We couldn't find anything matching your current filters. Try broadening your search or clearing some filters.
+                  </p>
+                  
+                  <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <button 
+                      onClick={() => setSearchParams({})}
+                      className="w-full sm:w-auto px-10 py-4 bg-primary text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-lg shadow-primary/20"
+                    >
+                      Clear All Filters
+                    </button>
+                    <Link 
+                      to="/create-listing"
+                      className="w-full sm:w-auto px-10 py-4 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
+                    >
+                      Post a Listing
+                    </Link>
+                  </div>
+
+                  <div className="mt-16 pt-16 border-t border-gray-100 dark:border-neutral-800">
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-8">Popular Categories</p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      {CATEGORIES.services.slice(0, 3).concat(CATEGORIES.marketplace.slice(0, 3)).map(cat => (
+                        <button 
+                          key={cat}
+                          onClick={() => updateFilter('category', cat)}
+                          className="px-6 py-2.5 bg-gray-50 dark:bg-neutral-800/50 text-gray-600 dark:text-gray-400 rounded-full text-xs font-bold hover:bg-primary/10 hover:text-primary transition-all border border-gray-100 dark:border-neutral-800"
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
               )}
             </>
           )}

@@ -41,3 +41,30 @@ export const TOWNS: Record<string, string[]> = {
   "Kakamega": ["Kakamega CBD", "Mumias", "Butere"],
   "Kiambu": ["Thika", "Kiambu Town", "Ruiru", "Kikuyu", "Limuru", "Githunguri"]
 };
+
+export const PROMOTION_TIERS = [
+  {
+    id: 'basic',
+    name: 'Basic Boost',
+    price: 500,
+    duration: 7,
+    description: 'Boost your listing to the top of search results for 7 days.',
+    features: ['Top of search results', '7 days duration', 'Standard badge']
+  },
+  {
+    id: 'premium',
+    name: 'Premium Exposure',
+    price: 1500,
+    duration: 30,
+    description: 'Maximum visibility for 30 days with a premium badge.',
+    features: ['Top of search results', '30 days duration', 'Premium badge', 'Social media shoutout']
+  },
+  {
+    id: 'elite',
+    name: 'Elite Seller',
+    price: 5000,
+    duration: 90,
+    description: 'The ultimate promotion for serious sellers. 90 days of elite status.',
+    features: ['Top of search results', '90 days duration', 'Elite badge', 'Priority support', 'Featured on homepage']
+  }
+];

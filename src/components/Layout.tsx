@@ -20,7 +20,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !user.uid) {
       setUnreadNotifications(0);
       return;
     }
@@ -84,6 +84,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Services', path: '/listings?type=service' },
     { name: 'Contact Us', path: '/contact' },
     { name: 'About Us', path: '/about' },
+    { name: 'FAQ', path: '/faq' },
   ];
 
   return (
@@ -153,10 +154,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <div className="hidden md:flex items-center space-x-4">
               {user ? (
                 <>
-                  <Link to="/create-listing" className="flex items-center space-x-1 bg-primary text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-opacity-90 transition-all">
-                    <PlusCircle className="w-4 h-4" />
-                    <span>Post Ad</span>
-                  </Link>
+                  {user.role !== 'customer' && (
+                    <Link to="/create-listing" className="flex items-center space-x-1 bg-primary text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-opacity-90 transition-all">
+                      <PlusCircle className="w-4 h-4" />
+                      <span>Post Ad</span>
+                    </Link>
+                  )}
                   {user.role === 'admin' && (
                     <Link to="/admin" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors" title="Admin Dashboard">
                       <Shield className="w-5 h-5" />
@@ -224,9 +227,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 ))}
                 {user ? (
                   <>
-                    <Link to="/create-listing" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-primary">
-                      Post Ad
-                    </Link>
+                    {user.role !== 'customer' && (
+                      <Link to="/create-listing" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-primary">
+                        Post Ad
+                      </Link>
+                    )}
                     {user.role === 'admin' && (
                       <Link to="/admin" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-primary">
                         Admin Dashboard
@@ -303,6 +308,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 <li><Link to="/listings?type=product" className="text-gray-400 hover:text-white transition-colors">Marketplace</Link></li>
                 <li><Link to="/listings?type=service" className="text-gray-400 hover:text-white transition-colors">Services</Link></li>
                 <li><Link to="/about" className="text-gray-400 hover:text-white transition-colors">About Us</Link></li>
+                <li><Link to="/faq" className="text-gray-400 hover:text-white transition-colors">FAQ</Link></li>
                 <li><Link to="/contact" className="text-gray-400 hover:text-white transition-colors">Contact Support</Link></li>
               </ul>
             </div>

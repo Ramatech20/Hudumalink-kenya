@@ -19,11 +19,14 @@ export interface User {
   rating?: number;
   reviewCount?: number;
   isVerified?: boolean;
+  isOnline?: boolean;
+  lastSeen?: string;
   emailVerified?: boolean;
   kycStatus?: KYCStatus;
   cancellationCount?: number;
   isFlagged?: boolean;
   flagReason?: string;
+  completedPaymentsCount?: number;
   referralCode: string;
   referredBy?: string;
   referralEarnings: number;
@@ -61,8 +64,6 @@ export interface Listing {
   specifications?: { [key: string]: string };
   status: ListingStatus;
   isFeatured?: boolean;
-  featuredUntil?: string;
-  isPromoted?: boolean;
   rating?: number;
   reviewCount?: number;
   escrowEnabled?: boolean;
@@ -72,10 +73,26 @@ export interface Listing {
     reason?: string;
   };
   viewCount?: number;
+  isPromoted?: boolean;
+  promotionTier?: 'basic' | 'premium' | 'elite';
+  featuredUntil?: string;
   createdAt: string;
 }
 
-export type TransactionStatus = 'pending' | 'deposited' | 'completed' | 'released' | 'cancelled';
+export type TransactionStatus = 'pending' | 'deposited' | 'disputed' | 'completed' | 'released' | 'cancelled';
+
+export interface Promotion {
+  id: string;
+  listingId: string;
+  userId: string;
+  tier: 'basic' | 'premium' | 'elite';
+  amount: number;
+  durationDays: number;
+  status: 'pending' | 'completed' | 'expired';
+  checkoutRequestId?: string;
+  createdAt: string;
+  expiresAt?: string;
+}
 
 export interface Milestone {
   id: string;

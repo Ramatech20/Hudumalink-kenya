@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, MapPin, Briefcase, ShoppingBag, ArrowRight, Star, ShieldCheck, Zap } from 'lucide-react';
+import { Search, MapPin, Briefcase, ShoppingBag, ArrowRight, Star, ShieldCheck, Zap, CheckCircle2 } from 'lucide-react';
 import { collection, query, where, limit, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
+import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
 import { formatPrice, cn } from '../lib/utils';
 import { motion } from 'motion/react';
 import { CATEGORIES, KENYAN_COUNTIES } from '../constants';
+import { useAuth } from '../AuthContext';
 
 const Home = () => {
+  const { user } = useAuth();
   const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCounty, setSelectedCounty] = useState('');
@@ -16,16 +19,20 @@ const Home = () => {
 
   useEffect(() => {
     const fetchFeatured = async () => {
-      const q = query(
-        collection(db, 'listings'),
-        where('status', '==', 'active'),
-        orderBy('isPromoted', 'desc'),
-        orderBy('createdAt', 'desc'),
-        limit(8)
-      );
-      const snapshot = await getDocs(q);
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
-      setFeaturedListings(docs);
+      try {
+        const q = query(
+          collection(db, 'listings'),
+          where('status', '==', 'active'),
+          orderBy('isPromoted', 'desc'),
+          orderBy('createdAt', 'desc'),
+          limit(8)
+        );
+        const snapshot = await getDocs(q);
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
+        setFeaturedListings(docs);
+      } catch (error) {
+        handleGeneralError(error, 'Failed to load featured listings');
+      }
     };
     fetchFeatured();
   }, []);
@@ -167,6 +174,46 @@ const Home = () => {
         </div>
       </section>
 
+      {/* How It Works Section */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">How HudumaLink Works</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">Your journey to safe and reliable transactions starts here</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {[
+            {
+              step: "01",
+              title: "Search & Connect",
+              desc: "Find the service or product you need and chat with the provider directly on our platform.",
+              icon: <Search className="w-8 h-8 text-primary" />
+            },
+            {
+              step: "02",
+              title: "Secure with Escrow",
+              desc: "Pay securely via M-Pesa. We hold the funds in escrow until you're satisfied with the delivery.",
+              icon: <ShieldCheck className="w-8 h-8 text-secondary" />
+            },
+            {
+              step: "03",
+              title: "Confirm & Release",
+              desc: "Once you receive your item or service, confirm it in the app to release funds to the seller.",
+              icon: <CheckCircle2 className="w-8 h-8 text-green-500" />
+            }
+          ].map((item, i) => (
+            <div key={i} className="relative p-8 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all text-center group">
+              <div className="absolute -top-4 -right-4 w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary font-black text-xl group-hover:bg-primary group-hover:text-white transition-colors">
+                {item.step}
+              </div>
+              <div className="mb-6 flex justify-center">{item.icon}</div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{item.title}</h3>
+              <p className="text-gray-500 dark:text-gray-400 leading-relaxed">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Trust Badges */}
       <section className="bg-white dark:bg-neutral-950 py-12 border-y border-gray-100 dark:border-neutral-800 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -230,8 +277,13 @@ const Home = () => {
                 />
                 <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
                   {listing.isPromoted && (
-                    <div className="bg-yellow-400 text-black px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse">
-                      <Zap className="w-3 h-3 mr-1 fill-current" /> FEATURED
+                    <div className={cn(
+                      "px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse",
+                      listing.promotionTier === 'elite' ? "bg-purple-600 text-white" :
+                      listing.promotionTier === 'premium' ? "bg-primary text-white" : "bg-yellow-400 text-black"
+                    )}>
+                      <Zap className="w-3 h-3 mr-1 fill-current" /> 
+                      {listing.promotionTier?.toUpperCase() || 'FEATURED'}
                     </div>
                   )}
                   <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-primary">
@@ -272,17 +324,22 @@ const Home = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="kenyan-gradient rounded-3xl p-12 text-center text-white">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to grow your business?</h2>
-          <p className="text-lg text-gray-200 mb-8 max-w-2xl mx-auto">
-            Join thousands of Kenyan entrepreneurs who use HudumaLink to reach more customers and grow their sales.
-          </p>
-          <Link to="/create-listing" className="inline-block bg-white text-primary px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-100 transition-all">
-            Start Selling Today
-          </Link>
-        </div>
-      </section>
+      {user?.role !== 'customer' && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="kenyan-gradient rounded-3xl p-12 text-center text-white">
+            <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to grow your business?</h2>
+            <p className="text-lg text-gray-200 mb-8 max-w-2xl mx-auto">
+              Join thousands of Kenyan entrepreneurs who use HudumaLink to reach more customers and grow their sales.
+            </p>
+            <Link 
+              to="/create-listing" 
+              className="inline-block bg-white text-primary px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-100 transition-all"
+            >
+              Start Selling Today
+            </Link>
+          </div>
+        </section>
+      )}
     </div>
   );
 };

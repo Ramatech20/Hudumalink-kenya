@@ -14,6 +14,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { Message, Chat, User } from '../types';
 import { formatDistanceToNow } from 'date-fns';
@@ -42,7 +43,7 @@ const Messages = () => {
 
   // Fetch all chats for the user
   useEffect(() => {
-    if (!user) return;
+    if (!user || !user.uid) return;
 
     const chatsQuery = query(
       collection(db, 'chats'),
@@ -69,7 +70,7 @@ const Messages = () => {
       setChats(chatData);
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching chats:", error);
+      handleGeneralError(error, 'Error fetching chats');
       setLoading(false);
     });
 

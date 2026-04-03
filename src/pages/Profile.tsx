@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../AuthContext';
-import { db, storage } from '../firebase';
+import { db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { handleGeneralError, handleValidationError } from '../lib/error-handler';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, increment, orderBy, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Listing, User, Transaction } from '../types';
@@ -31,12 +32,26 @@ const Profile = () => {
     county: user?.location?.county || '',
     town: user?.location?.town || '',
     role: user?.role || 'customer',
-    photoURL: user?.photoURL || ''
+    photoURL: user?.photoURL || '',
+    completedPaymentsCount: (user as any).completedPaymentsCount || 0
   });
+
+  const handleBecomeProvider = async () => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        role: 'provider'
+      });
+      toast.success('Congratulations! You are now a Provider. You can now post listings.');
+      setEditData(prev => ({ ...prev, role: 'provider' }));
+    } catch (error: any) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user) return;
+      if (!user || !user.uid) return;
       try {
         // Fetch Listings
         const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
@@ -58,7 +73,7 @@ const Profile = () => {
         const withdrawalsSnapshot = await getDocs(withdrawalsQ);
         setMyWithdrawals(withdrawalsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       } catch (error) {
-        console.error(error);
+        handleFirestoreError(error, OperationType.LIST, 'profile_data');
       } finally {
         setLoading(false);
       }
@@ -79,7 +94,16 @@ const Profile = () => {
     setUploading(true);
     try {
       const storageRef = ref(storage, `profiles/${user.uid}`);
-      const snapshot = await uploadBytes(storageRef, file);
+      const uploadPromise = uploadBytes(storageRef, file);
+      
+      // Add a timeout to the upload
+      const timeoutPromise = new Promise<null>((_, reject) => 
+        setTimeout(() => reject(new Error('Upload timed out. Please check your connection.')), 30000)
+      );
+
+      const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
+      if (!snapshot) throw new Error('Upload failed');
+
       const downloadURL = await getDownloadURL(snapshot.ref);
       
       setEditData(prev => ({ ...prev, photoURL: downloadURL }));
@@ -92,7 +116,7 @@ const Profile = () => {
         toast.success('Profile picture updated!');
       }
     } catch (error: any) {
-      toast.error('Failed to upload image: ' + error.message);
+      handleGeneralError(error, 'Failed to upload profile picture');
     } finally {
       setUploading(false);
     }
@@ -115,7 +139,11 @@ const Profile = () => {
       toast.success('Profile updated successfully!');
       setIsEditing(false);
     } catch (error: any) {
-      toast.error(error.message);
+      if (error.message && error.message.includes('permission')) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      } else {
+        handleGeneralError(error, 'Failed to update profile');
+      }
     }
   };
 
@@ -128,12 +156,12 @@ const Profile = () => {
     const totalToDeduct = amount + fee;
 
     if (totalToDeduct > ((user as any).escrowBalance || 0)) {
-      toast.error(`Insufficient balance. You need ${formatPrice(totalToDeduct)} (including ${formatPrice(fee)} fee)`);
+      handleValidationError(`Insufficient balance. You need ${formatPrice(totalToDeduct)} (including ${formatPrice(fee)} fee)`);
       return;
     }
 
     if (amount < 100) {
-      toast.error('Minimum withdrawal is KES 100');
+      handleValidationError('Minimum withdrawal is KES 100');
       return;
     }
 
@@ -175,7 +203,7 @@ const Profile = () => {
       setShowWithdrawModal(false);
       setWithdrawAmount('');
     } catch (error: any) {
-      toast.error('Failed to submit withdrawal: ' + error.message);
+      handleGeneralError(error, 'Failed to submit withdrawal');
     } finally {
       setSubmittingWithdraw(false);
     }
@@ -225,18 +253,49 @@ const Profile = () => {
             </div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{user.displayName}</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{user.role}</p>
+            
+            {user.role === 'customer' && !user.isVerified && (
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30 text-left">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase">Verification Progress</span>
+                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300">{(user as any).completedPaymentsCount || 0}/5</span>
+                </div>
+                <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-blue-600 transition-all duration-500" 
+                    style={{ width: `${Math.min(((user as any).completedPaymentsCount || 0) / 5 * 100, 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-2 leading-tight">
+                  Complete 5 payments to be eligible for verification by an admin.
+                </p>
+              </div>
+            )}
+
             <div className="flex items-center justify-center mt-2 text-yellow-500">
               <Star className="w-4 h-4 fill-current" />
               <span className="text-sm font-bold ml-1">{user.rating || 'New'}</span>
             </div>
 
-            <Link 
-              to="/seller-dashboard"
-              className="mt-4 w-full flex items-center justify-center space-x-2 bg-primary/10 text-primary py-3 rounded-xl text-sm font-bold hover:bg-primary/20 transition-all"
-            >
-              <TrendingUp className="w-4 h-4" />
-              <span>View Seller Analytics</span>
-            </Link>
+            {user.role !== 'customer' && (
+              <Link 
+                to="/seller-dashboard"
+                className="mt-4 w-full flex items-center justify-center space-x-2 bg-primary/10 text-primary py-3 rounded-xl text-sm font-bold hover:bg-primary/20 transition-all"
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span>View Seller Analytics</span>
+              </Link>
+            )}
+
+            {user.role === 'customer' && (
+              <button 
+                onClick={handleBecomeProvider}
+                className="mt-4 w-full flex items-center justify-center space-x-2 bg-secondary text-white py-3 rounded-xl text-sm font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-secondary/20"
+              >
+                <Briefcase className="w-4 h-4" />
+                <span>Become Provider/Seller</span>
+              </button>
+            )}
 
             {/* Referral & Escrow Stats */}
             <div className="mt-6 pt-6 border-t border-gray-100 dark:border-neutral-800 grid grid-cols-1 gap-4 text-left">
@@ -394,9 +453,11 @@ const Profile = () => {
                   <h2 className="text-2xl font-bold flex items-center text-gray-900 dark:text-gray-100">
                     <Package className="w-6 h-6 mr-2 text-primary" /> My Listings
                   </h2>
-                  <Link to="/create-listing" className="text-primary font-bold hover:underline">
-                    + Post New Listing
-                  </Link>
+                  {user.role !== 'customer' && (
+                    <Link to="/create-listing" className="text-primary font-bold hover:underline">
+                      + Post New Listing
+                    </Link>
+                  )}
                 </div>
 
                 {loading ? (
@@ -429,21 +490,12 @@ const Profile = () => {
                         </div>
                         <div className="flex items-center space-x-2">
                           {listing.status === 'active' && !listing.isPromoted && (
-                            <button 
-                              onClick={async () => {
-                                try {
-                                  // In a real app, this would trigger M-Pesa STK Push
-                                  await updateDoc(doc(db, 'listings', listing.id), { isPromoted: true });
-                                  setMyListings(prev => prev.map(l => l.id === listing.id ? { ...l, isPromoted: true } : l));
-                                  toast.success('Listing promoted! It will now appear higher in search results.');
-                                } catch (error) {
-                                  toast.error('Failed to promote listing');
-                                }
-                              }}
+                            <Link 
+                              to={`/promote/${listing.id}`}
                               className="px-3 py-1 bg-yellow-500 text-white rounded-lg text-xs font-bold hover:bg-yellow-600 transition-colors flex items-center"
                             >
                               <Zap className="w-3 h-3 mr-1" /> Promote
-                            </button>
+                            </Link>
                           )}
                           {listing.status === 'active' && (
                             <button 

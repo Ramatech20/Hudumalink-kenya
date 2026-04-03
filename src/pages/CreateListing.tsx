@@ -1,12 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase';
+import { db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { KENYAN_COUNTIES, CATEGORIES, TOWNS } from '../constants';
 import { toast } from 'sonner';
-import { Camera, MapPin, Tag, Info, DollarSign, Phone, MessageCircle, X, Upload, Loader2, Shield } from 'lucide-react';
+import { Camera, MapPin, Tag, Info, DollarSign, Phone, MessageCircle, X, Upload, Loader2, Shield, ShoppingBag, Briefcase } from 'lucide-react';
+import { cn } from '../lib/utils';
 import { moderateListing } from '../services/moderationService';
 
 const CreateListing = () => {
@@ -15,6 +17,13 @@ const CreateListing = () => {
   const [loading, setLoading] = useState(false);
   const [moderating, setModerating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (user && user.role === 'customer') {
+      toast.error('Customers cannot post listings. Please become a provider or seller first.');
+      navigate('/profile');
+    }
+  }, [user, navigate]);
 
   if (user && (user.role === 'provider' || user.role === 'seller') && user.kycStatus !== 'verified') {
     return (
@@ -44,6 +53,26 @@ const CreateListing = () => {
     );
   }
 
+  if (user && user.role === 'customer') {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12 text-center">
+        <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+          <ShoppingBag className="w-16 h-16 text-primary mx-auto mb-6" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Become a Seller</h1>
+          <p className="text-gray-500 dark:text-gray-400 mb-8">
+            You are currently registered as a customer. To start posting listings, you need to upgrade your account to a provider or seller.
+          </p>
+          <button 
+            onClick={() => navigate('/profile')}
+            className="bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all"
+          >
+            Upgrade Account
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -61,6 +90,17 @@ const CreateListing = () => {
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [currentStep, setCurrentStep] = useState(1);
+
+  const totalSteps = 4;
+
+  const nextStep = () => {
+    if (currentStep < totalSteps) setCurrentStep(prev => prev + 1);
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) setCurrentStep(prev => prev - 1);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -92,7 +132,16 @@ const CreateListing = () => {
   const uploadImages = async (): Promise<string[]> => {
     const uploadPromises = selectedFiles.map(async (file) => {
       const storageRef = ref(storage, `listings/${user?.uid}/${Date.now()}-${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
+      const uploadPromise = uploadBytes(storageRef, file);
+      
+      // Add a timeout to each upload
+      const timeoutPromise = new Promise<null>((_, reject) => 
+        setTimeout(() => reject(new Error(`Upload timed out for ${file.name}`)), 30000) // 30 second timeout per image
+      );
+
+      const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
+      if (!snapshot) throw new Error(`Upload failed for ${file.name}`);
+      
       return getDownloadURL(snapshot.ref);
     });
     return Promise.all(uploadPromises);
@@ -152,7 +201,11 @@ const CreateListing = () => {
       
       navigate(`/listing/${docRef.id}`);
     } catch (error: any) {
-      toast.error(error.message);
+      if (error.message && error.message.includes('permission')) {
+        handleFirestoreError(error, OperationType.CREATE, 'listings');
+      } else {
+        handleGeneralError(error, 'Failed to post listing');
+      }
     } finally {
       setLoading(false);
       setModerating(false);
@@ -162,323 +215,359 @@ const CreateListing = () => {
   return (
     <div className="max-w-3xl mx-auto px-4 py-12">
       <div className="bg-white dark:bg-neutral-900 rounded-3xl shadow-xl p-8 border border-gray-100 dark:border-neutral-800 transition-colors">
-        <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Post a New Listing</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-black text-gray-900 dark:text-white">Post a Listing</h1>
+          <div className="flex items-center space-x-2">
+            {[1, 2, 3, 4].map((step) => (
+              <div 
+                key={step} 
+                className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all",
+                  currentStep === step ? "bg-primary text-white scale-110 shadow-lg shadow-primary/20" : 
+                  currentStep > step ? "bg-green-500 text-white" : "bg-gray-100 dark:bg-neutral-800 text-gray-400"
+                )}
+              >
+                {currentStep > step ? "✓" : step}
+              </div>
+            ))}
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Basic Info */}
-          <section className="space-y-4">
-            <h2 className="text-lg font-bold flex items-center text-primary">
-              <Info className="w-5 h-5 mr-2" /> Basic Information
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="col-span-full">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Listing Title</label>
-                <input 
-                  type="text" 
-                  required 
-                  placeholder="e.g. iPhone 13 Pro Max or Professional Plumbing Services"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  value={formData.title}
-                  onChange={(e) => setFormData({...formData, title: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
-                <select 
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  value={formData.type}
-                  onChange={(e) => setFormData({...formData, type: e.target.value as any, category: ''})}
-                >
-                  <option value="product">Product for Sale</option>
-                  <option value="service">Service Offered</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-                <select 
-                  required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  value={formData.category}
-                  onChange={(e) => setFormData({...formData, category: e.target.value})}
-                >
-                  <option value="">Select Category</option>
-                  {formData.type === 'product' 
-                    ? CATEGORIES.marketplace.map(c => <option key={c} value={c}>{c}</option>)
-                    : CATEGORIES.services.map(c => <option key={c} value={c}>{c}</option>)
-                  }
-                </select>
-              </div>
-            </div>
-          </section>
-
-          {/* Pricing & Description */}
-          <section className="space-y-4">
-            <h2 className="text-lg font-bold flex items-center text-primary">
-              <DollarSign className="w-5 h-5 mr-2" /> Pricing & Details
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Price (KES)</label>
-                <input 
-                  type="number" 
-                  placeholder="Leave empty for 'Contact for Price'"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  value={formData.price}
-                  onChange={(e) => setFormData({...formData, price: e.target.value})}
-                />
-              </div>
-              {formData.type === 'product' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Units Left (Stock)</label>
-                  <input 
-                    type="number" 
-                    placeholder="e.g. 10"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({...formData, stock: e.target.value})}
-                  />
+          {/* Step 1: Basic Info */}
+          {currentStep === 1 && (
+            <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center space-x-3 text-primary mb-2">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Info className="w-5 h-5" />
                 </div>
-              )}
+                <h2 className="text-xl font-bold">Basic Information</h2>
+              </div>
               
-              {formData.type === 'product' && (
-                <div className="col-span-full">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Available Sizes (Optional)</label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {formData.sizes.map((size, idx) => (
-                      <span key={idx} className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm flex items-center">
-                        {size}
-                        <button 
-                          type="button" 
-                          onClick={() => setFormData({...formData, sizes: formData.sizes.filter((_, i) => i !== idx)})}
-                          className="ml-2 hover:text-secondary"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Listing Title <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="e.g. iPhone 13 Pro Max or Professional Plumbing Services"
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                    value={formData.title}
+                    onChange={(e) => setFormData({...formData, title: e.target.value})}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-2 font-medium">Use clear, descriptive titles to help buyers find your listing.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Type <span className="text-red-500">*</span></label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({...formData, type: 'product', category: ''})}
+                        className={cn(
+                          "py-4 rounded-2xl border font-bold text-sm transition-all flex flex-col items-center gap-2",
+                          formData.type === 'product' ? "bg-primary/10 border-primary text-primary shadow-sm" : "bg-white dark:bg-neutral-800 border-gray-100 dark:border-neutral-700 text-gray-500"
+                        )}
+                      >
+                        <ShoppingBag className="w-5 h-5" />
+                        Product
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({...formData, type: 'service', category: ''})}
+                        className={cn(
+                          "py-4 rounded-2xl border font-bold text-sm transition-all flex flex-col items-center gap-2",
+                          formData.type === 'service' ? "bg-primary/10 border-primary text-primary shadow-sm" : "bg-white dark:bg-neutral-800 border-gray-100 dark:border-neutral-700 text-gray-500"
+                        )}
+                      >
+                        <Briefcase className="w-5 h-5" />
+                        Service
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      id="size-input"
-                      placeholder="e.g. XL, 42, 10-inch"
-                      className="flex-grow px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const val = (e.target as HTMLInputElement).value.trim();
-                          if (val && !formData.sizes.includes(val)) {
-                            setFormData({...formData, sizes: [...formData.sizes, val]});
-                            (e.target as HTMLInputElement).value = '';
-                          }
-                        }
-                      }}
-                    />
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        const input = document.getElementById('size-input') as HTMLInputElement;
-                        const val = input.value.trim();
-                        if (val && !formData.sizes.includes(val)) {
-                          setFormData({...formData, sizes: [...formData.sizes, val]});
-                          input.value = '';
-                        }
-                      }}
-                      className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold"
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Category <span className="text-red-500">*</span></label>
+                    <select 
+                      required
+                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                      value={formData.category}
+                      onChange={(e) => setFormData({...formData, category: e.target.value})}
                     >
-                      Add
-                    </button>
+                      <option value="">Select Category</option>
+                      {formData.type === 'product' 
+                        ? CATEGORIES.marketplace.map(c => <option key={c} value={c}>{c}</option>)
+                        : CATEGORIES.services.map(c => <option key={c} value={c}>{c}</option>)
+                      }
+                    </select>
                   </div>
                 </div>
-              )}
+              </div>
 
-              <div className="col-span-full">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Specifications / Features (Optional)</label>
-                <div className="space-y-2 mb-2">
-                  {formData.specifications.map((spec, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-gray-50 dark:bg-neutral-800 p-3 rounded-xl border border-gray-100 dark:border-neutral-700">
-                      <div className="flex space-x-4">
-                        <span className="font-bold text-sm">{spec.key}:</span>
-                        <span className="text-sm">{spec.value}</span>
-                      </div>
+              <div className="pt-6">
+                <button 
+                  type="button"
+                  onClick={nextStep}
+                  disabled={!formData.title || !formData.category}
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                >
+                  Next: Pricing & Details
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* Step 2: Pricing & Details */}
+          {currentStep === 2 && (
+            <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center space-x-3 text-primary mb-2">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <DollarSign className="w-5 h-5" />
+                </div>
+                <h2 className="text-xl font-bold">Pricing & Details</h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Price (KES) <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">KES</span>
+                    <input 
+                      type="number" 
+                      required
+                      placeholder="0.00"
+                      className="w-full pl-14 pr-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                      value={formData.price}
+                      onChange={(e) => setFormData({...formData, price: e.target.value})}
+                    />
+                  </div>
+                </div>
+                {formData.type === 'product' && (
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Stock Level <span className="text-red-500">*</span></label>
+                    <input 
+                      type="number" 
+                      required
+                      placeholder="How many do you have?"
+                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                      value={formData.stock}
+                      onChange={(e) => setFormData({...formData, stock: e.target.value})}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest">Description <span className="text-red-500">*</span></label>
+                  <div className="group relative">
+                    <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                    <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-neutral-900 text-white text-[10px] rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl border border-white/10">
+                      <p className="font-bold mb-1 text-primary">Pro Tip for Sellers:</p>
+                      <ul className="list-disc pl-3 space-y-1 text-gray-300">
+                        <li>Mention key features first</li>
+                        <li>Be honest about the condition</li>
+                        <li>Explain why you're selling (optional)</li>
+                        <li>Include dimensions/weight if relevant</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                <textarea 
+                  required 
+                  rows={5}
+                  placeholder="Describe what you are selling or the service you offer in detail..."
+                  className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-6">
+                <button 
+                  type="button"
+                  onClick={prevStep}
+                  className="w-1/3 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 py-4 rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
+                >
+                  Back
+                </button>
+                <button 
+                  type="button"
+                  onClick={nextStep}
+                  disabled={!formData.price || !formData.description}
+                  className="flex-grow bg-primary text-white py-4 rounded-2xl font-bold text-lg hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                >
+                  Next: Media & Location
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* Step 3: Media & Location */}
+          {currentStep === 3 && (
+            <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center space-x-3 text-primary mb-2">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <h2 className="text-xl font-bold">Media & Location</h2>
+              </div>
+
+              <div className="space-y-4">
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest">Photos <span className="text-red-500">*</span></label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {previews.map((preview, index) => (
+                    <div key={index} className="relative aspect-square rounded-2xl overflow-hidden border border-gray-100 dark:border-neutral-800 shadow-sm group">
+                      <img src={preview} alt="Preview" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                       <button 
-                        type="button" 
-                        onClick={() => setFormData({...formData, specifications: formData.specifications.filter((_, i) => i !== idx)})}
-                        className="text-red-500 hover:text-red-600"
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg"
                       >
                         <X className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input 
-                    type="text" 
-                    id="spec-key"
-                    placeholder="e.g. Color, Material, RAM"
-                    className="px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  />
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      id="spec-val"
-                      placeholder="e.g. Space Gray, Leather, 8GB"
-                      className="flex-grow px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                    />
+                  {previews.length < 8 && (
                     <button 
                       type="button"
-                      onClick={() => {
-                        const kInput = document.getElementById('spec-key') as HTMLInputElement;
-                        const vInput = document.getElementById('spec-val') as HTMLInputElement;
-                        const k = kInput.value.trim();
-                        const v = vInput.value.trim();
-                        if (k && v) {
-                          setFormData({...formData, specifications: [...formData.specifications, { key: k, value: v }]});
-                          kInput.value = '';
-                          vInput.value = '';
-                        }
-                      }}
-                      className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="aspect-square rounded-2xl border-2 border-dashed border-gray-200 dark:border-neutral-800 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all"
                     >
-                      Add
+                      <Upload className="w-6 h-6 mb-2" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Add Photo</span>
                     </button>
-                  </div>
+                  )}
+                </div>
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" className="hidden" />
+                <p className="text-[10px] text-gray-400 font-medium">Upload up to 8 high-quality photos. First photo will be your cover.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-neutral-800">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">County <span className="text-red-500">*</span></label>
+                  <select 
+                    required
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                    value={formData.county}
+                    onChange={(e) => setFormData({...formData, county: e.target.value, town: ''})}
+                  >
+                    <option value="">Select County</option>
+                    {KENYAN_COUNTIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Town / Area <span className="text-red-500">*</span></label>
+                  <select 
+                    required
+                    disabled={!formData.county}
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 transition-all shadow-sm"
+                    value={formData.town}
+                    onChange={(e) => setFormData({...formData, town: e.target.value})}
+                  >
+                    <option value="">Select Town</option>
+                    {formData.county && TOWNS[formData.county]?.map(t => <option key={t} value={t}>{t}</option>)}
+                    {!TOWNS[formData.county] && <option value="Other">Other</option>}
+                  </select>
                 </div>
               </div>
 
-              <div className="col-span-full">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-                <textarea 
-                  required 
-                  rows={5}
-                  placeholder="Describe what you are selling or the service you offer..."
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* Images */}
-          <section className="space-y-4">
-            <h2 className="text-lg font-bold flex items-center text-primary">
-              <Camera className="w-5 h-5 mr-2" /> Images
-            </h2>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {previews.map((preview, index) => (
-                  <div key={index} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-neutral-800">
-                    <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-                    <button 
-                      type="button"
-                      onClick={() => removeFile(index)}
-                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+              <div className="flex gap-3 pt-6">
                 <button 
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-xl border-2 border-dashed border-gray-300 dark:border-neutral-700 flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 hover:border-primary hover:text-primary transition-all"
+                  onClick={prevStep}
+                  className="w-1/3 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 py-4 rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
                 >
-                  <Upload className="w-6 h-6 mb-2" />
-                  <span className="text-xs font-medium">Upload Photo</span>
+                  Back
+                </button>
+                <button 
+                  type="button"
+                  onClick={nextStep}
+                  disabled={selectedFiles.length === 0 || !formData.county || !formData.town}
+                  className="flex-grow bg-primary text-white py-4 rounded-2xl font-bold text-lg hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                >
+                  Next: Contact & Review
                 </button>
               </div>
-              <input 
-                type="file" 
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                multiple
-                accept="image/*"
-                className="hidden"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400">Upload high-quality images to attract more buyers. Max size: 3MB per image.</p>
-            </div>
-          </section>
+            </section>
+          )}
 
-          {/* Location */}
-          <section className="space-y-4">
-            <h2 className="text-lg font-bold flex items-center text-primary">
-              <MapPin className="w-5 h-5 mr-2" /> Location
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">County</label>
-                <select 
-                  required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  value={formData.county}
-                  onChange={(e) => setFormData({...formData, county: e.target.value, town: ''})}
+          {/* Step 4: Contact & Review */}
+          {currentStep === 4 && (
+            <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center space-x-3 text-primary mb-2">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Phone className="w-5 h-5" />
+                </div>
+                <h2 className="text-xl font-bold">Contact & Review</h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Phone Number <span className="text-red-500">*</span></label>
+                  <input 
+                    type="tel" 
+                    required 
+                    placeholder="0712345678"
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">WhatsApp (Optional)</label>
+                  <input 
+                    type="tel" 
+                    placeholder="+254712345678"
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                    value={formData.whatsapp}
+                    onChange={(e) => setFormData({...formData, whatsapp: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-neutral-800/50 p-6 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
+                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Listing Summary</h3>
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-200">
+                    <img src={previews[0]} alt="" className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900 dark:text-white">{formData.title}</p>
+                    <p className="text-sm text-primary font-black">KES {formData.price}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <MapPin className="w-3 h-3" />
+                  <span>{formData.town}, {formData.county}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-6">
+                <button 
+                  type="button"
+                  onClick={prevStep}
+                  className="w-1/3 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 py-4 rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
                 >
-                  <option value="">Select County</option>
-                  {KENYAN_COUNTIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Town / Area</label>
-                <select 
-                  required
-                  disabled={!formData.county}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary disabled:bg-gray-50 dark:disabled:bg-neutral-900 transition-colors"
-                  value={formData.town}
-                  onChange={(e) => setFormData({...formData, town: e.target.value})}
+                  Back
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={loading || !formData.phone}
+                  className="flex-grow bg-primary text-white py-4 rounded-2xl font-bold text-lg hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center"
                 >
-                  <option value="">Select Town</option>
-                  {formData.county && TOWNS[formData.county]?.map(t => <option key={t} value={t}>{t}</option>)}
-                  {!TOWNS[formData.county] && <option value="Other">Other</option>}
-                </select>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      {moderating ? 'AI Moderating...' : 'Posting Listing...'}
+                    </>
+                  ) : (
+                    'Post Listing Now'
+                  )}
+                </button>
               </div>
-            </div>
-          </section>
-
-          {/* Contact */}
-          <section className="space-y-4">
-            <h2 className="text-lg font-bold flex items-center text-primary">
-              <Phone className="w-5 h-5 mr-2" /> Contact Information
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
-                <input 
-                  type="tel" 
-                  required 
-                  placeholder="0712345678"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">WhatsApp (Optional)</label>
-                <input 
-                  type="tel" 
-                  placeholder="+254712345678"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors"
-                  value={formData.whatsapp}
-                  onChange={(e) => setFormData({...formData, whatsapp: e.target.value})}
-                />
-              </div>
-            </div>
-          </section>
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg hover:bg-opacity-90 transition-all disabled:opacity-50 flex items-center justify-center"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                {moderating ? 'AI Moderating...' : 'Posting Listing...'}
-              </>
-            ) : (
-              'Post Listing Now'
-            )}
-          </button>
+            </section>
+          )}
         </form>
       </div>
     </div>

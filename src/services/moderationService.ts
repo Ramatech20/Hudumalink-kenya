@@ -20,13 +20,25 @@ export const moderateListing = async (title: string, description: string): Promi
     - reason: string (if not safe, explain why in one short sentence)
     `;
 
-    const response = await ai.models.generateContent({
+    // Add a timeout to the AI call
+    const moderationPromise = ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
       }
     });
+
+    const timeoutPromise = new Promise<null>((resolve) => 
+      setTimeout(() => resolve(null), 10000) // 10 second timeout
+    );
+
+    const response = await Promise.race([moderationPromise, timeoutPromise]);
+
+    if (!response) {
+      console.warn('Moderation timed out, defaulting to safe');
+      return { isSafe: true };
+    }
 
     const result = JSON.parse(response.text || '{"isSafe": true}');
     return result;
