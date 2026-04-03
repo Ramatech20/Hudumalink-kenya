@@ -297,7 +297,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 <a href="https://x.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-neutral-800 transition-colors">
                   <Twitter className="w-5 h-5" />
                 </a>
-                <a href="https://wa.me/254700000000" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-green-500 transition-colors">
+                <a href="https://wa.me/254112389628" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-green-500 transition-colors">
                   <MessageCircle className="w-5 h-5" />
                 </a>
               </div>

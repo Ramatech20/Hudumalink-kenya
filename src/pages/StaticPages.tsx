@@ -81,7 +81,7 @@ export const About = () => (
             <div className="absolute bottom-10 left-10 right-10">
               <div className="p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
                 <p className="text-white font-bold text-lg">Connecting 47 Counties</p>
-                <p className="text-white/80 text-sm">From the heart of Nairobi to every corner of Kenya.</p>
+                <p className="text-white/80 text-sm">From the heart of Eldoret to every corner of Kenya.</p>
               </div>
             </div>
           </div>
@@ -884,12 +884,12 @@ export const Contact = () => {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="inline-flex items-center justify-center w-20 h-20 bg-accent/10 rounded-3xl text-accent mb-8"
+            className="inline-flex items-center justify-center w-20 h-20 bg-green-500/10 rounded-3xl text-green-500 mb-8"
           >
             <MessageSquare className="w-10 h-10" />
           </motion.div>
           <h1 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
-            Contact <span className="text-accent">Support</span> 💬
+            Contact <span className="text-green-500">Support</span> 💬
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto leading-relaxed">
             Need help, have a question, or facing an issue? Our support team is ready to assist you quickly and professionally. Your experience matters to us.
@@ -957,7 +957,7 @@ export const Contact = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-4 bg-accent text-white rounded-xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-4 bg-green-600 text-white rounded-xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isSubmitting ? 'Sending...' : (
                   <>
@@ -995,17 +995,17 @@ export const Contact = () => {
               <div className="space-y-8">
                 {[
                   { icon: <Mail className="w-6 h-6" />, title: "Email Us", val: "support@hudumalink.co.ke", desc: "⚡ Average response time: under 2 hours" },
-                  { icon: <MessageCircle className="w-6 h-6" />, title: "WhatsApp Support", val: "+254 700 000 000", desc: "Chat with us instantly for faster assistance." },
-                  { icon: <Phone className="w-6 h-6" />, title: "Call Us", val: "+254 700 000 000", desc: "Mon-Fri from 8am to 6pm." },
-                  { icon: <MapPin className="w-6 h-6" />, title: "Visit Us", val: "Nairobi, Kenya", desc: "(Operations currently remote as we build and expand)" }
+                  { icon: <MessageCircle className="w-6 h-6" />, title: "WhatsApp Support", val: "0112389628", desc: "Chat with us instantly for faster assistance." },
+                  { icon: <Phone className="w-6 h-6" />, title: "Call Us", val: "0112389628", desc: "Mon-Fri from 8am to 6pm." },
+                  { icon: <MapPin className="w-6 h-6" />, title: "Visit Us", val: "Eldoret, Kenya", desc: "(Operations currently remote as we build and expand)" }
                 ].map((item, i) => (
                   <div key={i} className="flex gap-6">
-                    <div className="w-14 h-14 bg-gray-50 dark:bg-neutral-900 rounded-2xl flex items-center justify-center text-accent border border-gray-100 dark:border-neutral-800 flex-shrink-0">
+                    <div className="w-14 h-14 bg-gray-50 dark:bg-neutral-900 rounded-2xl flex items-center justify-center text-green-500 border border-gray-100 dark:border-neutral-800 flex-shrink-0">
                       {item.icon}
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900 dark:text-white">{item.title}</h3>
-                      <p className="text-accent font-bold mt-1">{item.val}</p>
+                      <p className="text-green-600 dark:text-green-400 font-bold mt-1">{item.val}</p>
                       <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">{item.desc}</p>
                     </div>
                   </div>
