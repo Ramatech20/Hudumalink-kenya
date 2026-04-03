@@ -11,21 +11,28 @@ const __dirname = path.dirname(__filename);
 
 // Initialize Firebase Admin
 const firebaseConfigPath = path.join(__dirname, "firebase-applet-config.json");
-if (fs.existsSync(firebaseConfigPath)) {
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // Support for production environment variables (Base64 encoded JSON)
+  const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString());
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: serviceAccount.project_id,
+  });
+} else if (fs.existsSync(firebaseConfigPath)) {
   const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
   admin.initializeApp({
     credential: admin.credential.applicationDefault(),
     projectId: firebaseConfig.projectId,
   });
 } else {
-  console.warn("firebase-applet-config.json not found. Firebase Admin not initialized.");
+  console.warn("Firebase Admin not initialized. Set FIREBASE_SERVICE_ACCOUNT env var or provide firebase-applet-config.json.");
 }
 
 const db = admin.firestore();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   app.use(express.json());
 
