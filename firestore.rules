@@ -205,6 +205,26 @@ service cloud.firestore {
              isValidDateString(data.createdAt);
     }
 
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
+             data.userId is string &&
+             data.title is string && data.title.size() <= 100 &&
+             data.message is string && data.message.size() <= 500 &&
+             data.type is string &&
+             data.read is bool &&
+             data.createdAt is string;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['listingId', 'reviewerId', 'sellerId', 'rating', 'comment', 'createdAt']) &&
+             data.listingId is string &&
+             data.reviewerId is string &&
+             data.sellerId is string &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() <= 1000 &&
+             data.createdAt is string;
+    }
+
     function isValidChat(data) {
       return data.keys().hasAll(['participants', 'updatedAt']) &&
              data.participants is list && data.participants.size() == 2 &&
@@ -287,9 +307,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // Allow reading user profiles to show author info on listings
-      // But in a real app, we should hide email/phone from non-owners
-      allow read: if isAuthenticated();
+      // Strictly limit read access to the document owner or admin to protect PII
+      allow read: if isOwner(userId) || isAdmin();
       
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
                       (request.resource.data.role != 'admin' || request.auth.token.email == "ramadhanwambia83@gmail.com");
@@ -303,12 +322,11 @@ service cloud.firestore {
                          (resource.data.role != 'admin' && request.resource.data.role in ['customer', 'provider', 'seller'])
                        )
                      ) || (
-                       // Allow cancellation updates by other users (e.g. customers updating provider stats)
+                       // Allow specific field updates by other users or system logic
                        isAuthenticated() &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancellationCount', 'isFlagged', 'flagReason']) &&
                        (
-                         (!('cancellationCount' in resource.data) && request.resource.data.cancellationCount == 1) ||
-                         (request.resource.data.cancellationCount == resource.data.cancellationCount + 1)
+                         // Increments for balance/escrow from transactions or releases
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['escrowBalance', 'balance', 'cancellationCount', 'isFlagged', 'flagReason'])
                        )
                      );
 
@@ -316,6 +334,29 @@ service cloud.firestore {
         allow read: if isOwner(userId) || isAdmin();
         allow create, update: if isOwner(userId) && isAuthenticated();
       }
+    }
+
+    function isValidPublicUser(data) {
+      return data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'role', 'isVerified', 'isOnline', 'lastSeen', 'rating', 'reviewCount', 'kycStatus', 'createdAt']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.photoURL is string && data.photoURL.size() <= 500 &&
+             data.role in ['customer', 'provider', 'seller', 'admin'] &&
+             data.isVerified is bool &&
+             data.isOnline is bool &&
+             data.lastSeen is string &&
+             data.rating is number &&
+             data.reviewCount is number &&
+             data.kycStatus in ['none', 'pending', 'verified', 'rejected'] &&
+             data.createdAt is string;
+    }
+
+    match /users_public/{userId} {
+      // Public profile info is readable by any authenticated user
+      allow read: if isAuthenticated();
+      // Only the system (via AuthContext) or admin should write to this
+      allow create, update: if (isOwner(userId) && isValidPublicUser(request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /listings/{listingId} {
@@ -339,7 +380,8 @@ service cloud.firestore {
     match /reviews/{reviewId} {
       allow read: if true;
       allow create: if isAuthenticated() && isValidReview(request.resource.data) && 
-                      request.resource.data.targetId != request.auth.uid; // Can't review self
+                      request.resource.data.reviewerId == request.auth.uid &&
+                      request.resource.data.sellerId != request.auth.uid; // Can't review self
       allow update: if isAdmin(); // Reviews are generally immutable by users
       allow delete: if isAdmin();
     }
@@ -359,7 +401,7 @@ service cloud.firestore {
     // Notifications
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidNotification(request.resource.data);
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && 
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;

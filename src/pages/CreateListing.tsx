@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getCountFromServer } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
@@ -16,23 +16,80 @@ const CreateListing = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [moderating, setModerating] = useState(false);
+  const [listingCount, setListingCount] = useState<number | null>(null);
+  const [checkingCount, setCheckingCount] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    price: '',
+    type: 'product' as 'product' | 'service',
+    category: '',
+    county: '',
+    town: '',
+    phone: '',
+    whatsapp: '',
+    stock: '',
+    sizes: [] as string[],
+    specifications: [] as { key: string, value: string }[],
+    lat: undefined as number | undefined,
+    lng: undefined as number | undefined,
+  });
+
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [currentStep, setCurrentStep] = useState(1);
+
   useEffect(() => {
+    const checkListingCount = async () => {
+      if (!user) return;
+      try {
+        const q = query(collection(db, 'listings'), where('authorId', '==', user.uid));
+        const snapshot = await getCountFromServer(q);
+        setListingCount(snapshot.data().count);
+      } catch (error) {
+        console.error('Error fetching listing count:', error);
+      } finally {
+        setCheckingCount(false);
+      }
+    };
+
+    if (user && user.role !== 'customer') {
+      checkListingCount();
+    } else {
+      setCheckingCount(false);
+    }
+
     if (user && user.role === 'customer') {
       toast.error('Customers cannot post listings. Please become a provider or seller first.');
       navigate('/profile');
     }
   }, [user, navigate]);
 
-  if (user && (user.role === 'provider' || user.role === 'seller') && user.kycStatus !== 'verified') {
+  if (checkingCount) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+        <p className="text-gray-500">Checking account status...</p>
+      </div>
+    );
+  }
+
+  const needsKYC = user && 
+    (user.role === 'provider' || user.role === 'seller') && 
+    user.kycStatus !== 'verified' && 
+    listingCount !== null && 
+    listingCount >= 2;
+
+  if (needsKYC) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
         <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
           <Shield className="w-16 h-16 text-primary mx-auto mb-6" />
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Identity Verification Required</h1>
           <p className="text-gray-500 dark:text-gray-400 mb-8">
-            To maintain a safe marketplace, all service providers and sellers must verify their identity before posting listings.
+            You have reached the limit of 2 free listings. To maintain a safe marketplace, all service providers and sellers must verify their identity before posting more listings.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button 
@@ -72,27 +129,6 @@ const CreateListing = () => {
       </div>
     );
   }
-
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    price: '',
-    type: 'product' as 'product' | 'service',
-    category: '',
-    county: '',
-    town: '',
-    phone: '',
-    whatsapp: '',
-    stock: '',
-    sizes: [] as string[],
-    specifications: [] as { key: string, value: string }[],
-    lat: undefined as number | undefined,
-    lng: undefined as number | undefined,
-  });
-
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
-  const [currentStep, setCurrentStep] = useState(1);
 
   const totalSteps = 4;
 
@@ -249,7 +285,15 @@ const CreateListing = () => {
     <div className="max-w-3xl mx-auto px-4 py-12">
       <div className="bg-white dark:bg-neutral-900 rounded-3xl shadow-xl p-8 border border-gray-100 dark:border-neutral-800 transition-colors">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-black text-gray-900 dark:text-white">Post a Listing</h1>
+          <div>
+            <h1 className="text-3xl font-black text-gray-900 dark:text-white">Post a Listing</h1>
+            {user?.kycStatus !== 'verified' && listingCount !== null && listingCount < 2 && (
+              <p className="text-xs font-bold text-primary mt-1 flex items-center">
+                <Shield className="w-3 h-3 mr-1" />
+                Trial Listing {listingCount + 1}/2. Verify to become a trusted provider!
+              </p>
+            )}
+          </div>
           <div className="flex items-center space-x-2">
             {[1, 2, 3, 4].map((step) => (
               <div 

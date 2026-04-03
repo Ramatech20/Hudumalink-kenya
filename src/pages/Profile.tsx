@@ -246,6 +246,33 @@ const Profile = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      {/* KYC Banner */}
+      {user && (user.role === 'provider' || user.role === 'seller') && user.kycStatus !== 'verified' && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-6 bg-gradient-to-r from-primary/10 to-primary/5 rounded-[2.5rem] border border-primary/20 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-primary/5"
+        >
+          <div className="flex items-center gap-5 text-center md:text-left">
+            <div className="p-4 bg-primary text-white rounded-3xl shadow-lg shadow-primary/30">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">Get Verified Today!</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 font-medium">
+                Verified providers get <span className="text-primary font-bold">5x more inquiries</span> and can post unlimited listings.
+              </p>
+            </div>
+          </div>
+          <Link 
+            to="/kyc" 
+            className="w-full md:w-auto px-10 py-4 bg-primary text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-lg shadow-primary/20 text-center"
+          >
+            {user.kycStatus === 'pending' ? 'Verification Pending' : 'Verify Identity Now'}
+          </Link>
+        </motion.div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Sidebar */}
         <div className="lg:col-span-1 space-y-6">

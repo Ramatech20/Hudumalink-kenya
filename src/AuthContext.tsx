@@ -61,6 +61,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (docSnap.exists()) {
             const userData = { uid: docSnap.id, ...docSnap.data() } as User;
             
+            // Sync to users_public on every update
+            const publicUser = {
+              uid: userData.uid,
+              displayName: userData.displayName || '',
+              photoURL: userData.photoURL || '',
+              role: userData.role,
+              isVerified: userData.isVerified || false,
+              isOnline: userData.isOnline || false,
+              lastSeen: userData.lastSeen || new Date().toISOString(),
+              rating: userData.rating || 0,
+              reviewCount: userData.reviewCount || 0,
+              kycStatus: userData.kycStatus || 'none',
+              createdAt: userData.createdAt || new Date().toISOString()
+            };
+            setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true }).catch(console.error);
+
             // One-time upgrade for bootstrap admin
             if (firebaseUser.email === 'ramadhanwambia83@gmail.com' && userData.role !== 'admin') {
               try {
@@ -95,6 +111,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               createdAt: new Date().toISOString(),
             };
             await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
+            
+            // Sync to users_public
+            const publicUser = {
+              uid: newUser.uid,
+              displayName: newUser.displayName,
+              photoURL: newUser.photoURL,
+              role: newUser.role,
+              isVerified: newUser.isVerified,
+              isOnline: newUser.isOnline,
+              lastSeen: newUser.lastSeen,
+              rating: 0,
+              reviewCount: 0,
+              kycStatus: 'none',
+              createdAt: newUser.createdAt
+            };
+            await setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true });
+            
             setUser(newUser);
           }
           setLoading(false);

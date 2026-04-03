@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy, increment } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
+import { sendNotification } from '../lib/notifications';
 import { Listing, User, Report, UserKYC, Dispute, WithdrawalRequest, Appeal, Transaction } from '../types';
 import { toast } from 'sonner';
 import { CheckCircle, XCircle, Shield, User as UserIcon, Package, AlertTriangle, ExternalLink, Flag, Trash2, Eye, Wallet, Gavel, Clock, ArrowUpRight, Scale, TrendingUp, Zap } from 'lucide-react';
@@ -244,8 +245,21 @@ const Admin = () => {
 
   const approveListing = async (id: string) => {
     try {
+      const listingDoc = await getDoc(doc(db, 'listings', id));
+      if (!listingDoc.exists()) return;
+      const listingData = listingDoc.data() as Listing;
+
       await updateDoc(doc(db, 'listings', id), { status: 'active' });
       setPendingListings(prev => prev.filter(l => l.id !== id));
+      
+      await sendNotification(
+        listingData.authorId,
+        'Listing Approved!',
+        `Your listing "${listingData.title}" has been approved and is now live.`,
+        'success',
+        `/listing/${id}`
+      );
+
       toast.success('Listing approved!');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `listings/${id}`);
@@ -254,8 +268,20 @@ const Admin = () => {
 
   const rejectListing = async (id: string) => {
     try {
+      const listingDoc = await getDoc(doc(db, 'listings', id));
+      if (!listingDoc.exists()) return;
+      const listingData = listingDoc.data() as Listing;
+
       await updateDoc(doc(db, 'listings', id), { status: 'removed' });
       setPendingListings(prev => prev.filter(l => l.id !== id));
+
+      await sendNotification(
+        listingData.authorId,
+        'Listing Rejected',
+        `Your listing "${listingData.title}" was rejected by an admin.`,
+        'error'
+      );
+
       toast.success('Listing rejected');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `listings/${id}`);
@@ -266,6 +292,15 @@ const Admin = () => {
     try {
       await updateDoc(doc(db, 'users', uid), { isVerified: true });
       setUnverifiedUsers(prev => prev.filter(u => u.uid !== uid));
+      
+      await sendNotification(
+        uid,
+        'Account Verified!',
+        'Your account has been verified by an admin. You now have the verified badge!',
+        'success',
+        '/profile'
+      );
+
       toast.success('User verified!');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
@@ -279,6 +314,15 @@ const Admin = () => {
         isVerified: true 
       });
       setKycRequests(prev => prev.filter(u => u.uid !== uid));
+
+      await sendNotification(
+        uid,
+        'KYC Approved!',
+        'Your identity verification (KYC) has been approved. Your account is now fully verified.',
+        'success',
+        '/profile'
+      );
+
       toast.success('KYC approved and user verified!');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
@@ -298,6 +342,15 @@ const Admin = () => {
         rejectionReason: rejectionReason
       });
       setKycRequests(prev => prev.filter(u => u.uid !== uid));
+
+      await sendNotification(
+        uid,
+        'KYC Rejected',
+        `Your identity verification was rejected. Reason: ${rejectionReason}`,
+        'error',
+        '/kyc'
+      );
+
       toast.success('KYC rejected');
       setRejectionReason('');
       setSelectedUser(null);
@@ -308,13 +361,40 @@ const Admin = () => {
 
   const resolveReport = async (reportId: string, listingId: string, action: 'remove' | 'dismiss') => {
     try {
+      const report = reports.find(r => r.id === reportId);
+      const listingDoc = await getDoc(doc(db, 'listings', listingId));
+      const listing = listingDoc.exists() ? { id: listingDoc.id, ...listingDoc.data() } as Listing : null;
+
       if (action === 'remove') {
         await updateDoc(doc(db, 'listings', listingId), { status: 'removed' });
+        
+        // Notify listing owner
+        if (listing) {
+          await sendNotification(
+            listing.authorId,
+            'Listing Removed',
+            `Your listing "${listing.title}" has been removed due to reports of policy violations.`,
+            'error',
+            '/profile'
+          );
+        }
+        
         toast.success('Listing removed and report resolved');
       } else {
         toast.success('Report dismissed');
       }
       
+      // Notify reporter if they are logged in
+      if (report?.reporterId) {
+        await sendNotification(
+          report.reporterId,
+          'Report Resolved',
+          `Your report for listing "${listing?.title || 'a listing'}" has been ${action === 'remove' ? 'resolved and the listing removed' : 'dismissed after review'}.`,
+          'info',
+          '/profile'
+        );
+      }
+
       await updateDoc(doc(db, 'reports', reportId), { status: action === 'remove' ? 'resolved' : 'dismissed' });
       setReports(prev => prev.filter(r => r.id !== reportId));
     } catch (error) {
@@ -365,15 +445,13 @@ const Admin = () => {
         }
 
         // 3. Notify buyer
-        await addDoc(collection(db, 'notifications'), {
-          userId: txData.buyerId,
-          title: 'Refund Processed',
-          message: `Your refund of KES ${txData.amount} for transaction ${transactionId} has been processed.`,
-          type: 'success',
-          read: false,
-          link: '/profile',
-          createdAt: new Date().toISOString()
-        });
+        await sendNotification(
+          txData.buyerId,
+          'Refund Processed',
+          `Your refund of KES ${txData.amount} for transaction ${transactionId} has been processed.`,
+          'success',
+          '/profile'
+        );
       } else {
         // Release funds to seller
         const sellerRef = doc(db, 'users', txData.sellerId);
@@ -386,15 +464,13 @@ const Admin = () => {
         }
 
         // Notify seller
-        await addDoc(collection(db, 'notifications'), {
-          userId: txData.sellerId,
-          title: 'Funds Released',
-          message: `The funds for transaction ${transactionId} have been released to your balance.`,
-          type: 'success',
-          read: false,
-          link: '/profile',
-          createdAt: new Date().toISOString()
-        });
+        await sendNotification(
+          txData.sellerId,
+          'Funds Released',
+          `The funds for transaction ${transactionId} have been released to your balance.`,
+          'success',
+          '/profile'
+        );
       }
 
       await updateDoc(txRef, { 
@@ -458,15 +534,33 @@ const Admin = () => {
         });
 
         // 3. Notify user
-        await addDoc(collection(db, 'notifications'), {
+        await sendNotification(
           userId,
-          title: 'Withdrawal Approved',
-          message: `Your withdrawal of KES ${amount} has been approved and sent to your M-Pesa.`,
-          type: 'success',
-          read: false,
-          link: '/profile',
-          createdAt: new Date().toISOString()
+          'Withdrawal Approved',
+          `Your withdrawal of KES ${amount} has been approved and sent to your M-Pesa.`,
+          'success',
+          '/profile'
+        );
+      } else {
+        // Reject withdrawal - refund the balance
+        if (!rejectionReason) {
+          toast.error('Please provide a reason for rejection');
+          return;
+        }
+        
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, {
+          escrowBalance: increment(amount)
         });
+
+        // Notify user
+        await sendNotification(
+          userId,
+          'Withdrawal Rejected',
+          `Your withdrawal of KES ${amount} was rejected. Reason: ${rejectionReason}. Funds have been returned to your escrow balance.`,
+          'error',
+          '/profile'
+        );
       }
       
       await updateDoc(doc(db, 'withdrawals', withdrawalId), { 

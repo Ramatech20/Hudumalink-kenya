@@ -15,8 +15,9 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
+import { sendNotification } from '../lib/notifications';
 import { useAuth } from '../AuthContext';
-import { Message, Chat, User } from '../types';
+import { Message, Chat, User, Listing } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { Send, User as UserIcon, Search, ArrowLeft, MoreVertical, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
@@ -58,7 +59,7 @@ const Messages = () => {
         
         let otherUser: User | undefined;
         if (otherUserId) {
-          const userDoc = await getDoc(doc(db, 'users', otherUserId));
+          const userDoc = await getDoc(doc(db, 'users_public', otherUserId));
           if (userDoc.exists()) {
             otherUser = userDoc.data() as User;
           }
@@ -69,13 +70,56 @@ const Messages = () => {
       
       setChats(chatData);
       setLoading(false);
+
+      // Handle listingId from query params to initiate a new chat
+      const listingId = searchParams.get('listingId');
+      if (listingId && !selectedChatId) {
+        const initiateChat = async () => {
+          try {
+            const listingDoc = await getDoc(doc(db, 'listings', listingId));
+            if (!listingDoc.exists()) return;
+            const listingData = listingDoc.data() as Listing;
+            const sellerId = listingData.authorId;
+
+            if (sellerId === user.uid) {
+              toast.error("You cannot chat with yourself.");
+              return;
+            }
+
+            // Check if chat already exists
+            const existingChat = chatData.find(c => 
+              c.participants.includes(sellerId) && c.listingId === listingId
+            );
+
+            if (existingChat) {
+              setSelectedChatId(existingChat.id);
+              navigate(`/messages?chatId=${existingChat.id}`, { replace: true });
+            } else {
+              // Create new chat
+              const newChatData = {
+                participants: [user.uid, sellerId],
+                listingId,
+                lastMessage: '',
+                updatedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString()
+              };
+              const chatRef = await addDoc(collection(db, 'chats'), newChatData);
+              setSelectedChatId(chatRef.id);
+              navigate(`/messages?chatId=${chatRef.id}`, { replace: true });
+            }
+          } catch (error) {
+            console.error("Error initiating chat:", error);
+          }
+        };
+        initiateChat();
+      }
     }, (error) => {
       handleGeneralError(error, 'Error fetching chats');
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, searchParams, navigate, selectedChatId]);
 
   // Fetch messages for the selected chat
   useEffect(() => {
@@ -142,6 +186,18 @@ const Messages = () => {
         lastMessage: messageText,
         updatedAt: new Date().toISOString()
       });
+
+      // Notify recipient
+      const currentChat = chats.find(c => c.id === selectedChatId);
+      if (currentChat?.otherUser?.uid) {
+        await sendNotification(
+          currentChat.otherUser.uid,
+          'New Message',
+          `${user.displayName}: ${messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText}`,
+          'info',
+          `/messages?chatId=${selectedChatId}`
+        );
+      }
     } catch (error: any) {
       toast.error('Failed to send message: ' + error.message);
     }

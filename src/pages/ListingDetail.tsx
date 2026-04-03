@@ -216,7 +216,7 @@ const ListingDetail = () => {
           const listingData = { id: listingDoc.id, ...listingDoc.data() } as Listing;
           setListing(listingData);
           
-          const authorDoc = await getDoc(doc(db, 'users', listingData.authorId));
+          const authorDoc = await getDoc(doc(db, 'users_public', listingData.authorId));
           if (authorDoc.exists()) {
             setAuthor(authorDoc.data() as User);
           }
@@ -322,9 +322,35 @@ const ListingDetail = () => {
       if (transactionId) {
         toast.success('STK Push sent! Please enter your PIN on your phone.');
         
+        // Notify seller about pending order
+        await sendNotification(
+          listing.authorId,
+          'New Order Initiated',
+          `A buyer has initiated a payment for your listing "${listing.title}". Funds will be held in escrow.`,
+          'info',
+          `/listing/${listing.id}`
+        );
+
         // Simulate payment success after 10 seconds (in a real app, this would be a webhook)
         setTimeout(async () => {
           await simulatePaymentSuccess(transactionId);
+          
+          // Notify both parties about successful deposit
+          await sendNotification(
+            user.uid,
+            'Payment Successful',
+            `Your payment for "${listing.title}" has been received and is held securely in escrow.`,
+            'success',
+            `/listing/${listing.id}`
+          );
+          await sendNotification(
+            listing.authorId,
+            'Funds Received in Escrow',
+            `Payment for "${listing.title}" has been received and is held in escrow. You can now proceed with delivery.`,
+            'success',
+            `/listing/${listing.id}`
+          );
+
           // Refresh transaction state
           const txDoc = await getDoc(doc(db, 'transactions', transactionId));
           if (txDoc.exists()) {
@@ -358,6 +384,15 @@ const ListingDetail = () => {
       if (success) {
         setTransaction(prev => prev ? { ...prev, status: 'released' } : null);
         setHasCompletedTransaction(true);
+
+        // Notify seller about funds release
+        await sendNotification(
+          listing.authorId,
+          'Funds Released!',
+          `The buyer has confirmed delivery for "${listing.title}". KES ${transaction.amount} has been added to your escrow balance.`,
+          'success',
+          '/profile'
+        );
       }
     } catch (error: any) {
       toast.error('Error confirming delivery: ' + error.message);
@@ -392,6 +427,15 @@ const ListingDetail = () => {
         rating: parseFloat(newRatingVal.toFixed(1)),
         reviewCount: newReviewCount
       });
+
+      // Notify seller about new review
+      await sendNotification(
+        author.uid,
+        'New Review Received!',
+        `${user.displayName} left you a ${newRating}-star review for "${listing.title}".`,
+        'info',
+        `/listing/${listing.id}`
+      );
 
       toast.success('Review submitted successfully!');
       setNewComment('');
@@ -808,6 +852,17 @@ const ListingDetail = () => {
                           </p>
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                  {!transaction && (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-2xl">
+                      <p className="text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest flex items-center mb-1">
+                        <Zap className="w-3 h-3 mr-1" /> Sandbox Mode
+                      </p>
+                      <p className="text-[11px] text-blue-600 dark:text-blue-400 leading-relaxed font-medium">
+                        Payments are currently in simulation mode for MVP testing. No real funds will be deducted from your M-Pesa.
+                      </p>
                     </div>
                   )}
 

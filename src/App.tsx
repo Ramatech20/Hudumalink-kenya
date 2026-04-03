@@ -29,11 +29,14 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   return <>{children}</>;
 };
 
+import ErrorBoundary from './components/ErrorBoundary';
+
 export default function App() {
   return (
     <HelmetProvider>
-      <AuthProvider>
-        <Router>
+      <ErrorBoundary>
+        <AuthProvider>
+          <Router>
           <ScrollToTop />
           <Layout>
             <Routes>
@@ -61,6 +64,7 @@ export default function App() {
           <Toaster position="top-center" richColors />
         </Router>
       </AuthProvider>
+      </ErrorBoundary>
     </HelmetProvider>
   );
 }
