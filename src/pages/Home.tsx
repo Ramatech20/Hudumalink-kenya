@@ -15,10 +15,14 @@ const Home = () => {
   const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCounty, setSelectedCounty] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchFeatured = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const q = query(
           collection(db, 'listings'),
@@ -31,7 +35,11 @@ const Home = () => {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
         setFeaturedListings(docs);
       } catch (error) {
+        console.error('Failed to load featured listings:', error);
+        setError('Failed to load listings. Please check your internet connection.');
         handleGeneralError(error, 'Failed to load featured listings');
+      } finally {
+        setLoading(false);
       }
     };
     fetchFeatured();
@@ -261,7 +269,33 @@ const Home = () => {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {loading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div 
+                key={i} 
+                className="bg-gray-200 dark:bg-neutral-800 rounded-2xl h-64 animate-pulse"
+              ></div>
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-6 text-red-800 dark:text-red-300">
+            <p className="font-semibold">Error loading listings</p>
+            <p className="text-sm mt-1">{error}</p>
+          </div>
+        )}
+
+        {!loading && !error && featuredListings.length === 0 && (
+          <div className="text-center py-12">
+            <ShoppingBag className="w-16 h-16 text-gray-300 dark:text-neutral-700 mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400 text-lg">No listings yet. Check back soon!</p>
+          </div>
+        )}
+
+        {!loading && !error && featuredListings.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {featuredListings.map((listing) => (
             <Link 
               key={listing.id} 
@@ -315,12 +349,8 @@ const Home = () => {
               </div>
             </Link>
           ))}
-          {featuredListings.length === 0 && (
-            <div className="col-span-full py-20 text-center text-gray-500 dark:text-gray-400">
-              No listings found. Be the first to post!
-            </div>
-          )}
         </div>
+        )}
       </section>
 
       {/* CTA Section */}
