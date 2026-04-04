@@ -1,12 +1,40 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-import firebaseConfig from '../firebase-applet-config.json';
+// Try to load config from file, fallback to environment variables
+let firebaseConfig: any;
+try {
+  // @ts-ignore - This file might not exist in all environments
+  const configModule = await import('../firebase-applet-config.json');
+  firebaseConfig = configModule.default;
+  console.log("Firebase: Loaded configuration from firebase-applet-config.json");
+} catch (e) {
+  console.warn("Firebase: Could not load firebase-applet-config.json, falling back to environment variables");
+  firebaseConfig = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || '(default)'
+  };
+}
+
+// Validate basic config
+if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
+  console.error("Firebase: Critical configuration missing (projectId or apiKey). Check your .env or config file.");
+}
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Use initializeFirestore with experimentalForceLongPolling to bypass potential gRPC/WebSocket blocks
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId || '(default)');
+
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
