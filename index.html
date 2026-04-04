@@ -13,6 +13,27 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Global error handler to catch and display initialization errors (helpful for blank screens)
+      window.onerror = function(message, source, lineno, colno, error) {
+        const root = document.getElementById('root');
+        if (root && root.innerHTML === '') {
+          root.innerHTML = `
+            <div style="padding: 20px; font-family: sans-serif; text-align: center; color: #ef4444;">
+              <h1 style="font-size: 24px; font-weight: 900; margin-bottom: 10px;">Application Error</h1>
+              <p style="color: #6b7280; margin-bottom: 20px;">The application failed to load. This might be due to a configuration issue or a browser compatibility problem.</p>
+              <div style="background: #f9fafb; padding: 15px; border-radius: 12px; text-align: left; font-family: monospace; font-size: 12px; overflow-x: auto;">
+                <strong>Error:</strong> ${message}<br>
+                <strong>Source:</strong> ${source}:${lineno}:${colno}
+              </div>
+              <button onclick="window.location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #006633; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">
+                Try Again
+              </button>
+            </div>
+          `;
+        }
+      };
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
