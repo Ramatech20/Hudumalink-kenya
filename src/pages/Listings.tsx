@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
 import { formatPrice, cn, getDistance } from '../lib/utils';
@@ -134,7 +134,7 @@ const Listings = () => {
       setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
       setHasMore(snapshot.docs.length === LISTINGS_PER_PAGE);
     } catch (error) {
-      handleGeneralError(error, 'Failed to fetch listings');
+      handleFirestoreError(error, OperationType.LIST, 'listings');
     } finally {
       setLoading(false);
       setLoadingMore(false);

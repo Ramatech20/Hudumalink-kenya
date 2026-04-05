@@ -210,24 +210,25 @@ const ListingDetail = () => {
     const fetchData = async () => {
       if (!id) return;
       setLoading(true);
-      try {
-        const listingDoc = await getDoc(doc(db, 'listings', id));
-        if (listingDoc.exists()) {
-          const listingData = { id: listingDoc.id, ...listingDoc.data() } as Listing;
-          setListing(listingData);
-          
-          const authorDoc = await getDoc(doc(db, 'users_public', listingData.authorId));
-          if (authorDoc.exists()) {
-            setAuthor(authorDoc.data() as User);
-          }
+    try {
+      const listingDoc = await getDoc(doc(db, 'listings', id));
+      if (listingDoc.exists()) {
+        const listingData = { id: listingDoc.id, ...listingDoc.data() } as Listing;
+        setListing(listingData);
+        
+        const authorDoc = await getDoc(doc(db, 'users_public', listingData.authorId));
+        if (authorDoc.exists()) {
+          setAuthor(authorDoc.data() as User);
+        }
 
-          // Fetch transaction if user is logged in
-          if (user && user.uid) {
-            const txQuery = query(
-              collection(db, 'transactions'), 
-              where('listingId', '==', id),
-              where('buyerId', '==', user.uid)
-            );
+        // Fetch transaction if user is logged in
+        if (user && user.uid) {
+          const txQuery = query(
+            collection(db, 'transactions'), 
+            where('listingId', '==', id),
+            where('buyerId', '==', user.uid)
+          );
+          try {
             const txSnap = await getDocs(txQuery);
             if (!txSnap.empty) {
               const txData = { id: txSnap.docs[0].id, ...txSnap.docs[0].data() } as Transaction;
@@ -236,33 +237,45 @@ const ListingDetail = () => {
                 setHasCompletedTransaction(true);
               }
             }
+          } catch (error) {
+            handleFirestoreError(error, OperationType.LIST, 'transactions');
           }
+        }
 
-          // Increment view count
+        // Increment view count
+        try {
           await updateDoc(doc(db, 'listings', id), {
             viewCount: increment(1)
           });
+        } catch (error) {
+          // Non-critical error
+          console.warn('Failed to increment view count:', error);
+        }
 
-          // Fetch reviews for the author
-          if (listingData.authorId) {
-            const reviewsQuery = query(
-              collection(db, 'reviews'),
-              where('targetId', '==', listingData.authorId),
-              orderBy('createdAt', 'desc'),
-              limit(10)
-            );
+        // Fetch reviews for the author
+        if (listingData.authorId) {
+          const reviewsQuery = query(
+            collection(db, 'reviews'),
+            where('targetId', '==', listingData.authorId),
+            orderBy('createdAt', 'desc'),
+            limit(10)
+          );
+          try {
             const reviewsSnapshot = await getDocs(reviewsQuery);
             setReviews(reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review)));
+          } catch (error) {
+            handleFirestoreError(error, OperationType.LIST, 'reviews');
           }
-        } else {
-          toast.error('Listing not found');
-          navigate('/listings');
         }
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
+      } else {
+        toast.error('Listing not found');
+        navigate('/listings');
       }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `listings/${id}`);
+    } finally {
+      setLoading(false);
+    }
     };
     fetchData();
   }, [id, navigate, user]);

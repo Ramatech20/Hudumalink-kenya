@@ -3,20 +3,22 @@ import { getAuth } from 'firebase/auth';
 import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// Try to load config from environment variables first (Vite)
+import firebaseConfigJson from '../firebase-applet-config.json';
+
+// Try to load config from environment variables first (Vite), fall back to JSON
 const getInitialConfig = () => {
   return {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || '(default)'
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId,
+    firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId || '(default)'
   };
 };
 
-let firebaseConfig = getInitialConfig();
+const firebaseConfig = getInitialConfig();
 
 // Initialize with what we have
 const app = initializeApp(firebaseConfig);
@@ -28,26 +30,6 @@ export const db = initializeFirestore(app, {
 
 export const auth = getAuth(app);
 export const storage = getStorage(app);
-
-// Attempt to load from JSON file asynchronously if environment variables are missing
-const loadConfigFromJson = async () => {
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    try {
-      // @ts-ignore - This file might not exist in all environments
-      const configModule = await import('../firebase-applet-config.json');
-      const jsonConfig = configModule.default;
-      console.log("Firebase: Loaded configuration from firebase-applet-config.json");
-      
-      // Note: We can't easily re-initialize the same app with new config at runtime 
-      // without potentially breaking existing listeners. 
-      // This is mainly to inform the developer if they missed env vars.
-    } catch (e) {
-      console.warn("Firebase: Could not load firebase-applet-config.json and environment variables are missing.");
-    }
-  }
-};
-
-loadConfigFromJson();
 
 export enum OperationType {
   CREATE = 'create',

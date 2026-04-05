@@ -49,7 +49,7 @@ const CreateListing = () => {
         const snapshot = await getCountFromServer(q);
         setListingCount(snapshot.data().count);
       } catch (error) {
-        console.error('Error fetching listing count:', error);
+        handleFirestoreError(error, OperationType.GET, 'listings');
       } finally {
         setCheckingCount(false);
       }
@@ -270,11 +270,7 @@ const CreateListing = () => {
       
       navigate(`/listing/${docRef.id}`);
     } catch (error: any) {
-      if (error.message && error.message.includes('permission')) {
-        handleFirestoreError(error, OperationType.CREATE, 'listings');
-      } else {
-        handleGeneralError(error, 'Failed to post listing');
-      }
+      handleFirestoreError(error, OperationType.CREATE, 'listings');
     } finally {
       setLoading(false);
       setModerating(false);

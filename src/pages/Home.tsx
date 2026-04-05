@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, MapPin, Briefcase, ShoppingBag, ArrowRight, Star, ShieldCheck, Zap, CheckCircle2 } from 'lucide-react';
 import { collection, query, where, limit, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
 import { formatPrice, cn, getDistance } from '../lib/utils';
@@ -34,7 +34,7 @@ const Home = () => {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
         setFeaturedListings(docs);
       } catch (error) {
-        handleGeneralError(error, 'Failed to load featured listings');
+        handleFirestoreError(error, OperationType.LIST, 'listings');
       }
     };
     fetchFeatured();
@@ -77,7 +77,7 @@ const Home = () => {
 
       setNearbyListings(sorted.slice(0, 4));
     } catch (error) {
-      console.error('Failed to fetch nearby:', error);
+      handleFirestoreError(error, OperationType.LIST, 'listings');
     } finally {
       setLoadingNearby(false);
     }

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { User } from './types';
 
 interface AuthContextType {
@@ -51,10 +51,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         // Update online status using setDoc with merge to avoid failure if doc doesn't exist yet
+        const userPath = `users/${firebaseUser.uid}`;
         setDoc(doc(db, 'users', firebaseUser.uid), {
           isOnline: true,
           lastSeen: new Date().toISOString()
-        }, { merge: true }).catch(console.error);
+        }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, userPath));
 
         // Set up real-time listener for user profile
         unsubscribeSnapshot = onSnapshot(doc(db, 'users', firebaseUser.uid), async (docSnap) => {
@@ -75,7 +76,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               kycStatus: userData.kycStatus || 'none',
               createdAt: userData.createdAt || new Date().toISOString()
             };
-            setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true }).catch(console.error);
+            const publicPath = `users_public/${firebaseUser.uid}`;
+            setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, publicPath));
 
             // One-time upgrade for bootstrap admin
             if (firebaseUser.email === 'ramadhanwambia83@gmail.com' && userData.role !== 'admin') {
@@ -86,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
                 setUser({ ...userData, role: 'admin', isVerified: true });
               } catch (error) {
-                console.error("Failed to upgrade admin role:", error);
+                handleFirestoreError(error, OperationType.UPDATE, userPath);
                 setUser(userData);
               }
             } else {
@@ -110,36 +112,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               emailVerified: firebaseUser.emailVerified,
               createdAt: new Date().toISOString(),
             };
-            await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
-            
-            // Sync to users_public
-            const publicUser = {
-              uid: newUser.uid,
-              displayName: newUser.displayName,
-              photoURL: newUser.photoURL,
-              role: newUser.role,
-              isVerified: newUser.isVerified,
-              isOnline: newUser.isOnline,
-              lastSeen: newUser.lastSeen,
-              rating: 0,
-              reviewCount: 0,
-              kycStatus: 'none',
-              createdAt: newUser.createdAt
-            };
-            await setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true });
-            
-            setUser(newUser);
+            try {
+              await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
+              
+              // Sync to users_public
+              const publicUser = {
+                uid: newUser.uid,
+                displayName: newUser.displayName,
+                photoURL: newUser.photoURL,
+                role: newUser.role,
+                isVerified: newUser.isVerified,
+                isOnline: newUser.isOnline,
+                lastSeen: newUser.lastSeen,
+                rating: 0,
+                reviewCount: 0,
+                kycStatus: 'none',
+                createdAt: newUser.createdAt
+              };
+              await setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true });
+              
+              setUser(newUser);
+            } catch (error) {
+              handleFirestoreError(error, OperationType.WRITE, userPath);
+            }
           }
           setLoading(false);
           setIsAuthReady(true);
+        }, (error) => {
+          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
         });
       } else {
         if (user?.uid) {
           // Update offline status
+          const userPath = `users/${user.uid}`;
           setDoc(doc(db, 'users', user.uid), {
             isOnline: false,
             lastSeen: new Date().toISOString()
-          }, { merge: true }).catch(console.error);
+          }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, userPath));
         }
         if (unsubscribeSnapshot) unsubscribeSnapshot();
         setUser(null);

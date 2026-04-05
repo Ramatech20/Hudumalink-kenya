@@ -201,7 +201,7 @@ service cloud.firestore {
              data.authorId == request.auth.uid &&
              data.targetId is string &&
              data.rating is number && data.rating >= 1 && data.rating <= 5 &&
-             (!('comment' in data) || (data.comment is string && data.comment.size() <= 500)) &&
+             (!('comment' in data) || (data.comment is string && data.comment.size() <= 1000)) &&
              isValidDateString(data.createdAt);
     }
 
@@ -212,16 +212,6 @@ service cloud.firestore {
              data.message is string && data.message.size() <= 500 &&
              data.type is string &&
              data.read is bool &&
-             data.createdAt is string;
-    }
-
-    function isValidReview(data) {
-      return data.keys().hasAll(['listingId', 'reviewerId', 'sellerId', 'rating', 'comment', 'createdAt']) &&
-             data.listingId is string &&
-             data.reviewerId is string &&
-             data.sellerId is string &&
-             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
-             data.comment is string && data.comment.size() <= 1000 &&
              data.createdAt is string;
     }
 
