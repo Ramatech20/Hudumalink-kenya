@@ -11,7 +11,7 @@ import {
   History, Lightbulb, TrendingUp, Flag, Layout, Building2, Shield, UserCheck, Briefcase
 } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 
@@ -869,7 +869,7 @@ export const Contact = () => {
       toast.success('Message sent! Our team will get back to you shortly.');
       setFormData({ name: '', email: '', subject: '', message: '' });
     } catch (error: any) {
-      toast.error('Failed to send message. Please try again.');
+      handleFirestoreError(error, OperationType.WRITE, 'support_tickets');
     } finally {
       setIsSubmitting(false);
     }

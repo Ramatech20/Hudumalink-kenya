@@ -408,6 +408,11 @@ const ListingDetail = () => {
         );
       }
     } catch (error: any) {
+      if (error.operationType) {
+        // Already handled by handleFirestoreError inside releaseEscrowFunds if applicable
+        // But here we might want to catch it if it's a general error from releaseEscrowFunds
+        return;
+      }
       toast.error('Error confirming delivery: ' + error.message);
     }
   };
@@ -436,10 +441,15 @@ const ListingDetail = () => {
       const newReviewCount = (author.reviewCount || 0) + 1;
       const newRatingVal = ((author.rating || 0) * (author.reviewCount || 0) + newRating) / newReviewCount;
 
-      await updateDoc(doc(db, 'users', author.uid), {
-        rating: parseFloat(newRatingVal.toFixed(1)),
-        reviewCount: newReviewCount
-      });
+      try {
+        await updateDoc(doc(db, 'users', author.uid), {
+          rating: parseFloat(newRatingVal.toFixed(1)),
+          reviewCount: newReviewCount
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${author.uid}`);
+        throw error;
+      }
 
       // Notify seller about new review
       await sendNotification(
@@ -461,10 +471,17 @@ const ListingDetail = () => {
         orderBy('createdAt', 'desc'),
         limit(10)
       );
-      const reviewsSnapshot = await getDocs(reviewsQuery);
-      setReviews(reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review)));
+      try {
+        const reviewsSnapshot = await getDocs(reviewsQuery);
+        setReviews(reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review)));
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.LIST, 'reviews');
+        throw error;
+      }
     } catch (error: any) {
-      toast.error('Error submitting review: ' + error.message);
+      if (!error.operationType) {
+        toast.error('Error submitting review: ' + error.message);
+      }
     } finally {
       setReviewing(false);
     }

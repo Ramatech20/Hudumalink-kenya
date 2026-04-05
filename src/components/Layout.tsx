@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, User, LogOut, Menu, X, PlusCircle, MessageSquare, Heart, Moon, Sun, Shield, AlertCircle, Bell, Facebook, Instagram, Twitter, MessageCircle } from 'lucide-react';
 import { useAuth } from '../AuthContext';
-import { auth, db } from '../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { sendEmailVerification } from 'firebase/auth';
@@ -33,6 +33,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setUnreadNotifications(snapshot.size);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notifications');
     });
 
     return () => unsubscribe();

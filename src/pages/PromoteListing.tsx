@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { Listing } from '../types';
 import { PROMOTION_TIERS } from '../constants';
@@ -28,7 +28,14 @@ const PromoteListing = () => {
       if (!id) return;
       try {
         const docRef = doc(db, 'listings', id);
-        const docSnap = await getDoc(docRef);
+        let docSnap;
+        try {
+          docSnap = await getDoc(docRef);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.GET, `listings/${id}`);
+          throw error;
+        }
+        
         if (docSnap.exists()) {
           const data = docSnap.data() as Listing;
           if (data.authorId !== user?.uid) {
@@ -41,8 +48,10 @@ const PromoteListing = () => {
           toast.error('Listing not found');
           navigate('/seller-dashboard');
         }
-      } catch (error) {
-        handleGeneralError(error, 'Failed to fetch listing');
+      } catch (error: any) {
+        if (!error.operationType) {
+          handleGeneralError(error, 'Failed to fetch listing');
+        }
       } finally {
         setLoading(false);
       }

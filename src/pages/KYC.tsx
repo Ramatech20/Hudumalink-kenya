@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { db, storage } from '../firebase';
+import { db, storage, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -23,13 +23,14 @@ const KYC = () => {
   React.useEffect(() => {
     const fetchKycData = async () => {
       if (user?.kycStatus === 'rejected') {
+        const path = `users/${user.uid}/kyc/data`;
         try {
           const dataDoc = await getDoc(doc(db, 'users', user.uid, 'kyc', 'data'));
           if (dataDoc.exists()) {
             setRejectionReason(dataDoc.data().rejectionReason || null);
           }
-        } catch (error) {
-          handleGeneralError(error, 'Error fetching KYC data');
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.GET, path);
         }
       }
     };
@@ -77,25 +78,39 @@ const KYC = () => {
         backUrl = await getDownloadURL(backSnap.ref);
       }
 
-      await updateDoc(doc(db, 'users', user.uid), {
-        kycStatus: 'pending'
-      });
+      const userPath = `users/${user.uid}`;
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          kycStatus: 'pending'
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, userPath);
+        throw error;
+      }
 
-      await setDoc(doc(db, 'users', user.uid, 'kyc', 'data'), {
-        uid: user.uid,
-        idType,
-        idNumber,
-        idFrontUrl: frontUrl,
-        idBackUrl: backUrl,
-        selfieUrl,
-        submittedAt: new Date().toISOString()
-      });
+      const kycPath = `users/${user.uid}/kyc/data`;
+      try {
+        await setDoc(doc(db, 'users', user.uid, 'kyc', 'data'), {
+          uid: user.uid,
+          idType,
+          idNumber,
+          idFrontUrl: frontUrl,
+          idBackUrl: backUrl,
+          selfieUrl,
+          submittedAt: new Date().toISOString()
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.WRITE, kycPath);
+        throw error;
+      }
 
       await refreshUser();
       toast.success('KYC documents submitted successfully! Our team will review them.');
       navigate('/profile');
     } catch (error: any) {
-      handleGeneralError(error, 'Submission failed');
+      if (!error.operationType) {
+        handleGeneralError(error, 'Submission failed');
+      }
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { collection, query, where, getDocs, orderBy, limit, addDoc } from 'firebase/firestore';
 import { Listing, Transaction, Appeal } from '../types';
@@ -31,7 +31,13 @@ const SellerDashboard = () => {
       try {
         // Fetch Listings
         const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
-        const listingsSnapshot = await getDocs(listingsQ);
+        let listingsSnapshot;
+        try {
+          listingsSnapshot = await getDocs(listingsQ);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.LIST, 'listings');
+          throw error;
+        }
         const fetchedListings = listingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
         setListings(fetchedListings);
 
@@ -42,7 +48,13 @@ const SellerDashboard = () => {
           orderBy('createdAt', 'desc'),
           limit(20)
         );
-        const salesSnapshot = await getDocs(salesQ);
+        let salesSnapshot;
+        try {
+          salesSnapshot = await getDocs(salesQ);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.LIST, 'transactions');
+          throw error;
+        }
         const fetchedSales = salesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
         setSales(fetchedSales);
 
@@ -58,8 +70,10 @@ const SellerDashboard = () => {
           totalSales: fetchedSales.length,
           activeListings
         });
-      } catch (error) {
-        handleGeneralError(error, 'Failed to fetch dashboard data');
+      } catch (error: any) {
+        if (!error.operationType) {
+          handleGeneralError(error, 'Failed to fetch dashboard data');
+        }
       } finally {
         setLoading(false);
       }
@@ -88,12 +102,19 @@ const SellerDashboard = () => {
         status: 'pending',
         createdAt: new Date().toISOString()
       };
-      await addDoc(collection(db, 'appeals'), appeal);
+      try {
+        await addDoc(collection(db, 'appeals'), appeal);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.CREATE, 'appeals');
+        throw error;
+      }
       toast.success('Appeal submitted successfully. Our team will review it.');
       setShowAppealModal(false);
       setAppealReason('');
-    } catch (error) {
-      handleGeneralError(error, 'Failed to submit appeal');
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleGeneralError(error, 'Failed to submit appeal');
+      }
     } finally {
       setSubmittingAppeal(false);
     }

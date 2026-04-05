@@ -96,7 +96,13 @@ const Listings = () => {
         q = query(q, startAfter(lastDoc));
       }
 
-      const snapshot = await getDocs(q);
+      let snapshot;
+      try {
+        snapshot = await getDocs(q);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.LIST, 'listings');
+        throw error;
+      }
       const newDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
       
       // Client-side search for keyword (Firestore limitation)
@@ -133,8 +139,10 @@ const Listings = () => {
 
       setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
       setHasMore(snapshot.docs.length === LISTINGS_PER_PAGE);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'listings');
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.LIST, 'listings');
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);

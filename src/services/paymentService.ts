@@ -1,5 +1,5 @@
 import { collection, addDoc, updateDoc, doc, increment, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Transaction, Listing, User } from '../types';
 import { toast } from 'sonner';
 
@@ -43,7 +43,13 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
       };
     }
 
-    const docRef = await addDoc(collection(db, 'transactions'), transactionData);
+    let docRef;
+    try {
+      docRef = await addDoc(collection(db, 'transactions'), transactionData);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'transactions');
+      throw error;
+    }
     const transactionId = docRef.id;
 
     // 2. Simulate the STK Push request to the user's phone
@@ -57,15 +63,24 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
 
     // 3. Update transaction with a simulated checkout request ID
     const checkoutRequestId = `ws_CO_${Math.random().toString(36).substring(2, 15)}`;
-    await updateDoc(doc(db, 'transactions', transactionId), {
-      checkoutRequestId,
-      updatedAt: new Date().toISOString()
-    });
+    try {
+      await updateDoc(doc(db, 'transactions', transactionId), {
+        checkoutRequestId,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `transactions/${transactionId}`);
+      throw error;
+    }
 
     return transactionId;
   } catch (error: any) {
-    console.error('Payment initiation failed:', error);
-    toast.error('Failed to initiate payment. Please try again.');
+    if (error.operationType) {
+      // Already handled by handleFirestoreError
+    } else {
+      console.error('Payment initiation failed:', error);
+      toast.error('Failed to initiate payment. Please try again.');
+    }
     return null;
   }
 };
@@ -77,32 +92,52 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
 export const simulatePaymentSuccess = async (transactionId: string) => {
   try {
     const txRef = doc(db, 'transactions', transactionId);
-    const txSnap = await getDoc(txRef);
+    let txSnap;
+    try {
+      txSnap = await getDoc(txRef);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `transactions/${transactionId}`);
+      throw error;
+    }
     
     if (!txSnap.exists()) return;
     
     const txData = txSnap.data() as Transaction;
 
     // Update transaction status to 'deposited' (funds are now in escrow)
-    await updateDoc(txRef, {
-      status: 'deposited',
-      updatedAt: new Date().toISOString()
-    });
+    try {
+      await updateDoc(txRef, {
+        status: 'deposited',
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `transactions/${transactionId}`);
+      throw error;
+    }
 
     // Notify the seller
-    await addDoc(collection(db, 'notifications'), {
-      userId: txData.sellerId,
-      title: 'Payment Received (Escrow)',
-      message: `A payment of KES ${txData.amount} has been deposited into escrow for your listing. Please prepare for delivery/service.`,
-      type: 'success',
-      read: false,
-      link: `/transactions/${transactionId}`,
-      createdAt: new Date().toISOString()
-    });
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: txData.sellerId,
+        title: 'Payment Received (Escrow)',
+        message: `A payment of KES ${txData.amount} has been deposited into escrow for your listing. Please prepare for delivery/service.`,
+        type: 'success',
+        read: false,
+        link: `/transactions/${transactionId}`,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'notifications');
+      throw error;
+    }
 
     toast.success('Payment confirmed! Funds are now held securely in escrow.');
-  } catch (error) {
-    console.error('Error simulating payment success:', error);
+  } catch (error: any) {
+    if (error.operationType) {
+      // Already handled by handleFirestoreError
+    } else {
+      console.error('Error simulating payment success:', error);
+    }
   }
 };
 
@@ -112,7 +147,13 @@ export const simulatePaymentSuccess = async (transactionId: string) => {
 export const releaseEscrowFunds = async (transactionId: string) => {
   try {
     const txRef = doc(db, 'transactions', transactionId);
-    const txSnap = await getDoc(txRef);
+    let txSnap;
+    try {
+      txSnap = await getDoc(txRef);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `transactions/${transactionId}`);
+      throw error;
+    }
     
     if (!txSnap.exists()) return false;
     
@@ -123,32 +164,51 @@ export const releaseEscrowFunds = async (transactionId: string) => {
     }
 
     // 1. Update transaction status
-    await updateDoc(txRef, {
-      status: 'released',
-      updatedAt: new Date().toISOString()
-    });
+    try {
+      await updateDoc(txRef, {
+        status: 'released',
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `transactions/${transactionId}`);
+      throw error;
+    }
 
     // 2. Update seller's balance
     const sellerRef = doc(db, 'users', txData.sellerId);
-    await updateDoc(sellerRef, {
-      escrowBalance: increment(txData.amount)
-    });
+    try {
+      await updateDoc(sellerRef, {
+        escrowBalance: increment(txData.amount)
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${txData.sellerId}`);
+      throw error;
+    }
 
     // 3. Notify the seller
-    await addDoc(collection(db, 'notifications'), {
-      userId: txData.sellerId,
-      title: 'Funds Released!',
-      message: `The buyer has confirmed delivery. KES ${txData.amount} has been added to your balance.`,
-      type: 'success',
-      read: false,
-      link: `/dashboard/wallet`,
-      createdAt: new Date().toISOString()
-    });
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: txData.sellerId,
+        title: 'Funds Released!',
+        message: `The buyer has confirmed delivery. KES ${txData.amount} has been added to your balance.`,
+        type: 'success',
+        read: false,
+        link: `/dashboard/wallet`,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'notifications');
+      throw error;
+    }
 
     return true;
-  } catch (error) {
-    console.error('Error releasing funds:', error);
-    toast.error('Failed to release funds.');
+  } catch (error: any) {
+    if (error.operationType) {
+      // Already handled by handleFirestoreError
+    } else {
+      console.error('Error releasing funds:', error);
+      toast.error('Failed to release funds.');
+    }
     return false;
   }
 };

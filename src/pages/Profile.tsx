@@ -57,12 +57,24 @@ const Profile = () => {
       try {
         // Fetch Listings
         const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
-        const listingsSnapshot = await getDocs(listingsQ);
+        let listingsSnapshot;
+        try {
+          listingsSnapshot = await getDocs(listingsQ);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.LIST, 'listings');
+          throw error;
+        }
         setMyListings(listingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing)));
 
         // Fetch Orders (Transactions as Buyer)
         const ordersQ = query(collection(db, 'transactions'), where('buyerId', '==', user.uid));
-        const ordersSnapshot = await getDocs(ordersQ);
+        let ordersSnapshot;
+        try {
+          ordersSnapshot = await getDocs(ordersQ);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.LIST, 'transactions');
+          throw error;
+        }
         setMyOrders(ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction)));
 
         // Fetch Withdrawals
@@ -72,10 +84,18 @@ const Profile = () => {
           orderBy('createdAt', 'desc'),
           limit(10)
         );
-        const withdrawalsSnapshot = await getDocs(withdrawalsQ);
+        let withdrawalsSnapshot;
+        try {
+          withdrawalsSnapshot = await getDocs(withdrawalsQ);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.LIST, 'withdrawals');
+          throw error;
+        }
         setMyWithdrawals(withdrawalsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, 'profile_data');
+      } catch (error: any) {
+        if (!error.operationType) {
+          handleFirestoreError(error, OperationType.LIST, 'profile_data');
+        }
       } finally {
         setLoading(false);
       }
@@ -111,11 +131,14 @@ const Profile = () => {
       setEditData(prev => ({ ...prev, photoURL: downloadURL }));
       
       // If not in editing mode, update immediately
-      if (!isEditing) {
+      try {
         await updateDoc(doc(db, 'users', user.uid), {
           photoURL: downloadURL
         });
         toast.success('Profile picture updated!');
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+        throw error;
       }
     } catch (error: any) {
       handleGeneralError(error, 'Failed to upload profile picture');
@@ -172,11 +195,7 @@ const Profile = () => {
       toast.success('Profile updated successfully!');
       setIsEditing(false);
     } catch (error: any) {
-      if (error.message && error.message.includes('permission')) {
-        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
-      } else {
-        handleGeneralError(error, 'Failed to update profile');
-      }
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }
   };
 
@@ -203,40 +222,47 @@ const Profile = () => {
       const userRef = doc(db, 'users', user.uid);
       
       // Use a transaction to ensure balance is deducted and withdrawal is recorded
-      await runTransaction(db, async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists()) throw new Error("User not found");
-        
-        const currentBalance = userDoc.data().escrowBalance || 0;
-        if (currentBalance < totalToDeduct) throw new Error("Insufficient balance");
+      try {
+        await runTransaction(db, async (transaction) => {
+          const userDoc = await transaction.get(userRef);
+          if (!userDoc.exists()) throw new Error("User not found");
+          
+          const currentBalance = userDoc.data().escrowBalance || 0;
+          if (currentBalance < totalToDeduct) throw new Error("Insufficient balance");
 
-        // 1. Deduct from balance
-        transaction.update(userRef, {
-          escrowBalance: increment(-totalToDeduct)
-        });
+          // 1. Deduct from balance
+          transaction.update(userRef, {
+            escrowBalance: increment(-totalToDeduct)
+          });
 
-        // 2. Add withdrawal record
-        const withdrawalRef = doc(collection(db, 'withdrawals'));
-        transaction.set(withdrawalRef, {
-          userId: user.uid,
-          userName: user.displayName,
-          amount,
-          fee,
-          totalDeducted: totalToDeduct,
-          method: withdrawMethod,
-          details: withdrawMethod === 'mpesa' 
-            ? { phoneNumber: withdrawDetails.phoneNumber }
-            : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber },
-          status: 'pending',
-          createdAt: new Date().toISOString()
+          // 2. Add withdrawal record
+          const withdrawalRef = doc(collection(db, 'withdrawals'));
+          transaction.set(withdrawalRef, {
+            userId: user.uid,
+            userName: user.displayName,
+            amount,
+            fee,
+            totalDeducted: totalToDeduct,
+            method: withdrawMethod,
+            details: withdrawMethod === 'mpesa' 
+              ? { phoneNumber: withdrawDetails.phoneNumber }
+              : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber },
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          });
         });
-      });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.WRITE, 'withdrawals');
+        throw error;
+      }
       
       toast.success('Withdrawal request submitted! Funds have been moved to pending.');
       setShowWithdrawModal(false);
       setWithdrawAmount('');
     } catch (error: any) {
-      handleGeneralError(error, 'Failed to submit withdrawal');
+      if (!error.operationType) {
+        handleGeneralError(error, 'Failed to submit withdrawal');
+      }
     } finally {
       setSubmittingWithdraw(false);
     }

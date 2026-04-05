@@ -231,36 +231,42 @@ const CreateListing = () => {
 
       const imageUrls = await uploadImages();
 
-        const listingData = {
-          authorId: user.uid,
-          title: formData.title,
-          description: formData.description,
-          price: formData.price ? parseFloat(formData.price) : null,
-          type: formData.type,
-          category: formData.category,
-          images: imageUrls,
-          location: {
-            county: formData.county,
-            town: formData.town,
-            lat: formData.lat,
-            lng: formData.lng
-          },
-          contact: {
-            phone: formData.phone,
-            whatsapp: formData.whatsapp
-          },
-          stock: formData.type === 'product' ? (formData.stock ? parseInt(formData.stock) : undefined) : undefined,
-          sizes: formData.type === 'product' && formData.sizes.length > 0 ? formData.sizes : undefined,
-          specifications: formData.specifications.length > 0 
-            ? Object.fromEntries(formData.specifications.map(s => [s.key, s.value]))
-            : undefined,
-          status: 'pending',
-          aiModerationResult: modResult,
-          createdAt: new Date().toISOString(),
-          viewCount: 0
-        };
+      const listingData = {
+        authorId: user.uid,
+        title: formData.title,
+        description: formData.description,
+        price: formData.price ? parseFloat(formData.price) : null,
+        type: formData.type,
+        category: formData.category,
+        images: imageUrls,
+        location: {
+          county: formData.county,
+          town: formData.town,
+          lat: formData.lat,
+          lng: formData.lng
+        },
+        contact: {
+          phone: formData.phone,
+          whatsapp: formData.whatsapp
+        },
+        stock: formData.type === 'product' ? (formData.stock ? parseInt(formData.stock) : undefined) : undefined,
+        sizes: formData.type === 'product' && formData.sizes.length > 0 ? formData.sizes : undefined,
+        specifications: formData.specifications.length > 0 
+          ? Object.fromEntries(formData.specifications.map(s => [s.key, s.value]))
+          : undefined,
+        status: 'pending',
+        aiModerationResult: modResult,
+        createdAt: new Date().toISOString(),
+        viewCount: 0
+      };
 
-      const docRef = await addDoc(collection(db, 'listings'), listingData);
+      let docRef;
+      try {
+        docRef = await addDoc(collection(db, 'listings'), listingData);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.CREATE, 'listings');
+        throw error;
+      }
       
       if (!modResult.isSafe) {
         toast.warning('Listing submitted, but it has been flagged for review: ' + modResult.reason);
@@ -270,7 +276,9 @@ const CreateListing = () => {
       
       navigate(`/listing/${docRef.id}`);
     } catch (error: any) {
-      handleFirestoreError(error, OperationType.CREATE, 'listings');
+      if (!error.operationType) {
+        handleGeneralError(error, 'Posting listing failed');
+      }
     } finally {
       setLoading(false);
       setModerating(false);

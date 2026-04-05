@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, updateDoc, addDoc, collection } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Transaction, Listing, User } from '../types';
 import { formatPrice, formatDate } from '../lib/utils';
 import { releaseEscrowFunds } from '../services/paymentService';
@@ -25,7 +25,14 @@ const TransactionDetail = () => {
       if (!id || !user) return;
       setLoading(true);
       try {
-        const txDoc = await getDoc(doc(db, 'transactions', id));
+        let txDoc;
+        try {
+          txDoc = await getDoc(doc(db, 'transactions', id));
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.GET, `transactions/${id}`);
+          throw error;
+        }
+        
         if (txDoc.exists()) {
           const txData = { id: txDoc.id, ...txDoc.data() } as Transaction;
           
@@ -39,24 +46,34 @@ const TransactionDetail = () => {
           setTransaction(txData);
 
           // Fetch listing
-          const listingDoc = await getDoc(doc(db, 'listings', txData.listingId));
-          if (listingDoc.exists()) {
-            setListing({ id: listingDoc.id, ...listingDoc.data() } as Listing);
+          try {
+            const listingDoc = await getDoc(doc(db, 'listings', txData.listingId));
+            if (listingDoc.exists()) {
+              setListing({ id: listingDoc.id, ...listingDoc.data() } as Listing);
+            }
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.GET, `listings/${txData.listingId}`);
           }
 
           // Fetch other user info
           const otherUserId = user.uid === txData.buyerId ? txData.sellerId : txData.buyerId;
-          const otherUserDoc = await getDoc(doc(db, 'users', otherUserId));
-          if (otherUserDoc.exists()) {
-            setOtherUser(otherUserDoc.data() as User);
+          try {
+            const otherUserDoc = await getDoc(doc(db, 'users', otherUserId));
+            if (otherUserDoc.exists()) {
+              setOtherUser(otherUserDoc.data() as User);
+            }
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.GET, `users/${otherUserId}`);
           }
         } else {
           toast.error('Transaction not found');
           navigate('/dashboard');
         }
-      } catch (error) {
-        console.error('Error fetching transaction:', error);
-        toast.error('Failed to load transaction details');
+      } catch (error: any) {
+        if (!error.operationType) {
+          console.error('Error fetching transaction:', error);
+          toast.error('Failed to load transaction details');
+        }
       } finally {
         setLoading(false);
       }

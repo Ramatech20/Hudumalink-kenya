@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { Notification } from '../types';
@@ -26,6 +26,9 @@ const Notifications = () => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification)));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notifications');
+      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -35,7 +38,7 @@ const Notifications = () => {
     try {
       await updateDoc(doc(db, 'notifications', id), { read: true });
     } catch (error) {
-      handleGeneralError(error, 'Error marking notification as read');
+      handleFirestoreError(error, OperationType.UPDATE, `notifications/${id}`);
     }
   };
 
@@ -48,7 +51,7 @@ const Notifications = () => {
       });
       await batch.commit();
     } catch (error) {
-      handleGeneralError(error, 'Error marking all as read');
+      handleFirestoreError(error, OperationType.WRITE, 'notifications');
     }
   };
 
@@ -56,7 +59,7 @@ const Notifications = () => {
     try {
       await deleteDoc(doc(db, 'notifications', id));
     } catch (error) {
-      handleGeneralError(error, 'Error deleting notification');
+      handleFirestoreError(error, OperationType.DELETE, `notifications/${id}`);
     }
   };
 

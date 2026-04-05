@@ -1,5 +1,5 @@
 import { doc, updateDoc, addDoc, collection, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { toast } from 'sonner';
 
 export interface PromotionPlan {
@@ -48,7 +48,6 @@ export const initiatePromotionPayment = async (params: {
   if (!plan) throw new Error('Invalid promotion plan');
 
   try {
-    // 1. Create a promotion transaction record
     const transactionRef = await addDoc(collection(db, 'transactions'), {
       type: 'promotion',
       planId: params.planId,
@@ -67,14 +66,21 @@ export const initiatePromotionPayment = async (params: {
     
     return transactionRef.id;
   } catch (error) {
-    console.error('Error initiating promotion payment:', error);
+    handleFirestoreError(error, OperationType.WRITE, 'transactions');
     throw error;
   }
 };
 
 export const activatePromotion = async (transactionId: string) => {
   try {
-    const txDoc = await getDoc(doc(db, 'transactions', transactionId));
+    let txDoc;
+    try {
+      txDoc = await getDoc(doc(db, 'transactions', transactionId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `transactions/${transactionId}`);
+      throw error;
+    }
+    
     if (!txDoc.exists()) throw new Error('Transaction not found');
     
     const txData = txDoc.data();
@@ -85,34 +91,53 @@ export const activatePromotion = async (transactionId: string) => {
     featuredUntil.setDate(featuredUntil.getDate() + plan.durationDays);
 
     // 1. Update listing
-    await updateDoc(doc(db, 'listings', txData.listingId), {
-      isPromoted: true,
-      promotionTier: plan.tier,
-      featuredUntil: featuredUntil.toISOString(),
-      updatedAt: new Date().toISOString()
-    });
+    try {
+      await updateDoc(doc(db, 'listings', txData.listingId), {
+        isPromoted: true,
+        promotionTier: plan.tier,
+        featuredUntil: featuredUntil.toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `listings/${txData.listingId}`);
+      throw error;
+    }
 
     // 2. Update transaction
-    await updateDoc(doc(db, 'transactions', transactionId), {
-      status: 'completed',
-      updatedAt: new Date().toISOString()
-    });
+    try {
+      await updateDoc(doc(db, 'transactions', transactionId), {
+        status: 'completed',
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `transactions/${transactionId}`);
+      throw error;
+    }
 
     // 3. Notify user
-    await addDoc(collection(db, 'notifications'), {
-      userId: txData.buyerId,
-      title: 'Listing Promoted!',
-      message: `Your listing has been successfully promoted to ${plan.name} for ${plan.durationDays} days.`,
-      type: 'success',
-      read: false,
-      createdAt: new Date().toISOString()
-    });
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: txData.buyerId,
+        title: 'Listing Promoted!',
+        message: `Your listing has been successfully promoted to ${plan.name} for ${plan.durationDays} days.`,
+        type: 'success',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'notifications');
+      throw error;
+    }
 
     toast.success(`Promotion activated: ${plan.name}`);
     return true;
-  } catch (error) {
-    console.error('Error activating promotion:', error);
-    toast.error('Failed to activate promotion');
+  } catch (error: any) {
+    if (error.operationType) {
+      // Already handled by handleFirestoreError
+    } else {
+      console.error('Error activating promotion:', error);
+      toast.error('Failed to activate promotion');
+    }
     return false;
   }
 };

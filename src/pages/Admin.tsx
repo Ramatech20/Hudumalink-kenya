@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy, increment, limit } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
@@ -27,6 +27,10 @@ const Admin = () => {
   const [promotions, setPromotions] = useState<any[]>([]);
   const [kycDataMap, setKycDataMap] = useState<Record<string, UserKYC>>({});
   const [activeTab, setActiveTab] = useState<'overview' | 'listings' | 'users' | 'reports' | 'kyc' | 'disputes' | 'withdrawals' | 'appeals' | 'promotions'>('overview');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [userFilter, setUserFilter] = useState<'all' | 'unverified' | 'flagged' | 'provider' | 'seller'>('all');
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalListings: 0,
@@ -49,7 +53,15 @@ const Admin = () => {
       }
 
       try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userDocRef = doc(db, 'users', user.uid);
+        let userDoc;
+        try {
+          userDoc = await getDoc(userDocRef);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+          throw error;
+        }
+        
         if (userDoc.exists() && userDoc.data().role === 'admin') {
           setIsAdmin(true);
           fetchOverviewStats();
@@ -57,9 +69,11 @@ const Admin = () => {
           handleGeneralError(new Error('Access denied. Admin only.'), 'Access Denied');
           navigate('/');
         }
-      } catch (error) {
-        handleGeneralError(error, 'Error checking admin status');
-        navigate('/');
+      } catch (error: any) {
+        if (!error.operationType) {
+          handleGeneralError(error, 'Error checking admin status');
+          navigate('/');
+        }
       } finally {
         setLoading(false);
       }
@@ -76,26 +90,50 @@ const Admin = () => {
 
   const fetchOverviewStats = async () => {
     try {
-      const [
-        usersCount,
-        listingsCount,
-        txCount,
-        disputesCount,
-        kycCount
-      ] = await Promise.all([
-        getCountFromServer(collection(db, 'users')),
-        getCountFromServer(collection(db, 'listings')),
-        getCountFromServer(collection(db, 'transactions')),
-        getCountFromServer(query(collection(db, 'disputes'), where('status', '==', 'open'))),
-        getCountFromServer(query(collection(db, 'users'), where('kycStatus', '==', 'pending')))
-      ]);
+      let usersCount, listingsCount, txCount, disputesCount, kycCount;
+      try {
+        [
+          usersCount,
+          listingsCount,
+          txCount,
+          disputesCount,
+          kycCount
+        ] = await Promise.all([
+          getCountFromServer(collection(db, 'users')),
+          getCountFromServer(collection(db, 'listings')),
+          getCountFromServer(collection(db, 'transactions')),
+          getCountFromServer(query(collection(db, 'disputes'), where('status', '==', 'open'))),
+          getCountFromServer(query(collection(db, 'users'), where('kycStatus', '==', 'pending')))
+        ]);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.GET, 'overview_stats_counts');
+        throw error;
+      }
       
       const balanceQuery = query(collection(db, 'users'), where('escrowBalance', '>', 0));
-      const balanceSnapshot = await getDocs(balanceQuery);
+      let balanceSnapshot;
+      try {
+        balanceSnapshot = await getDocs(balanceQuery);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.LIST, 'users_with_balance');
+        throw error;
+      }
+      
       let totalEscrow = 0;
       balanceSnapshot.docs.forEach(doc => {
         totalEscrow += (doc.data().escrowBalance || 0);
       });
+
+      // Fetch recent activity (last 10 transactions)
+      const recentTxQuery = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(10));
+      let recentTxSnapshot;
+      try {
+        recentTxSnapshot = await getDocs(recentTxQuery);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.LIST, 'recent_transactions');
+        throw error;
+      }
+      setRecentActivity(recentTxSnapshot.docs.map(doc => ({ id: doc.id, type: 'transaction', ...doc.data() })));
 
       setStats({
         totalUsers: usersCount.data().count,
@@ -105,13 +143,16 @@ const Admin = () => {
         pendingKYC: kycCount.data().count,
         openDisputes: disputesCount.data().count
       });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.GET, 'overview_stats');
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.GET, 'overview_stats');
+      }
     }
   };
 
   const fetchTabData = async () => {
     setIsDataLoading(true);
+    setSelectedItems([]); // Reset selection on tab change
     try {
       switch (activeTab) {
         case 'overview':
@@ -119,92 +160,213 @@ const Admin = () => {
           break;
         case 'listings':
           const listingsQuery = query(collection(db, 'listings'), where('status', '==', 'pending'));
-          const listingsSnapshot = await getDocs(listingsQuery);
+          let listingsSnapshot;
+          try {
+            listingsSnapshot = await getDocs(listingsQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'listings/pending');
+            throw error;
+          }
           setPendingListings(listingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing)));
           break;
         case 'users':
-          const unverifiedQuery = query(collection(db, 'users'), where('isVerified', '==', false));
-          const flaggedQuery = query(collection(db, 'users'), where('isFlagged', '==', true));
-          const [unverifiedSnapshot, flaggedSnapshot] = await Promise.all([
-            getDocs(unverifiedQuery),
-            getDocs(flaggedQuery)
-          ]);
-          const unverified = unverifiedSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User));
-          const flagged = flaggedSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User));
-          const allUsersMap = new Map<string, User>();
-          unverified.forEach(u => allUsersMap.set(u.uid, u));
-          flagged.forEach(u => allUsersMap.set(u.uid, u));
-          setUnverifiedUsers(Array.from(allUsersMap.values()));
+          let usersQuery;
+          if (userFilter === 'unverified') {
+            usersQuery = query(collection(db, 'users'), where('isVerified', '==', false));
+          } else if (userFilter === 'flagged') {
+            usersQuery = query(collection(db, 'users'), where('isFlagged', '==', true));
+          } else if (userFilter === 'provider') {
+            usersQuery = query(collection(db, 'users'), where('role', '==', 'provider'));
+          } else if (userFilter === 'seller') {
+            usersQuery = query(collection(db, 'users'), where('role', '==', 'seller'));
+          } else {
+            usersQuery = query(collection(db, 'users'), limit(100));
+          }
+          
+          let usersSnapshot;
+          try {
+            usersSnapshot = await getDocs(usersQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'users');
+            throw error;
+          }
+          setUnverifiedUsers(usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
           break;
         case 'reports':
           const reportsQuery = query(collection(db, 'reports'), where('status', '==', 'pending'));
-          const reportsSnapshot = await getDocs(reportsQuery);
+          let reportsSnapshot;
+          try {
+            reportsSnapshot = await getDocs(reportsQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'reports/pending');
+            throw error;
+          }
           setReports(reportsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report)));
           break;
         case 'kyc':
           const kycQuery = query(collection(db, 'users'), where('kycStatus', '==', 'pending'));
-          const kycSnapshot = await getDocs(kycQuery);
+          let kycSnapshot;
+          try {
+            kycSnapshot = await getDocs(kycQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'users/kyc_pending');
+            throw error;
+          }
           const users = kycSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User));
           setKycRequests(users);
           const dataMap: Record<string, UserKYC> = {};
-          await Promise.all(users.map(async (u) => {
-            const dataDoc = await getDoc(doc(db, 'users', u.uid, 'kyc', 'data'));
-            if (dataDoc.exists()) {
-              dataMap[u.uid] = dataDoc.data() as UserKYC;
-            }
-          }));
+          try {
+            await Promise.all(users.map(async (u) => {
+              const dataDoc = await getDoc(doc(db, 'users', u.uid, 'kyc', 'data'));
+              if (dataDoc.exists()) {
+                dataMap[u.uid] = dataDoc.data() as UserKYC;
+              }
+            }));
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.GET, 'kyc_data');
+            throw error;
+          }
           setKycDataMap(dataMap);
           break;
         case 'disputes':
           const disputesQuery = query(collection(db, 'disputes'), where('status', '==', 'open'));
-          const disputesSnapshot = await getDocs(disputesQuery);
+          let disputesSnapshot;
+          try {
+            disputesSnapshot = await getDocs(disputesQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'disputes/open');
+            throw error;
+          }
           setDisputes(disputesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Dispute)));
           break;
         case 'withdrawals':
           const withdrawalsQuery = query(collection(db, 'withdrawals'), where('status', '==', 'pending'));
-          const withdrawalsSnapshot = await getDocs(withdrawalsQuery);
+          let withdrawalsSnapshot;
+          try {
+            withdrawalsSnapshot = await getDocs(withdrawalsQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'withdrawals/pending');
+            throw error;
+          }
           setWithdrawals(withdrawalsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WithdrawalRequest)));
           break;
         case 'appeals':
           const appealsQuery = query(collection(db, 'appeals'), where('status', '==', 'pending'));
-          const appealsSnapshot = await getDocs(appealsQuery);
+          let appealsSnapshot;
+          try {
+            appealsSnapshot = await getDocs(appealsQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'appeals/pending');
+            throw error;
+          }
           setAppeals(appealsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appeal)));
           break;
         case 'promotions':
           const promotionsQuery = query(collection(db, 'promotions'), orderBy('createdAt', 'desc'));
-          const promotionsSnapshot = await getDocs(promotionsQuery);
+          let promotionsSnapshot;
+          try {
+            promotionsSnapshot = await getDocs(promotionsQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'promotions');
+            throw error;
+          }
           setPromotions(promotionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
           break;
       }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, activeTab);
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.LIST, activeTab);
+      }
     } finally {
       setIsDataLoading(false);
     }
   };
+
+  const handleBulkAction = async (action: 'approve' | 'reject' | 'verify') => {
+    if (selectedItems.length === 0) return;
+    
+    const confirmMessage = `Are you sure you want to ${action} ${selectedItems.length} items?`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setIsDataLoading(true);
+    try {
+      await Promise.all(selectedItems.map(async (id) => {
+        if (activeTab === 'listings') {
+          if (action === 'approve') await approveListing(id);
+          else if (action === 'reject') await rejectListing(id);
+        } else if (activeTab === 'users') {
+          if (action === 'verify') await verifyUser(id);
+        } else if (activeTab === 'kyc') {
+          if (action === 'approve') await approveKYC(id);
+          // Rejection requires a reason, so bulk rejection is tricky
+        }
+      }));
+      toast.success(`Bulk ${action} completed`);
+      setSelectedItems([]);
+      fetchTabData();
+    } catch (error) {
+      console.error('Bulk action failed:', error);
+      toast.error('Some actions failed. Please check the logs.');
+    } finally {
+      setIsDataLoading(false);
+    }
+  };
+
+  const filteredUsers = unverifiedUsers.filter(u => 
+    u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.uid.includes(searchQuery)
+  );
+
+  const filteredListings = pendingListings.filter(l => 
+    l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    l.id.includes(searchQuery)
+  );
 
   const handleResolveAppeal = async (appealId: string, action: 'approve' | 'reject') => {
     try {
       const appeal = appeals.find(a => a.id === appealId);
       if (!appeal) return;
 
-      await updateDoc(doc(db, 'appeals', appealId), {
-        status: action === 'approve' ? 'approved' : 'rejected',
-        updatedAt: new Date().toISOString()
-      });
+      try {
+        await updateDoc(doc(db, 'appeals', appealId), {
+          status: action === 'approve' ? 'approved' : 'rejected',
+          updatedAt: new Date().toISOString()
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `appeals/${appealId}`);
+        throw error;
+      }
 
       if (action === 'approve') {
-        await updateDoc(doc(db, 'users', appeal.userId), {
-          isFlagged: false,
-          cancellationCount: 0,
-          flagReason: null
-        });
+        try {
+          await updateDoc(doc(db, 'users', appeal.userId), {
+            isFlagged: false,
+            cancellationCount: 0,
+            flagReason: null
+          });
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.UPDATE, `users/${appeal.userId}`);
+          throw error;
+        }
       }
+
+      await sendNotification(
+        appeal.userId,
+        `Appeal ${action === 'approve' ? 'Approved' : 'Rejected'}`,
+        action === 'approve' 
+          ? 'Your appeal has been approved. Your account restrictions have been lifted.' 
+          : 'Your appeal has been rejected after review. The original decision stands.',
+        action === 'approve' ? 'success' : 'error',
+        '/profile'
+      );
 
       toast.success(`Appeal ${action === 'approve' ? 'approved' : 'rejected'}`);
       fetchTabData();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `appeals/${appealId}`);
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.UPDATE, `appeals/${appealId}`);
+      }
     }
   };
 
@@ -214,42 +376,88 @@ const Admin = () => {
       return;
     }
     try {
-      await updateDoc(doc(db, 'users', uid), {
-        isFlagged: true,
-        flagReason: flagReason,
-        updatedAt: new Date().toISOString()
-      });
+      try {
+        await updateDoc(doc(db, 'users', uid), {
+          isFlagged: true,
+          flagReason: flagReason,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+        throw error;
+      }
       toast.success('User flagged successfully');
+      
+      await sendNotification(
+        uid,
+        'Account Flagged',
+        `Your account has been flagged by an admin. Reason: ${flagReason}. Please contact support if you believe this is an error.`,
+        'error',
+        '/profile'
+      );
+
       setFlagReason('');
       setShowUserModal(false);
       fetchTabData();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+      }
     }
   };
 
   const unflagUser = async (uid: string) => {
     try {
-      await updateDoc(doc(db, 'users', uid), {
-        isFlagged: false,
-        flagReason: null,
-        updatedAt: new Date().toISOString()
-      });
+      try {
+        await updateDoc(doc(db, 'users', uid), {
+          isFlagged: false,
+          flagReason: null,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+        throw error;
+      }
       toast.success('User unflagged successfully');
+      
+      await sendNotification(
+        uid,
+        'Account Unflagged',
+        'Your account has been reviewed and unflagged by an admin. You can now use all platform features.',
+        'success',
+        '/profile'
+      );
+
       setShowUserModal(false);
       fetchTabData();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+      }
     }
   };
 
   const approveListing = async (id: string) => {
     try {
-      const listingDoc = await getDoc(doc(db, 'listings', id));
+      const listingDocRef = doc(db, 'listings', id);
+      let listingDoc;
+      try {
+        listingDoc = await getDoc(listingDocRef);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.GET, `listings/${id}`);
+        throw error;
+      }
+      
       if (!listingDoc.exists()) return;
       const listingData = listingDoc.data() as Listing;
 
-      await updateDoc(doc(db, 'listings', id), { status: 'active' });
+      try {
+        await updateDoc(listingDocRef, { status: 'active' });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `listings/${id}`);
+        throw error;
+      }
+      
       setPendingListings(prev => prev.filter(l => l.id !== id));
       
       await sendNotification(
@@ -268,11 +476,25 @@ const Admin = () => {
 
   const rejectListing = async (id: string) => {
     try {
-      const listingDoc = await getDoc(doc(db, 'listings', id));
+      const listingDocRef = doc(db, 'listings', id);
+      let listingDoc;
+      try {
+        listingDoc = await getDoc(listingDocRef);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.GET, `listings/${id}`);
+        throw error;
+      }
+      
       if (!listingDoc.exists()) return;
       const listingData = listingDoc.data() as Listing;
 
-      await updateDoc(doc(db, 'listings', id), { status: 'removed' });
+      try {
+        await updateDoc(listingDocRef, { status: 'removed' });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `listings/${id}`);
+        throw error;
+      }
+      
       setPendingListings(prev => prev.filter(l => l.id !== id));
 
       await sendNotification(
@@ -290,7 +512,12 @@ const Admin = () => {
 
   const verifyUser = async (uid: string) => {
     try {
-      await updateDoc(doc(db, 'users', uid), { isVerified: true });
+      try {
+        await updateDoc(doc(db, 'users', uid), { isVerified: true });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+        throw error;
+      }
       setUnverifiedUsers(prev => prev.filter(u => u.uid !== uid));
       
       await sendNotification(
@@ -302,17 +529,24 @@ const Admin = () => {
       );
 
       toast.success('User verified!');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+      }
     }
   };
 
   const approveKYC = async (uid: string) => {
     try {
-      await updateDoc(doc(db, 'users', uid), { 
-        kycStatus: 'verified',
-        isVerified: true 
-      });
+      try {
+        await updateDoc(doc(db, 'users', uid), { 
+          kycStatus: 'verified',
+          isVerified: true 
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+        throw error;
+      }
       setKycRequests(prev => prev.filter(u => u.uid !== uid));
 
       await sendNotification(
@@ -324,8 +558,10 @@ const Admin = () => {
       );
 
       toast.success('KYC approved and user verified!');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+      }
     }
   };
 
@@ -335,12 +571,24 @@ const Admin = () => {
       return;
     }
     try {
-      await updateDoc(doc(db, 'users', uid), { 
-        kycStatus: 'rejected'
-      });
-      await updateDoc(doc(db, 'users', uid, 'kyc', 'data'), {
-        rejectionReason: rejectionReason
-      });
+      try {
+        await updateDoc(doc(db, 'users', uid), { 
+          kycStatus: 'rejected'
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+        throw error;
+      }
+      
+      try {
+        await updateDoc(doc(db, 'users', uid, 'kyc', 'data'), {
+          rejectionReason: rejectionReason
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${uid}/kyc/data`);
+        throw error;
+      }
+      
       setKycRequests(prev => prev.filter(u => u.uid !== uid));
 
       await sendNotification(
@@ -362,11 +610,24 @@ const Admin = () => {
   const resolveReport = async (reportId: string, listingId: string, action: 'remove' | 'dismiss') => {
     try {
       const report = reports.find(r => r.id === reportId);
-      const listingDoc = await getDoc(doc(db, 'listings', listingId));
+      const listingDocRef = doc(db, 'listings', listingId);
+      let listingDoc;
+      try {
+        listingDoc = await getDoc(listingDocRef);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.GET, `listings/${listingId}`);
+        throw error;
+      }
+      
       const listing = listingDoc.exists() ? { id: listingDoc.id, ...listingDoc.data() } as Listing : null;
 
       if (action === 'remove') {
-        await updateDoc(doc(db, 'listings', listingId), { status: 'removed' });
+        try {
+          await updateDoc(listingDocRef, { status: 'removed' });
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.UPDATE, `listings/${listingId}`);
+          throw error;
+        }
         
         // Notify listing owner
         if (listing) {
@@ -395,17 +656,31 @@ const Admin = () => {
         );
       }
 
-      await updateDoc(doc(db, 'reports', reportId), { status: action === 'remove' ? 'resolved' : 'dismissed' });
+      try {
+        await updateDoc(doc(db, 'reports', reportId), { status: action === 'remove' ? 'resolved' : 'dismissed' });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `reports/${reportId}`);
+        throw error;
+      }
+      
       setReports(prev => prev.filter(r => r.id !== reportId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `reports/${reportId}`);
+    } catch (error: any) {
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.UPDATE, `reports/${reportId}`);
+      }
     }
   };
 
   const resolveDispute = async (disputeId: string, transactionId: string, action: 'refund' | 'release') => {
     try {
       const txRef = doc(db, 'transactions', transactionId);
-      const txDoc = await getDoc(txRef);
+      let txDoc;
+      try {
+        txDoc = await getDoc(txRef);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.GET, `transactions/${transactionId}`);
+        throw error;
+      }
       
       if (!txDoc.exists()) {
         toast.error('Transaction not found');
@@ -417,7 +692,13 @@ const Admin = () => {
       if (action === 'refund') {
         // 1. Get buyer info
         const buyerRef = doc(db, 'users', txData.buyerId);
-        const buyerDoc = await getDoc(buyerRef);
+        let buyerDoc;
+        try {
+          buyerDoc = await getDoc(buyerRef);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.GET, `users/${txData.buyerId}`);
+          throw error;
+        }
         
         if (!buyerDoc.exists()) {
           toast.error('Buyer not found');
@@ -444,50 +725,88 @@ const Admin = () => {
           throw new Error(payoutData.error || 'Refund failed');
         }
 
-        // 3. Notify buyer
+        // 3. Notify both parties
         await sendNotification(
           txData.buyerId,
-          'Refund Processed',
-          `Your refund of KES ${txData.amount} for transaction ${transactionId} has been processed.`,
+          'Dispute Resolved: Refunded',
+          `Your refund of KES ${txData.amount} for transaction ${transactionId} has been processed following a dispute resolution.`,
           'success',
+          '/profile'
+        );
+        await sendNotification(
+          txData.sellerId,
+          'Dispute Resolved: Refunded to Buyer',
+          `The dispute for transaction ${transactionId} has been resolved. The funds (KES ${txData.amount}) have been refunded to the buyer.`,
+          'info',
           '/profile'
         );
       } else {
         // Release funds to seller
         const sellerRef = doc(db, 'users', txData.sellerId);
-        const sellerDoc = await getDoc(sellerRef);
+        let sellerDoc;
+        try {
+          sellerDoc = await getDoc(sellerRef);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.GET, `users/${txData.sellerId}`);
+          throw error;
+        }
+        
         if (sellerDoc.exists()) {
           const currentBalance = sellerDoc.data().escrowBalance || 0;
-          await updateDoc(sellerRef, {
-            escrowBalance: currentBalance + txData.amount
-          });
+          try {
+            await updateDoc(sellerRef, {
+              escrowBalance: currentBalance + txData.amount
+            });
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.UPDATE, `users/${txData.sellerId}`);
+            throw error;
+          }
         }
 
-        // Notify seller
+        // 3. Notify both parties
         await sendNotification(
           txData.sellerId,
-          'Funds Released',
-          `The funds for transaction ${transactionId} have been released to your balance.`,
+          'Dispute Resolved: Funds Released',
+          `The funds (KES ${txData.amount}) for transaction ${transactionId} have been released to your balance following a dispute resolution.`,
           'success',
+          '/profile'
+        );
+        await sendNotification(
+          txData.buyerId,
+          'Dispute Resolved: Funds Released to Seller',
+          `The dispute for transaction ${transactionId} has been resolved. The funds have been released to the seller.`,
+          'info',
           '/profile'
         );
       }
 
-      await updateDoc(txRef, { 
-        status: action === 'refund' ? 'cancelled' : 'completed',
-        updatedAt: new Date().toISOString()
-      });
+      try {
+        await updateDoc(txRef, { 
+          status: action === 'refund' ? 'cancelled' : 'completed',
+          updatedAt: new Date().toISOString()
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `transactions/${transactionId}`);
+        throw error;
+      }
       
-      await updateDoc(doc(db, 'disputes', disputeId), { 
-        status: action === 'refund' ? 'refunded' : 'resolved',
-        resolution: `Admin resolved by ${action === 'refund' ? 'refunding buyer' : 'releasing funds to seller'}`,
-        updatedAt: new Date().toISOString()
-      });
+      try {
+        await updateDoc(doc(db, 'disputes', disputeId), { 
+          status: action === 'refund' ? 'refunded' : 'resolved',
+          resolution: `Admin resolved by ${action === 'refund' ? 'refunding buyer' : 'releasing funds to seller'}`,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `disputes/${disputeId}`);
+        throw error;
+      }
 
       setDisputes(prev => prev.filter(d => d.id !== disputeId));
       toast.success(`Dispute resolved: ${action}`);
     } catch (error: any) {
-      handleFirestoreError(error, OperationType.UPDATE, `disputes/${disputeId}`);
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.UPDATE, `disputes/${disputeId}`);
+      }
     }
   };
 
@@ -495,7 +814,13 @@ const Admin = () => {
     try {
       if (action === 'approve') {
         const userRef = doc(db, 'users', userId);
-        const userDoc = await getDoc(userRef);
+        let userDoc;
+        try {
+          userDoc = await getDoc(userRef);
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.GET, `users/${userId}`);
+          throw error;
+        }
         
         if (!userDoc.exists()) {
           toast.error('User not found');
@@ -529,9 +854,14 @@ const Admin = () => {
         }
 
         // 2. Deduct from user balance
-        await updateDoc(userRef, {
-          escrowBalance: currentBalance - amount
-        });
+        try {
+          await updateDoc(userRef, {
+            escrowBalance: currentBalance - amount
+          });
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+          throw error;
+        }
 
         // 3. Notify user
         await sendNotification(
@@ -549,9 +879,14 @@ const Admin = () => {
         }
         
         const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, {
-          escrowBalance: increment(amount)
-        });
+        try {
+          await updateDoc(userRef, {
+            escrowBalance: increment(amount)
+          });
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+          throw error;
+        }
 
         // Notify user
         await sendNotification(
@@ -563,17 +898,24 @@ const Admin = () => {
         );
       }
       
-      await updateDoc(doc(db, 'withdrawals', withdrawalId), { 
-        status: action === 'approve' ? 'completed' : 'rejected',
-        rejectionReason: action === 'reject' ? rejectionReason : null,
-        updatedAt: new Date().toISOString()
-      });
+      try {
+        await updateDoc(doc(db, 'withdrawals', withdrawalId), { 
+          status: action === 'approve' ? 'completed' : 'rejected',
+          rejectionReason: action === 'reject' ? rejectionReason : null,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.UPDATE, `withdrawals/${withdrawalId}`);
+        throw error;
+      }
 
       setWithdrawals(prev => prev.filter(w => w.id !== withdrawalId));
       toast.success(`Withdrawal ${action}d`);
       setRejectionReason('');
     } catch (error: any) {
-      handleFirestoreError(error, OperationType.UPDATE, `withdrawals/${withdrawalId}`);
+      if (!error.operationType) {
+        handleFirestoreError(error, OperationType.UPDATE, `withdrawals/${withdrawalId}`);
+      }
     }
   };
 
@@ -709,7 +1051,9 @@ const Admin = () => {
                 <div className="p-3 bg-primary/10 rounded-2xl text-primary">
                   <UserIcon className="w-6 h-6" />
                 </div>
-                <span className="text-xs font-bold text-green-500">+12% this week</span>
+                <span className="text-xs font-bold text-green-500 flex items-center">
+                  <TrendingUp className="w-3 h-3 mr-1" /> +12%
+                </span>
               </div>
               <h3 className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total Users</h3>
               <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{stats.totalUsers}</p>
@@ -719,7 +1063,9 @@ const Admin = () => {
                 <div className="p-3 bg-secondary/10 rounded-2xl text-secondary">
                   <Package className="w-6 h-6" />
                 </div>
-                <span className="text-xs font-bold text-green-500">+5% this week</span>
+                <span className="text-xs font-bold text-green-500 flex items-center">
+                  <TrendingUp className="w-3 h-3 mr-1" /> +5%
+                </span>
               </div>
               <h3 className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total Listings</h3>
               <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{stats.totalListings}</p>
@@ -736,72 +1082,142 @@ const Admin = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
-              <h3 className="text-xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
-                <AlertTriangle className="w-5 h-5 mr-2 text-yellow-500" /> Action Required
-              </h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl">
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500 mr-3"></div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Pending KYC Requests</span>
-                  </div>
-                  <span className="font-bold text-gray-900 dark:text-white">{stats.pendingKYC}</span>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl">
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 rounded-full bg-red-500 mr-3"></div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Open Disputes</span>
-                  </div>
-                  <span className="font-bold text-gray-900 dark:text-white">{stats.openDisputes}</span>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl">
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 rounded-full bg-primary mr-3"></div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Pending Listings</span>
-                  </div>
-                  <span className="font-bold text-gray-900 dark:text-white">{pendingListings.length}</span>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-8">
+              <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+                <h3 className="text-xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
+                  <Zap className="w-5 h-5 mr-2 text-primary" /> Quick Actions
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <button 
+                    onClick={() => setActiveTab('listings')}
+                    className="flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl hover:bg-primary/10 hover:text-primary transition-all group"
+                  >
+                    <Package className="w-6 h-6 mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-bold">Review Listings</span>
+                    <span className="text-[10px] text-gray-500 mt-1">{pendingListings.length} pending</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('kyc')}
+                    className="flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl hover:bg-primary/10 hover:text-primary transition-all group"
+                  >
+                    <Shield className="w-6 h-6 mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-bold">Verify KYC</span>
+                    <span className="text-[10px] text-gray-500 mt-1">{stats.pendingKYC} pending</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('disputes')}
+                    className="flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl hover:bg-primary/10 hover:text-primary transition-all group"
+                  >
+                    <Gavel className="w-6 h-6 mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-bold">Resolve Disputes</span>
+                    <span className="text-[10px] text-gray-500 mt-1">{stats.openDisputes} open</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('withdrawals')}
+                    className="flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl hover:bg-primary/10 hover:text-primary transition-all group"
+                  >
+                    <Wallet className="w-6 h-6 mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-bold">Withdrawals</span>
+                    <span className="text-[10px] text-gray-500 mt-1">{withdrawals.length} pending</span>
+                  </button>
                 </div>
               </div>
-              <button 
-                onClick={() => setActiveTab('listings')}
-                className="mt-6 w-full py-3 bg-primary/10 text-primary rounded-xl font-bold text-sm hover:bg-primary/20 transition-all"
-              >
-                Go to Tasks
-              </button>
+
+              <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+                <h3 className="text-xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
+                  <Clock className="w-5 h-5 mr-2 text-primary" /> Recent Activity
+                </h3>
+                <div className="space-y-4">
+                  {recentActivity.length === 0 ? (
+                    <p className="text-center py-8 text-gray-500">No recent activity found.</p>
+                  ) : (
+                    recentActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl">
+                        <div className="flex items-center">
+                          <div className={cn(
+                            "p-2 rounded-xl mr-4",
+                            activity.status === 'completed' ? "bg-green-100 text-green-600" : "bg-yellow-100 text-yellow-600"
+                          )}>
+                            <ArrowUpRight className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">Transaction {activity.id.slice(0, 8)}...</p>
+                            <p className="text-[10px] text-gray-500">{formatDate(activity.createdAt)}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">{formatPrice(activity.amount)}</p>
+                          <p className={cn(
+                            "text-[10px] font-bold uppercase",
+                            activity.status === 'completed' ? "text-green-500" : "text-yellow-500"
+                          )}>{activity.status}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
 
-            <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
-              <h3 className="text-xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
-                <Zap className="w-5 h-5 mr-2 text-primary" /> Platform Health
-              </h3>
-              <div className="space-y-6">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-gray-500 dark:text-gray-400">User Growth</span>
-                    <span className="font-bold text-green-500">+12%</span>
+            <div className="space-y-8">
+              <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+                <h3 className="text-xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
+                  <AlertTriangle className="w-5 h-5 mr-2 text-yellow-500" /> Action Required
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl">
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 rounded-full bg-yellow-500 mr-3"></div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Pending KYC</span>
+                    </div>
+                    <span className="font-bold text-gray-900 dark:text-white">{stats.pendingKYC}</span>
                   </div>
-                  <div className="h-2 bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-green-500 w-[75%]"></div>
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl">
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 rounded-full bg-red-500 mr-3"></div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Open Disputes</span>
+                    </div>
+                    <span className="font-bold text-gray-900 dark:text-white">{stats.openDisputes}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl">
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 rounded-full bg-primary mr-3"></div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Pending Listings</span>
+                    </div>
+                    <span className="font-bold text-gray-900 dark:text-white">{pendingListings.length}</span>
                   </div>
                 </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-gray-500 dark:text-gray-400">Transaction Success Rate</span>
-                    <span className="font-bold text-primary">98.5%</span>
+                <button 
+                  onClick={() => setActiveTab('listings')}
+                  className="mt-6 w-full py-3 bg-primary/10 text-primary rounded-xl font-bold text-sm hover:bg-primary/20 transition-all"
+                >
+                  Go to Tasks
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-neutral-900 p-8 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+                <h3 className="text-xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
+                  <Zap className="w-5 h-5 mr-2 text-primary" /> Platform Health
+                </h3>
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-500 dark:text-gray-400">User Growth</span>
+                      <span className="font-bold text-green-500">+12%</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-green-500 w-[75%]"></div>
+                    </div>
                   </div>
-                  <div className="h-2 bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-primary w-[98.5%]"></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-gray-500 dark:text-gray-400">Moderation Efficiency</span>
-                    <span className="font-bold text-secondary">92%</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-secondary w-[92%]"></div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-500 dark:text-gray-400">Tx Success Rate</span>
+                      <span className="font-bold text-primary">98.5%</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary w-[98.5%]"></div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -809,20 +1225,65 @@ const Admin = () => {
           </div>
         </div>
       ) : activeTab === 'listings' ? (
-        <div className="grid grid-cols-1 gap-6">
-          {pendingListings.length === 0 ? (
-            <div className="bg-white dark:bg-neutral-900 rounded-2xl p-12 text-center border border-gray-100 dark:border-neutral-800">
-              <Package className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">No pending listings</h3>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">All listings have been reviewed.</p>
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white dark:bg-neutral-900 p-4 rounded-2xl border border-gray-100 dark:border-neutral-800">
+            <div className="relative w-full md:w-96">
+              <input 
+                type="text" 
+                placeholder="Search listings by title or ID..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-neutral-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary"
+              />
+              <Eye className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
-          ) : (
-            pendingListings.map((listing) => (
-              <div key={listing.id} className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-gray-100 dark:border-neutral-800 flex flex-col md:flex-row gap-6 items-start">
-                <div className="w-full md:w-48 h-32 rounded-xl overflow-hidden flex-shrink-0">
-                  <img src={listing.images[0]} alt={listing.title} className="w-full h-full object-cover" />
-                </div>
-                <div className="flex-grow">
+            
+            <div className="flex gap-2 w-full md:w-auto">
+              <button 
+                onClick={() => handleBulkAction('approve')}
+                disabled={selectedItems.length === 0}
+                className="flex-1 md:flex-none px-4 py-2 bg-green-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-green-600 transition-colors"
+              >
+                Approve Selected ({selectedItems.length})
+              </button>
+              <button 
+                onClick={() => handleBulkAction('reject')}
+                disabled={selectedItems.length === 0}
+                className="flex-1 md:flex-none px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-600 transition-colors"
+              >
+                Reject Selected
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
+            {filteredListings.length === 0 ? (
+              <div className="bg-white dark:bg-neutral-900 rounded-2xl p-12 text-center border border-gray-100 dark:border-neutral-800">
+                <Package className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">No listings found</h3>
+                <p className="text-gray-500 dark:text-gray-400 mt-2">Try adjusting your search query.</p>
+              </div>
+            ) : (
+              filteredListings.map((listing) => (
+                <div key={listing.id} className={cn(
+                  "bg-white dark:bg-neutral-900 rounded-2xl p-6 border transition-all flex flex-col md:flex-row gap-6 items-start",
+                  selectedItems.includes(listing.id) ? "border-primary ring-1 ring-primary" : "border-gray-100 dark:border-neutral-800"
+                )}>
+                  <div className="flex items-center self-stretch">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedItems.includes(listing.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedItems([...selectedItems, listing.id]);
+                        else setSelectedItems(selectedItems.filter(id => id !== listing.id));
+                      }}
+                      className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                  </div>
+                  <div className="w-full md:w-48 h-32 rounded-xl overflow-hidden flex-shrink-0">
+                    <img src={listing.images[0]} alt={listing.title} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-grow">
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white">{listing.title}</h3>
@@ -846,7 +1307,7 @@ const Admin = () => {
                     )}
                   </div>
                 </div>
-                <div className="flex md:flex-col gap-2 w-full md:w-auto">
+                  <div className="flex md:flex-col gap-2 w-full md:w-auto">
                   <Link 
                     to={`/listing/${listing.id}`} 
                     className="flex-grow md:w-full px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 rounded-xl font-bold text-sm text-center hover:bg-gray-200 dark:hover:bg-neutral-700 transition-colors flex items-center justify-center"
@@ -870,67 +1331,121 @@ const Admin = () => {
             ))
           )}
         </div>
+      </div>
       ) : activeTab === 'users' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {unverifiedUsers.length === 0 ? (
-            <div className="col-span-full bg-white dark:bg-neutral-900 rounded-2xl p-12 text-center border border-gray-100 dark:border-neutral-800">
-              <UserIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">No verification requests</h3>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">All providers are verified.</p>
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white dark:bg-neutral-900 p-4 rounded-2xl border border-gray-100 dark:border-neutral-800">
+            <div className="relative w-full md:w-96">
+              <input 
+                type="text" 
+                placeholder="Search users by name, email or ID..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-neutral-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary"
+              />
+              <UserIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
-          ) : (
-            unverifiedUsers.map((user) => (
-              <div key={user.uid} className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-gray-100 dark:border-neutral-800 flex flex-col items-center text-center">
-                <div className="w-20 h-20 rounded-full overflow-hidden mb-4 border-2 border-primary/20">
-                  <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt={user.displayName} className="w-full h-full object-cover" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">{user.displayName}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{user.email}</p>
-                {user.isFlagged && (
-                  <div className="mb-4 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-[10px] font-bold uppercase flex items-center">
-                    <AlertTriangle className="w-3 h-3 mr-1" /> Flagged: {user.flagReason || 'Excessive Cancellations'}
-                  </div>
-                )}
-                <div className="flex gap-2 w-full">
-                  <button 
-                    onClick={() => verifyUser(user.uid)}
-                    className="flex-1 px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" /> Verify
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setSelectedUser(user);
-                      setShowUserModal(true);
-                    }}
-                    className="flex-1 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 rounded-xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-neutral-700 transition-colors"
-                  >
-                    Details
-                  </button>
-                </div>
-                {user.role === 'customer' && (
-                  <div className="mt-4 w-full">
-                    <div className="flex justify-between text-[10px] font-bold text-gray-500 mb-1 uppercase">
-                      <span>Verification Progress</span>
-                      <span>{user.completedPaymentsCount || 0} / 5 Payments</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary transition-all duration-500" 
-                        style={{ width: `${Math.min(((user.completedPaymentsCount || 0) / 5) * 100, 100)}%` }}
-                      ></div>
-                    </div>
-                    {(user.completedPaymentsCount || 0) >= 5 && (
-                      <p className="text-[10px] text-green-500 font-bold mt-1">Eligible for Verification!</p>
-                    )}
-                  </div>
-                )}
+            
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+              <select 
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value as any)}
+                className="px-4 py-2 bg-gray-50 dark:bg-neutral-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none"
+              >
+                <option value="all">All Users</option>
+                <option value="unverified">Unverified Only</option>
+                <option value="flagged">Flagged Only</option>
+                <option value="provider">Providers Only</option>
+                <option value="seller">Sellers Only</option>
+              </select>
+              
+              <button 
+                onClick={() => handleBulkAction('verify')}
+                disabled={selectedItems.length === 0}
+                className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+              >
+                Verify Selected ({selectedItems.length})
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredUsers.length === 0 ? (
+              <div className="col-span-full bg-white dark:bg-neutral-900 rounded-2xl p-12 text-center border border-gray-100 dark:border-neutral-800">
+                <UserIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">No users found</h3>
+                <p className="text-gray-500 dark:text-gray-400 mt-2">Try adjusting your search or filters.</p>
               </div>
-            ))
-          )}
+            ) : (
+              filteredUsers.map((user) => (
+                <div key={user.uid} className={cn(
+                  "bg-white dark:bg-neutral-900 rounded-2xl p-6 border transition-all flex flex-col items-center text-center relative",
+                  selectedItems.includes(user.uid) ? "border-primary ring-1 ring-primary" : "border-gray-100 dark:border-neutral-800"
+                )}>
+                  <div className="absolute top-4 left-4">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedItems.includes(user.uid)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedItems([...selectedItems, user.uid]);
+                        else setSelectedItems(selectedItems.filter(id => id !== user.uid));
+                      }}
+                      className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                  </div>
+                  <div className="w-20 h-20 rounded-full overflow-hidden mb-4 border-2 border-primary/20">
+                    <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt={user.displayName} className="w-full h-full object-cover" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">{user.displayName}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{user.email}</p>
+                  <div className="flex gap-1 mb-4">
+                    <span className="px-2 py-0.5 bg-gray-100 dark:bg-neutral-800 rounded text-[10px] font-bold uppercase text-gray-500">{user.role}</span>
+                    {user.isVerified && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-bold uppercase">Verified</span>}
+                  </div>
+                  {user.isFlagged && (
+                    <div className="mb-4 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-[10px] font-bold uppercase flex items-center">
+                      <AlertTriangle className="w-3 h-3 mr-1" /> Flagged: {user.flagReason || 'Excessive Cancellations'}
+                    </div>
+                  )}
+                  <div className="flex gap-2 w-full">
+                    {!user.isVerified && (
+                      <button 
+                        onClick={() => verifyUser(user.uid)}
+                        className="flex-1 px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" /> Verify
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => {
+                        setSelectedUser(user);
+                        setShowUserModal(true);
+                      }}
+                      className="flex-1 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 rounded-xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-neutral-700 transition-colors"
+                    >
+                      Details
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       ) : activeTab === 'kyc' ? (
         <div className="space-y-6">
+          <div className="flex justify-between items-center bg-white dark:bg-neutral-900 p-4 rounded-2xl border border-gray-100 dark:border-neutral-800">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+              <Shield className="w-5 h-5 mr-2 text-primary" /> Pending KYC ({kycRequests.length})
+            </h3>
+            <button 
+              onClick={() => handleBulkAction('approve')}
+              disabled={selectedItems.length === 0}
+              className="px-4 py-2 bg-green-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-green-600 transition-colors"
+            >
+              Approve Selected ({selectedItems.length})
+            </button>
+          </div>
+
           {kycRequests.length === 0 ? (
             <div className="bg-white dark:bg-neutral-900 rounded-2xl p-12 text-center border border-gray-100 dark:border-neutral-800">
               <Shield className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
@@ -939,8 +1454,22 @@ const Admin = () => {
             </div>
           ) : (
             kycRequests.map((u) => (
-              <div key={u.uid} className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-gray-100 dark:border-neutral-800">
+              <div key={u.uid} className={cn(
+                "bg-white dark:bg-neutral-900 rounded-2xl p-6 border transition-all",
+                selectedItems.includes(u.uid) ? "border-primary ring-1 ring-primary" : "border-gray-100 dark:border-neutral-800"
+              )}>
                 <div className="flex flex-col md:flex-row gap-6">
+                  <div className="flex items-start">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedItems.includes(u.uid)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedItems([...selectedItems, u.uid]);
+                        else setSelectedItems(selectedItems.filter(id => id !== u.uid));
+                      }}
+                      className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary mt-1"
+                    />
+                  </div>
                   <div className="flex-grow">
                     <div className="flex items-center space-x-4 mb-4">
                       <img src={u.photoURL || `https://ui-avatars.com/api/?name=${u.displayName}`} className="w-12 h-12 rounded-full object-cover" />
@@ -1243,9 +1772,7 @@ const Admin = () => {
             ))
           )}
         </div>
-      ) : null}
-
-      {activeTab === 'promotions' ? (
+      ) : activeTab === 'promotions' ? (
         <div className="space-y-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Promotions History</h2>

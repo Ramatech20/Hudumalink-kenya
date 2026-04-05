@@ -30,7 +30,15 @@ const Auth = () => {
       const user = result.user;
 
       // Check if user profile exists
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userDocRef = doc(db, 'users', user.uid);
+      let userDoc;
+      try {
+        userDoc = await getDoc(userDocRef);
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+        throw error;
+      }
+      
       if (!userDoc.exists()) {
         const newReferralCode = user.uid.substring(0, 6).toUpperCase();
         const isAdminEmail = user.email === 'ramadhanwambia83@gmail.com';
@@ -63,7 +71,9 @@ const Auth = () => {
       toast.success('Successfully signed in!');
       navigate('/');
     } catch (error: any) {
-      handleAuthError(error);
+      if (!error.operationType) {
+        handleAuthError(error);
+      }
     }
   };
 

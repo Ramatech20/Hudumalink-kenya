@@ -13,7 +13,7 @@ import {
   Timestamp,
   serverTimestamp
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { sendNotification } from '../lib/notifications';
 import { useAuth } from '../AuthContext';
@@ -53,68 +53,81 @@ const Messages = () => {
     );
 
     const unsubscribe = onSnapshot(chatsQuery, async (snapshot) => {
-      const chatData = await Promise.all(snapshot.docs.map(async (chatDoc) => {
-        const data = chatDoc.data() as Chat;
-        const otherUserId = data.participants.find(p => p !== user.uid);
-        
-        let otherUser: User | undefined;
-        if (otherUserId) {
-          const userDoc = await getDoc(doc(db, 'users_public', otherUserId));
-          if (userDoc.exists()) {
-            otherUser = userDoc.data() as User;
+      try {
+        const chatData = await Promise.all(snapshot.docs.map(async (chatDoc) => {
+          const data = chatDoc.data() as Chat;
+          const otherUserId = data.participants.find(p => p !== user.uid);
+          
+          let otherUser: User | undefined;
+          if (otherUserId) {
+            try {
+              const userDoc = await getDoc(doc(db, 'users_public', otherUserId));
+              if (userDoc.exists()) {
+                otherUser = userDoc.data() as User;
+              }
+            } catch (error) {
+              handleFirestoreError(error, OperationType.GET, `users_public/${otherUserId}`);
+            }
           }
+          
+          return { id: chatDoc.id, ...data, otherUser };
+        }));
+        
+        setChats(chatData);
+        setLoading(false);
+
+        // Handle listingId from query params to initiate a new chat
+        const listingId = searchParams.get('listingId');
+        if (listingId && !selectedChatId) {
+          const initiateChat = async () => {
+            try {
+              const listingDoc = await getDoc(doc(db, 'listings', listingId));
+              if (!listingDoc.exists()) return;
+              const listingData = listingDoc.data() as Listing;
+              const sellerId = listingData.authorId;
+
+              if (sellerId === user.uid) {
+                toast.error("You cannot chat with yourself.");
+                return;
+              }
+
+              // Check if chat already exists
+              const existingChat = chatData.find(c => 
+                c.participants.includes(sellerId) && c.listingId === listingId
+              );
+
+              if (existingChat) {
+                setSelectedChatId(existingChat.id);
+                navigate(`/messages?chatId=${existingChat.id}`, { replace: true });
+              } else {
+                // Create new chat
+                const newChatData = {
+                  participants: [user.uid, sellerId],
+                  listingId,
+                  lastMessage: '',
+                  updatedAt: new Date().toISOString(),
+                  createdAt: new Date().toISOString()
+                };
+                const chatRef = await addDoc(collection(db, 'chats'), newChatData);
+                setSelectedChatId(chatRef.id);
+                navigate(`/messages?chatId=${chatRef.id}`, { replace: true });
+              }
+            } catch (error: any) {
+              if (error.operationType) {
+                // Already handled by handleFirestoreError
+              } else {
+                console.error("Error initiating chat:", error);
+                toast.error("Failed to initiate chat. Please try again.");
+              }
+            }
+          };
+          initiateChat();
         }
-        
-        return { id: chatDoc.id, ...data, otherUser };
-      }));
-      
-      setChats(chatData);
-      setLoading(false);
-
-      // Handle listingId from query params to initiate a new chat
-      const listingId = searchParams.get('listingId');
-      if (listingId && !selectedChatId) {
-        const initiateChat = async () => {
-          try {
-            const listingDoc = await getDoc(doc(db, 'listings', listingId));
-            if (!listingDoc.exists()) return;
-            const listingData = listingDoc.data() as Listing;
-            const sellerId = listingData.authorId;
-
-            if (sellerId === user.uid) {
-              toast.error("You cannot chat with yourself.");
-              return;
-            }
-
-            // Check if chat already exists
-            const existingChat = chatData.find(c => 
-              c.participants.includes(sellerId) && c.listingId === listingId
-            );
-
-            if (existingChat) {
-              setSelectedChatId(existingChat.id);
-              navigate(`/messages?chatId=${existingChat.id}`, { replace: true });
-            } else {
-              // Create new chat
-              const newChatData = {
-                participants: [user.uid, sellerId],
-                listingId,
-                lastMessage: '',
-                updatedAt: new Date().toISOString(),
-                createdAt: new Date().toISOString()
-              };
-              const chatRef = await addDoc(collection(db, 'chats'), newChatData);
-              setSelectedChatId(chatRef.id);
-              navigate(`/messages?chatId=${chatRef.id}`, { replace: true });
-            }
-          } catch (error) {
-            console.error("Error initiating chat:", error);
-          }
-        };
-        initiateChat();
+      } catch (error) {
+        handleFirestoreError(error, OperationType.LIST, 'chats');
       }
     }, (error) => {
-      handleGeneralError(error, 'Error fetching chats');
+      handleFirestoreError(error, OperationType.LIST, 'chats');
       setLoading(false);
     });
 
@@ -137,6 +150,8 @@ const Messages = () => {
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
       const msgData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
       setMessages(msgData);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `chats/${selectedChatId}/messages`);
     });
 
     // Get other user info for header
@@ -146,16 +161,20 @@ const Messages = () => {
     } else if (selectedChatId) {
       // Fallback if chat list hasn't loaded yet
       const fetchOtherUser = async () => {
-        const chatDoc = await getDoc(doc(db, 'chats', selectedChatId));
-        if (chatDoc.exists()) {
-          const data = chatDoc.data() as Chat;
-          const otherUserId = data.participants.find(p => p !== user?.uid);
-          if (otherUserId) {
-            const userDoc = await getDoc(doc(db, 'users', otherUserId));
-            if (userDoc.exists()) {
-              setSelectedChatUser(userDoc.data() as User);
+        try {
+          const chatDoc = await getDoc(doc(db, 'chats', selectedChatId));
+          if (chatDoc.exists()) {
+            const data = chatDoc.data() as Chat;
+            const otherUserId = data.participants.find(p => p !== user?.uid);
+            if (otherUserId) {
+              const userDoc = await getDoc(doc(db, 'users', otherUserId));
+              if (userDoc.exists()) {
+                setSelectedChatUser(userDoc.data() as User);
+              }
             }
           }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.GET, `chats/${selectedChatId}`);
         }
       };
       fetchOtherUser();
@@ -199,7 +218,7 @@ const Messages = () => {
         );
       }
     } catch (error: any) {
-      toast.error('Failed to send message: ' + error.message);
+      handleFirestoreError(error, OperationType.WRITE, `chats/${selectedChatId}/messages`);
     }
   };
 

@@ -29,19 +29,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Reload firebase user to get latest emailVerified status
     await auth.currentUser.reload();
     
-    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-    if (userDoc.exists()) {
-      const userData = { uid: userDoc.id, ...userDoc.data() } as User;
-      
-      // Sync emailVerified if it changed in Firebase Auth
-      if (auth.currentUser.emailVerified && !userData.emailVerified) {
-        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-          emailVerified: true
-        });
-        setUser({ ...userData, emailVerified: true });
-      } else {
-        setUser(userData);
+    try {
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (userDoc.exists()) {
+        const userData = { uid: userDoc.id, ...userDoc.data() } as User;
+        
+        // Sync emailVerified if it changed in Firebase Auth
+        if (auth.currentUser.emailVerified && !userData.emailVerified) {
+          try {
+            await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+              emailVerified: true
+            });
+            setUser({ ...userData, emailVerified: true });
+          } catch (error) {
+            handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
+          }
+        } else {
+          setUser(userData);
+        }
       }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `users/${auth.currentUser.uid}`);
     }
   };
 
