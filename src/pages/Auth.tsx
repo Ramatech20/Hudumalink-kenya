@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { handleAuthError, handleGeneralError, handleValidationError } from '../lib/error-handler';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { toast } from 'sonner';
-import { User, Gift } from 'lucide-react';
+import { User, Gift, ArrowLeft } from 'lucide-react';
+
+import { useLanguage } from '../LanguageContext';
 
 const Auth = () => {
+  const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -18,6 +22,24 @@ const Auth = () => {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      handleValidationError('Please enter your email address');
+      return;
+    }
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast.success('Password reset email sent! Please check your inbox.');
+      setShowForgotPassword(false);
+    } catch (error: any) {
+      handleAuthError(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     if (!isLogin && !agreeToTerms) {
@@ -171,15 +193,56 @@ const Auth = () => {
     }
   };
 
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full bg-white dark:bg-neutral-900 rounded-3xl shadow-xl p-8 border border-gray-100 dark:border-neutral-800 transition-colors">
+          <button 
+            onClick={() => setShowForgotPassword(false)}
+            className="flex items-center text-sm text-gray-500 dark:text-gray-400 hover:text-primary mb-6 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            {t('auth.back_to_signin')}
+          </button>
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('auth.reset_password')}</h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-2">
+              {t('auth.reset_desc')}
+            </p>
+          </div>
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
+              <input 
+                type="email" 
+                required 
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-colors"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50"
+            >
+              {loading ? t('common.processing') : t('auth.send_reset')}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full bg-white dark:bg-neutral-900 rounded-3xl shadow-xl p-8 border border-gray-100 dark:border-neutral-800 transition-colors">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            {isLogin ? 'Welcome Back' : 'Create Account'}
+            {isLogin ? t('auth.welcome_back') : t('auth.create_account')}
           </h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2">
-            {isLogin ? 'Sign in to access your marketplace' : 'Join Kenya\'s biggest digital marketplace'}
+            {isLogin ? t('auth.signin_desc') : t('auth.signup_desc')}
           </p>
         </div>
 
@@ -235,7 +298,18 @@ const Auth = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
+              {isLogin && (
+                <button 
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-xs font-bold text-primary hover:underline"
+                >
+                  {t('auth.forgot_password')}
+                </button>
+              )}
+            </div>
             <input 
               type="password" 
               required 
@@ -282,7 +356,7 @@ const Auth = () => {
             disabled={loading}
             className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50"
           >
-            {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+            {loading ? t('common.processing') : (isLogin ? t('auth.login') : t('auth.signup'))}
           </button>
         </form>
 
@@ -309,7 +383,7 @@ const Auth = () => {
             onClick={() => setIsLogin(!isLogin)}
             className="ml-1 text-primary font-bold hover:underline"
           >
-            {isLogin ? 'Sign Up' : 'Sign In'}
+            {isLogin ? t('auth.signup') : t('auth.login')}
           </button>
         </p>
       </div>

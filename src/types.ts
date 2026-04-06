@@ -29,6 +29,12 @@ export interface User {
   isFlagged?: boolean;
   flagReason?: string;
   completedPaymentsCount?: number;
+  dob?: string;
+  countyOfBirth?: string;
+  residence?: string;
+  area?: string;
+  gender?: 'male' | 'female' | 'other';
+  occupation?: string;
   referralCode: string;
   referredBy?: string;
   referralEarnings: number;

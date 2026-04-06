@@ -8,10 +8,13 @@ import { formatPrice, cn, getDistance } from '../lib/utils';
 import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap, Tag, DollarSign, ShoppingBag } from 'lucide-react';
 import { KENYAN_COUNTIES, CATEGORIES } from '../constants';
 import { motion } from 'motion/react';
+import { ListingSkeleton } from '../components/Skeleton';
+import { useLanguage } from '../LanguageContext';
 
 const LISTINGS_PER_PAGE = 12;
 
 const Listings = () => {
+  const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,14 +171,14 @@ const Listings = () => {
           showFilters ? "block" : "hidden"
         )}>
           <div className="flex justify-between items-center md:hidden">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Filters</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('listings.filters')}</h2>
             <button onClick={() => setShowFilters(false)} className="text-gray-500 dark:text-gray-400"><X className="w-6 h-6" /></button>
           </div>
 
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Location</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('listings.location')}</h3>
             {countyParam && (
-              <button onClick={() => updateFilter('county', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">Clear</button>
+              <button onClick={() => updateFilter('county', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">{t('listings.clear')}</button>
             )}
           </div>
           <select 
@@ -183,17 +186,17 @@ const Listings = () => {
             value={countyParam}
             onChange={(e) => updateFilter('county', e.target.value)}
           >
-            <option value="" className="dark:bg-neutral-900">All Counties</option>
+            <option value="" className="dark:bg-neutral-900">{t('listings.all_counties')}</option>
             {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
           </select>
 
           <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
-                <Tag className="w-3 h-3 mr-2" /> Category
+                <Tag className="w-3 h-3 mr-2" /> {t('listings.category')}
               </h3>
               {categoryParam && (
-                <button onClick={() => updateFilter('category', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">Clear</button>
+                <button onClick={() => updateFilter('category', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">{t('listings.clear')}</button>
               )}
             </div>
             <select 
@@ -201,11 +204,11 @@ const Listings = () => {
               value={categoryParam}
               onChange={(e) => updateFilter('category', e.target.value)}
             >
-              <option value="" className="dark:bg-neutral-900">All Categories</option>
-              <optgroup label="Services" className="dark:bg-neutral-900">
+              <option value="" className="dark:bg-neutral-900">{t('listings.all_categories')}</option>
+              <optgroup label={t('nav.services')} className="dark:bg-neutral-900">
                 {CATEGORIES.services.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
               </optgroup>
-              <optgroup label="Marketplace" className="dark:bg-neutral-900">
+              <optgroup label={t('nav.marketplace')} className="dark:bg-neutral-900">
                 {CATEGORIES.marketplace.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
               </optgroup>
             </select>
@@ -214,15 +217,15 @@ const Listings = () => {
           <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
-                <DollarSign className="w-3 h-3 mr-2" /> Price Range (KES)
+                <DollarSign className="w-3 h-3 mr-2" /> {t('listings.price_range')}
               </h3>
               {(minPriceParam || maxPriceParam) && (
-                <button onClick={() => { updateFilter('minPrice', ''); updateFilter('maxPrice', ''); }} className="text-[10px] font-bold text-primary hover:underline uppercase">Clear</button>
+                <button onClick={() => { updateFilter('minPrice', ''); updateFilter('maxPrice', ''); }} className="text-[10px] font-bold text-primary hover:underline uppercase">{t('listings.clear')}</button>
               )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">MIN</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{t('listings.min')}</span>
                 <input 
                   type="number" 
                   className="w-full pl-10 pr-3 py-3 border border-gray-100 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
@@ -231,7 +234,7 @@ const Listings = () => {
                 />
               </div>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">MAX</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{t('listings.max')}</span>
                 <input 
                   type="number" 
                   className="w-full pl-10 pr-3 py-3 border border-gray-100 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
@@ -244,13 +247,13 @@ const Listings = () => {
 
           <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
             <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
-              <ShoppingBag className="w-3 h-3 mr-2" /> Listing Type
+              <ShoppingBag className="w-3 h-3 mr-2" /> {t('listings.type')}
             </h3>
             <div className="flex flex-col gap-2">
               {[
-                { id: '', label: 'All Types' },
-                { id: 'product', label: 'Products Only' },
-                { id: 'service', label: 'Services Only' }
+                { id: '', label: t('listings.all_types') },
+                { id: 'product', label: t('listings.products_only') },
+                { id: 'service', label: t('listings.services_only') }
               ].map((t) => (
                 <button
                   key={t.id}
@@ -274,7 +277,7 @@ const Listings = () => {
               onClick={() => setSearchParams({})}
               className="w-full py-3 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
             >
-              Reset All Filters
+              {t('listings.reset_filters')}
             </button>
           )}
         </aside>
@@ -287,7 +290,7 @@ const Listings = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input 
                 type="text" 
-                placeholder="Search listings..." 
+                placeholder={t('listings.search_placeholder')} 
                 className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-colors"
                 value={qParam}
                 onChange={(e) => updateFilter('q', e.target.value)}
@@ -304,26 +307,26 @@ const Listings = () => {
           {/* Results Info & Sorting */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <p className="text-gray-500 dark:text-gray-400">
-              Showing <span className="font-bold text-gray-900 dark:text-gray-100">{listings.length}</span> results
+              {t('listings.showing_results').replace('{count}', listings.length.toString())}
             </p>
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Sort by:</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('listings.sort_by')}</span>
               <select 
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="text-sm font-bold bg-transparent border-none outline-none text-primary cursor-pointer"
               >
-                <option value="newest">Newest First</option>
-                <option value="price_low">Price: Low to High</option>
-                <option value="price_high">Price: High to Low</option>
-                <option value="distance">Nearest to Me</option>
+                <option value="newest">{t('listings.sort_newest')}</option>
+                <option value="price_low">{t('listings.sort_price_low')}</option>
+                <option value="price_high">{t('listings.sort_price_high')}</option>
+                <option value="distance">{t('listings.sort_distance')}</option>
               </select>
               {sortBy === 'distance' && !userLocation && (
                 <button 
                   onClick={handleGetLocation}
                   className="text-[10px] font-bold text-primary hover:underline ml-2 uppercase"
                 >
-                  {locating ? 'Locating...' : 'Enable Location'}
+                  {locating ? t('listings.locating') : t('listings.enable_location')}
                 </button>
               )}
             </div>
@@ -333,7 +336,7 @@ const Listings = () => {
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3, 4, 5, 6].map(i => (
-                <div key={i} className="bg-gray-100 dark:bg-neutral-800 animate-pulse h-80 rounded-2xl"></div>
+                <ListingSkeleton key={i} />
               ))}
             </div>
           ) : (
@@ -364,14 +367,14 @@ const Listings = () => {
                           </div>
                         )}
                         <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-primary">
-                          {listing.type === 'service' ? 'SERVICE' : 'PRODUCT'}
+                          {listing.type === 'service' ? t('nav.services').toUpperCase() : t('nav.marketplace').toUpperCase()}
                         </div>
                         {listing.type === 'product' && listing.stock !== undefined && (
                           <div className={cn(
                             "px-2 py-1 rounded-lg text-[10px] font-bold text-white",
                             listing.stock > 0 ? "bg-green-500/90" : "bg-red-500/90"
                           )}>
-                            {listing.stock > 0 ? `${listing.stock} IN STOCK` : 'OUT OF STOCK'}
+                            {listing.stock > 0 ? t('listings.in_stock') : t('listings.out_of_stock')}
                           </div>
                         )}
                       </div>
@@ -386,7 +389,7 @@ const Listings = () => {
                       </h3>
                       <div className="mt-4 flex justify-between items-center">
                         <span className="text-lg font-extrabold text-primary">
-                          {listing.price ? formatPrice(listing.price) : 'Contact for Price'}
+                          {listing.price ? formatPrice(listing.price) : t('listings.contact_price')}
                         </span>
                       </div>
                     </div>
@@ -404,10 +407,10 @@ const Listings = () => {
                     {loadingMore ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Loading...
+                        {t('common.loading')}
                       </>
                     ) : (
-                      'Load More Listings'
+                      t('common.load_more')
                     )}
                   </button>
                 </div>
@@ -422,9 +425,9 @@ const Listings = () => {
                   <div className="bg-primary/10 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8 transition-colors">
                     <Search className="w-10 h-10 text-primary" />
                   </div>
-                  <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">No matching listings found</h3>
+                  <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">{t('listings.no_listings')}</h3>
                   <p className="text-gray-500 dark:text-gray-400 mt-4 max-w-md mx-auto leading-relaxed">
-                    We couldn't find anything matching your current filters. Try broadening your search or clearing some filters.
+                    {t('listings.no_listings_desc')}
                   </p>
                   
                   <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -432,18 +435,18 @@ const Listings = () => {
                       onClick={() => setSearchParams({})}
                       className="w-full sm:w-auto px-10 py-4 bg-primary text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-lg shadow-primary/20"
                     >
-                      Clear All Filters
+                      {t('listings.reset_filters')}
                     </button>
                     <Link 
                       to="/create-listing"
                       className="w-full sm:w-auto px-10 py-4 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
                     >
-                      Post a Listing
+                      {t('listings.post_listing')}
                     </Link>
                   </div>
 
                   <div className="mt-16 pt-16 border-t border-gray-100 dark:border-neutral-800">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-8">Popular Categories</p>
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-8">{t('listings.popular_categories')}</p>
                     <div className="flex flex-wrap justify-center gap-3">
                       {CATEGORIES.services.slice(0, 3).concat(CATEGORIES.marketplace.slice(0, 3)).map(cat => (
                         <button 

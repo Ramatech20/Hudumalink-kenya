@@ -35,7 +35,13 @@ const Profile = () => {
     lng: user?.location?.lng || undefined as number | undefined,
     role: user?.role || 'customer',
     photoURL: user?.photoURL || '',
-    completedPaymentsCount: (user as any).completedPaymentsCount || 0
+    completedPaymentsCount: (user as any).completedPaymentsCount || 0,
+    dob: user?.dob || '',
+    countyOfBirth: user?.countyOfBirth || '',
+    residence: user?.residence || '',
+    area: user?.area || '',
+    gender: user?.gender || '' as any,
+    occupation: user?.occupation || ''
   });
 
   const handleBecomeProvider = async () => {
@@ -190,7 +196,13 @@ const Profile = () => {
           lng: editData.lng
         },
         role: editData.role,
-        photoURL: editData.photoURL
+        photoURL: editData.photoURL,
+        dob: editData.dob,
+        countyOfBirth: editData.countyOfBirth,
+        residence: editData.residence,
+        area: editData.area,
+        gender: editData.gender,
+        occupation: editData.occupation
       });
       toast.success('Profile updated successfully!');
       setIsEditing(false);
@@ -284,9 +296,9 @@ const Profile = () => {
               <ShieldCheck className="w-8 h-8" />
             </div>
             <div>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">Get Verified Today!</h3>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">{t('profile.kyc_banner_title')}</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 font-medium">
-                Verified providers get <span className="text-primary font-bold">5x more inquiries</span> and can post unlimited listings.
+                {t('profile.kyc_banner_desc').replace('{count}', '5')}
               </p>
             </div>
           </div>
@@ -294,7 +306,7 @@ const Profile = () => {
             to="/kyc" 
             className="w-full md:w-auto px-10 py-4 bg-primary text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-lg shadow-primary/20 text-center"
           >
-            {user.kycStatus === 'pending' ? 'Verification Pending' : 'Verify Identity Now'}
+            {user.kycStatus === 'pending' ? t('profile.kyc_pending') : t('profile.kyc_verify_now')}
           </Link>
         </motion.div>
       )}
@@ -343,7 +355,7 @@ const Profile = () => {
             {user.role === 'customer' && !user.isVerified && (
               <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30 text-left">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase">Verification Progress</span>
+                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase">{t('profile.verification_progress')}</span>
                   <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300">{(user as any).completedPaymentsCount || 0}/5</span>
                 </div>
                 <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
@@ -353,7 +365,7 @@ const Profile = () => {
                   />
                 </div>
                 <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-2 leading-tight">
-                  Complete 5 payments to be eligible for verification by an admin.
+                  {t('profile.verification_help')}
                 </p>
               </div>
             )}
@@ -369,7 +381,7 @@ const Profile = () => {
                 className="mt-4 w-full flex items-center justify-center space-x-2 bg-primary/10 text-primary py-3 rounded-xl text-sm font-bold hover:bg-primary/20 transition-all"
               >
                 <TrendingUp className="w-4 h-4" />
-                <span>View Seller Analytics</span>
+                <span>{t('profile.view_analytics')}</span>
               </Link>
             )}
 
@@ -379,7 +391,7 @@ const Profile = () => {
                 className="mt-4 w-full flex items-center justify-center space-x-2 bg-secondary text-white py-3 rounded-xl text-sm font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-secondary/20"
               >
                 <Briefcase className="w-4 h-4" />
-                <span>Become Provider/Seller</span>
+                <span>{t('profile.become_provider')}</span>
               </button>
             )}
 
@@ -387,7 +399,7 @@ const Profile = () => {
             <div className="mt-6 pt-6 border-t border-gray-100 dark:border-neutral-800 grid grid-cols-1 gap-4 text-left">
               <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-2xl">
                 <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
-                  <Gift className="w-3 h-3 mr-1" /> Referral Code
+                  <Gift className="w-3 h-3 mr-1" /> {t('profile.referral_code')}
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-gray-900 dark:text-white font-mono">{(user as any).referralCode}</span>
@@ -398,13 +410,13 @@ const Profile = () => {
                     }}
                     className="text-[10px] text-primary font-bold uppercase hover:underline"
                   >
-                    Copy
+                    {t('common.copy')}
                   </button>
                 </div>
               </div>
               <div className="bg-primary/5 p-4 rounded-2xl">
                 <div className="flex items-center text-primary text-xs mb-1 font-bold">
-                  <Shield className="w-3 h-3 mr-1" /> Escrow Balance
+                  <Shield className="w-3 h-3 mr-1" /> {t('profile.escrow_balance')}
                 </div>
                 <div className="flex items-end justify-between">
                   <span className="text-xl font-bold text-gray-900 dark:text-white">
@@ -414,14 +426,14 @@ const Profile = () => {
                     onClick={() => setShowWithdrawModal(true)}
                     className="text-[10px] text-primary font-bold uppercase hover:underline"
                   >
-                    Withdraw
+                    {t('profile.withdraw')}
                   </button>
                 </div>
                 <p className="text-[10px] text-gray-500 mt-1">Funds from completed sales</p>
               </div>
               <div className="bg-secondary/5 p-4 rounded-2xl">
                 <div className="flex items-center text-secondary text-xs mb-1 font-bold">
-                  <Gift className="w-3 h-3 mr-1" /> Referral Earnings
+                  <Gift className="w-3 h-3 mr-1" /> {t('profile.referral_earnings')}
                 </div>
                 <span className="text-xl font-bold text-gray-900 dark:text-white">
                   {formatPrice((user as any).referralEarnings || 0)}
@@ -429,7 +441,7 @@ const Profile = () => {
               </div>
               <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-2xl">
                 <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
-                  <Shield className="w-3 h-3 mr-1" /> Identity Verification
+                  <Shield className="w-3 h-3 mr-1" /> {t('profile.kyc_status')}
                 </div>
                 <div className="flex items-center justify-between">
                   <span className={cn(
@@ -438,11 +450,13 @@ const Profile = () => {
                     user.kycStatus === 'pending' ? "text-yellow-500" : 
                     user.kycStatus === 'rejected' ? "text-red-500" : "text-gray-400"
                   )}>
-                    {user.kycStatus || 'Not Verified'}
+                    {user.kycStatus === 'verified' ? t('profile.kyc_verified') : 
+                     user.kycStatus === 'pending' ? t('profile.kyc_pending') :
+                     user.kycStatus === 'rejected' ? t('profile.kyc_rejected') : t('profile.kyc_not_verified')}
                   </span>
                   {user.kycStatus !== 'verified' && (
                     <Link to="/kyc" className="text-[10px] text-primary font-bold uppercase hover:underline">
-                      {user.kycStatus === 'pending' ? 'View' : 'Verify'}
+                      {user.kycStatus === 'pending' ? t('common.view') : t('profile.kyc_verify_now')}
                     </Link>
                   )}
                 </div>
@@ -454,7 +468,7 @@ const Profile = () => {
               className="mt-6 w-full flex items-center justify-center space-x-2 border border-gray-200 dark:border-neutral-800 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-neutral-800 text-gray-700 dark:text-gray-300 transition-all"
             >
               <Settings className="w-4 h-4" />
-              <span>Edit Profile</span>
+              <span>{t('profile.edit_profile')}</span>
             </button>
           </div>
 
@@ -478,11 +492,11 @@ const Profile = () => {
           {isEditing ? (
             <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
               <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-900 dark:text-gray-100">
-                <Edit3 className="w-6 h-6 mr-2 text-primary" /> Edit Profile
+                <Edit3 className="w-6 h-6 mr-2 text-primary" /> {t('profile.edit_profile')}
               </h2>
               <form onSubmit={handleUpdateProfile} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Display Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.display_name')}</label>
                   <input 
                     type="text" 
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
@@ -491,7 +505,7 @@ const Profile = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.phone_number')}</label>
                   <input 
                     type="tel" 
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
@@ -500,26 +514,89 @@ const Profile = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">County</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.county')}</label>
                   <select 
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
                     value={editData.county}
                     onChange={(e) => setEditData({...editData, county: e.target.value, town: ''})}
                   >
-                    <option value="" className="dark:bg-neutral-900">Select County</option>
+                    <option value="" className="dark:bg-neutral-900">{t('profile.county')}</option>
                     {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Town</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.town')}</label>
                   <select 
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
                     value={editData.town}
                     onChange={(e) => setEditData({...editData, town: e.target.value})}
                   >
-                    <option value="" className="dark:bg-neutral-900">Select Town</option>
+                    <option value="" className="dark:bg-neutral-900">{t('profile.town')}</option>
                     {editData.county && TOWNS[editData.county]?.map(t => <option key={t} value={t} className="dark:bg-neutral-900">{t}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.dob')}</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.dob}
+                    onChange={(e) => setEditData({...editData, dob: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.gender')}</label>
+                  <select 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.gender}
+                    onChange={(e) => setEditData({...editData, gender: e.target.value as any})}
+                  >
+                    <option value="" className="dark:bg-neutral-900">{t('profile.gender')}</option>
+                    <option value="male" className="dark:bg-neutral-900">{t('profile.male')}</option>
+                    <option value="female" className="dark:bg-neutral-900">{t('profile.female')}</option>
+                    <option value="other" className="dark:bg-neutral-900">{t('profile.other')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.county_of_birth')}</label>
+                  <select 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.countyOfBirth}
+                    onChange={(e) => setEditData({...editData, countyOfBirth: e.target.value})}
+                  >
+                    <option value="" className="dark:bg-neutral-900">{t('profile.county')}</option>
+                    {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.occupation')}</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Software Engineer"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.occupation}
+                    onChange={(e) => setEditData({...editData, occupation: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.residence')}</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Kilimani"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.area}
+                    onChange={(e) => setEditData({...editData, area: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.residence_info')}</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Apartment 4B, Green Court"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                    value={editData.residence}
+                    onChange={(e) => setEditData({...editData, residence: e.target.value})}
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <button
@@ -531,16 +608,16 @@ const Profile = () => {
                     )}
                   >
                     <MapPin className="w-4 h-4" />
-                    {editData.lat ? 'Location Captured ✓' : 'Use My Current Location for Proximity Search'}
+                    {editData.lat ? t('profile.location_captured') : t('profile.use_location')}
                   </button>
-                  <p className="text-[10px] text-gray-400 mt-2 font-medium">Providing your location helps us recommend sellers and services closer to you.</p>
+                  <p className="text-[10px] text-gray-400 mt-2 font-medium">{t('profile.location_help')}</p>
                 </div>
                 <div className="md:col-span-2 flex space-x-4 pt-4">
                   <button type="submit" className="bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all">
-                    Save Changes
+                    {t('profile.save_changes')}
                   </button>
                   <button type="button" onClick={() => setIsEditing(false)} className="bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-300 px-8 py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all">
-                    Cancel
+                    {t('profile.cancel')}
                   </button>
                 </div>
               </form>
@@ -551,11 +628,11 @@ const Profile = () => {
               <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
                 <div className="flex justify-between items-center mb-8">
                   <h2 className="text-2xl font-bold flex items-center text-gray-900 dark:text-gray-100">
-                    <Package className="w-6 h-6 mr-2 text-primary" /> My Listings
+                    <Package className="w-6 h-6 mr-2 text-primary" /> {t('profile.my_listings')}
                   </h2>
                   {user.role !== 'customer' && (
                     <Link to="/create-listing" className="text-primary font-bold hover:underline">
-                      + Post New Listing
+                      {t('profile.post_new')}
                     </Link>
                   )}
                 </div>
@@ -581,7 +658,7 @@ const Profile = () => {
                               </span>
                               {listing.isPromoted && (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase mr-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 flex items-center">
-                                  <Zap className="w-3 h-3 mr-1" /> PROMOTED
+                                  <Zap className="w-3 h-3 mr-1" /> {t('listing.promoted')}
                                 </span>
                               )}
                               <span>{formatDate(listing.createdAt)}</span>
@@ -594,7 +671,7 @@ const Profile = () => {
                               to={`/promote/${listing.id}`}
                               className="px-3 py-1 bg-yellow-500 text-white rounded-lg text-xs font-bold hover:bg-yellow-600 transition-colors flex items-center"
                             >
-                              <Zap className="w-3 h-3 mr-1" /> Promote
+                              <Zap className="w-3 h-3 mr-1" /> {t('profile.promote')}
                             </Link>
                           )}
                           {listing.status === 'active' && (
@@ -610,7 +687,7 @@ const Profile = () => {
                               }}
                               className="px-3 py-1 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 transition-colors"
                             >
-                              Mark Sold
+                              {t('profile.mark_sold')}
                             </button>
                           )}
                           <Link to={`/listing/${listing.id}`} className="p-2 text-gray-400 hover:text-primary transition-colors">
@@ -618,7 +695,7 @@ const Profile = () => {
                           </Link>
                           <button 
                             onClick={async () => {
-                              if (window.confirm('Are you sure you want to delete this listing?')) {
+                              if (window.confirm(t('profile.delete_confirm'))) {
                                 try {
                                   await updateDoc(doc(db, 'listings', listing.id), { status: 'removed' });
                                   setMyListings(prev => prev.map(l => l.id === listing.id ? { ...l, status: 'removed' } : l));
@@ -639,7 +716,7 @@ const Profile = () => {
                 ) : (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                    <p>You haven't posted any listings yet.</p>
+                    <p>{t('profile.no_listings')}</p>
                   </div>
                 )}
               </div>
@@ -647,10 +724,10 @@ const Profile = () => {
               {/* Reviews Section */}
               <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
                 <h2 className="text-2xl font-bold mb-8 flex items-center text-gray-900 dark:text-gray-100">
-                  <Star className="w-6 h-6 mr-2 text-yellow-500" /> Reviews & Ratings
+                  <Star className="w-6 h-6 mr-2 text-yellow-500" /> {t('profile.reviews_ratings')}
                 </h2>
                 <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                  <p>No reviews yet. Complete transactions to build your reputation!</p>
+                  <p>{t('profile.no_reviews')}</p>
                 </div>
               </div>
 
@@ -658,7 +735,7 @@ const Profile = () => {
               <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
                 <div className="flex justify-between items-center mb-8">
                   <h2 className="text-2xl font-bold flex items-center text-gray-900 dark:text-gray-100">
-                    <ShoppingBag className="w-6 h-6 mr-2 text-primary" /> My Orders & Tracking
+                    <ShoppingBag className="w-6 h-6 mr-2 text-primary" /> {t('profile.my_orders')}
                   </h2>
                 </div>
 
@@ -676,8 +753,8 @@ const Profile = () => {
                               <Package className="w-6 h-6 text-primary" />
                             </div>
                             <div>
-                              <h3 className="font-bold text-gray-900 dark:text-gray-100">Order #{order.id.slice(0, 8)}</h3>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">Amount: {formatPrice(order.amount)} • {formatDate(order.createdAt)}</p>
+                              <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('profile.order_id').replace('{id}', order.id.slice(0, 8))}</h3>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{t('profile.amount')}: {formatPrice(order.amount)} • {formatDate(order.createdAt)}</p>
                             </div>
                           </div>
                           
@@ -707,7 +784,7 @@ const Profile = () => {
                         
                         {(order as any).milestones && (
                           <div className="mt-4 pt-4 border-t border-gray-100 dark:border-neutral-800">
-                            <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Milestone Progress</p>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">{t('profile.milestone_progress')}</p>
                             <div className="flex gap-2">
                               {(order as any).milestones.map((m: any, idx: number) => (
                                 <div key={idx} className="flex-1 h-1.5 bg-gray-200 dark:bg-neutral-700 rounded-full overflow-hidden">

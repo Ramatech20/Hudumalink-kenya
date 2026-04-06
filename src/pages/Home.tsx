@@ -9,9 +9,11 @@ import { formatPrice, cn, getDistance } from '../lib/utils';
 import { motion } from 'motion/react';
 import { CATEGORIES, KENYAN_COUNTIES } from '../constants';
 import { useAuth } from '../AuthContext';
+import { useLanguage } from '../LanguageContext';
 
 const Home = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
   const [nearbyListings, setNearbyListings] = useState<Listing[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
@@ -90,6 +92,35 @@ const Home = () => {
 
   return (
     <div className="space-y-16 pb-20">
+      {/* Profile Completion Banner */}
+      {user && (!user.dob || !user.gender || !user.occupation) && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-6 bg-gradient-to-r from-secondary/20 to-secondary/10 rounded-[2.5rem] border border-secondary/20 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-secondary/5"
+          >
+            <div className="flex items-center gap-5 text-center md:text-left">
+              <div className="p-4 bg-secondary text-white rounded-3xl shadow-lg shadow-secondary/30">
+                <Star className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-gray-900 dark:text-white">{t('profile.complete_banner')}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 font-medium">
+                  {t('profile.complete_desc')}
+                </p>
+              </div>
+            </div>
+            <Link 
+              to="/profile" 
+              className="w-full md:w-auto px-10 py-4 bg-secondary text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-lg shadow-secondary/20 text-center"
+            >
+              {t('profile.complete_btn')}
+            </Link>
+          </motion.div>
+        </section>
+      )}
+
       {/* Hero Section */}
       <section className="relative min-h-[600px] flex items-center justify-center overflow-hidden bg-neutral-950">
         {/* Background Image Grid */}
@@ -142,14 +173,14 @@ const Home = () => {
             className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full text-sm font-bold mb-8"
           >
             <Zap className="w-4 h-4 text-secondary" />
-            <span>Kenya's #1 Trusted Marketplace</span>
+            <span>{t('hero.tagline')}</span>
           </motion.div>
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-5xl md:text-7xl font-black tracking-tight mb-8 leading-[1.1]"
           >
-            Find Anything, Hire Anyone in <span className="text-primary">Kenya</span> 🇰🇪
+            {t('hero.title')}
           </motion.h1>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
@@ -157,7 +188,7 @@ const Home = () => {
             transition={{ delay: 0.1 }}
             className="text-xl md:text-2xl text-gray-200 mb-12 max-w-3xl mx-auto font-medium leading-relaxed"
           >
-            Connecting skilled fundis, local sellers, and digital freelancers with customers across all 47 counties.
+            {t('hero.subtitle')}
           </motion.p>
 
           <motion.form 
@@ -171,7 +202,7 @@ const Home = () => {
               <Search className="w-5 h-5 text-gray-400 mr-2" />
               <input 
                 type="text" 
-                placeholder="What are you looking for?" 
+                placeholder={t('hero.search_placeholder')} 
                 className="w-full py-3 text-gray-900 dark:text-gray-100 bg-transparent focus:outline-none"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -184,12 +215,12 @@ const Home = () => {
                 value={selectedCounty}
                 onChange={(e) => setSelectedCounty(e.target.value)}
               >
-                <option value="" className="dark:bg-neutral-900">All Counties</option>
+                <option value="" className="dark:bg-neutral-900">{t('hero.all_counties')}</option>
                 {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
               </select>
             </div>
             <button type="submit" className="w-full md:w-auto bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all">
-              Search
+              {t('hero.search_btn')}
             </button>
           </motion.form>
 
@@ -204,7 +235,7 @@ const Home = () => {
               className="flex items-center space-x-2 bg-white/10 backdrop-blur-md border border-white/20 px-6 py-3 rounded-full text-sm font-bold hover:bg-white/20 transition-all"
             >
               <MapPin className="w-4 h-4 text-secondary" />
-              <span>{loadingNearby ? 'Locating...' : 'Find Sellers Near Me'}</span>
+              <span>{loadingNearby ? t('hero.locating') : t('hero.nearby_btn')}</span>
             </button>
           </motion.div>
         </div>
@@ -215,8 +246,8 @@ const Home = () => {
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-end mb-8">
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Nearby You</h2>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">Services and products in your immediate area</p>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('section.nearby')}</h2>
+              <p className="text-gray-500 dark:text-gray-400 mt-2">{t('section.nearby_desc')}</p>
             </div>
           </div>
 
@@ -237,8 +268,8 @@ const Home = () => {
                   <div className="absolute top-2 left-2 bg-primary text-white px-2 py-1 rounded-lg text-[10px] font-bold flex items-center shadow-lg">
                     <MapPin className="w-3 h-3 mr-1" />
                     {userLocation && listing.location.lat && listing.location.lng ? 
-                      `${getDistance(userLocation.lat, userLocation.lng, listing.location.lat, listing.location.lng).toFixed(1)} km away` : 
-                      'Nearby'
+                      t('home.km_away').replace('{distance}', getDistance(userLocation.lat, userLocation.lng, listing.location.lat, listing.location.lng).toFixed(1)) : 
+                      t('section.nearby')
                     }
                   </div>
                 </div>
@@ -266,8 +297,8 @@ const Home = () => {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-end mb-8">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Browse Categories</h2>
-            <p className="text-gray-500 dark:text-gray-400 mt-2">Explore services and products by category</p>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('section.categories')}</h2>
+            <p className="text-gray-500 dark:text-gray-400 mt-2">{t('section.categories_desc')}</p>
           </div>
         </div>
 
@@ -290,28 +321,28 @@ const Home = () => {
       {/* How It Works Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">How HudumaLink Works</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-2">Your journey to safe and reliable transactions starts here</p>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('home.how_it_works')}</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">{t('home.how_it_works_desc')}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
             {
               step: "01",
-              title: "Search & Connect",
-              desc: "Find the service or product you need and chat with the provider directly on our platform.",
+              title: t('home.step1_title'),
+              desc: t('home.step1_desc'),
               icon: <Search className="w-8 h-8 text-primary" />
             },
             {
               step: "02",
-              title: "Secure with Escrow",
-              desc: "Pay securely via M-Pesa. We hold the funds in escrow until you're satisfied with the delivery.",
+              title: t('home.step2_title'),
+              desc: t('home.step2_desc'),
               icon: <ShieldCheck className="w-8 h-8 text-secondary" />
             },
             {
               step: "03",
-              title: "Confirm & Release",
-              desc: "Once you receive your item or service, confirm it in the app to release funds to the seller.",
+              title: t('home.step3_title'),
+              desc: t('home.step3_desc'),
               icon: <CheckCircle2 className="w-8 h-8 text-green-500" />
             }
           ].map((item, i) => (
@@ -336,8 +367,8 @@ const Home = () => {
                 <ShieldCheck className="w-8 h-8" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900 dark:text-gray-100">Verified Providers</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">We verify identities for your safety.</p>
+                <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('home.verified_providers')}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('home.verified_desc')}</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -345,8 +376,8 @@ const Home = () => {
                 <Zap className="w-8 h-8" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900 dark:text-gray-100">Fast Connections</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Connect with sellers in minutes.</p>
+                <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('home.fast_connections')}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('home.fast_desc')}</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -354,8 +385,8 @@ const Home = () => {
                 <Star className="w-8 h-8" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900 dark:text-gray-100">Top Rated</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Only the best services for you.</p>
+                <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('home.top_rated')}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('home.top_rated_desc')}</p>
               </div>
             </div>
           </div>
@@ -366,11 +397,11 @@ const Home = () => {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-end mb-8">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Featured Listings</h2>
-            <p className="text-gray-500 dark:text-gray-400 mt-2">Handpicked quality services and products</p>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('section.featured')}</h2>
+            <p className="text-gray-500 dark:text-gray-400 mt-2">{t('section.featured_desc')}</p>
           </div>
           <Link to="/listings" className="text-primary font-bold flex items-center hover:underline">
-            View All <ArrowRight className="w-4 h-4 ml-1" />
+            {t('home.view_all')} <ArrowRight className="w-4 h-4 ml-1" />
           </Link>
         </div>
 
@@ -400,14 +431,14 @@ const Home = () => {
                     </div>
                   )}
                   <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-primary">
-                    {listing.type === 'service' ? 'SERVICE' : 'PRODUCT'}
+                    {listing.type === 'service' ? t('listings.services').toUpperCase() : t('listings.products').toUpperCase()}
                   </div>
                   {listing.type === 'product' && listing.stock !== undefined && (
                     <div className={cn(
                       "px-2 py-1 rounded-lg text-[10px] font-bold text-white",
                       listing.stock > 0 ? "bg-green-500/90" : "bg-red-500/90"
                     )}>
-                      {listing.stock > 0 ? `${listing.stock} IN STOCK` : 'OUT OF STOCK'}
+                      {listing.stock > 0 ? t('listings.in_stock') : t('listings.out_of_stock')}
                     </div>
                   )}
                 </div>
@@ -422,7 +453,7 @@ const Home = () => {
                 </h3>
                 <div className="mt-4 flex justify-between items-center">
                   <span className="text-lg font-extrabold text-primary">
-                    {listing.price ? formatPrice(listing.price) : 'Contact for Price'}
+                    {listing.price ? formatPrice(listing.price) : t('listings.contact_price')}
                   </span>
                 </div>
               </div>
@@ -430,7 +461,7 @@ const Home = () => {
           ))}
           {featuredListings.length === 0 && (
             <div className="col-span-full py-20 text-center text-gray-500 dark:text-gray-400">
-              No listings found. Be the first to post!
+              {t('home.no_listings')}
             </div>
           )}
         </div>
@@ -440,15 +471,15 @@ const Home = () => {
       {user?.role !== 'customer' && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="kenyan-gradient rounded-3xl p-12 text-center text-white">
-            <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to grow your business?</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-6">{t('home.ready_to_grow')}</h2>
             <p className="text-lg text-gray-200 mb-8 max-w-2xl mx-auto">
-              Join thousands of Kenyan entrepreneurs who use HudumaLink to reach more customers and grow their sales.
+              {t('home.ready_to_grow_desc')}
             </p>
             <Link 
               to="/create-listing" 
               className="inline-block bg-white text-primary px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-100 transition-all"
             >
-              Start Selling Today
+              {t('home.start_selling')}
             </Link>
           </div>
         </section>

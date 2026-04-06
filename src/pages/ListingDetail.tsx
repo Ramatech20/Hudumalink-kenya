@@ -14,8 +14,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
+import { useLanguage } from '../LanguageContext';
 
 const ListingDetail = () => {
+  const { t } = useLanguage();
   const { id } = useParams();
   const { user } = useAuth();
   const [listing, setListing] = useState<Listing | null>(null);
@@ -556,13 +558,13 @@ const ListingDetail = () => {
       {listing.status === 'pending' && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-900/30 rounded-2xl py-4 px-6 mb-8 text-center">
           <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 flex items-center justify-center">
-            <Zap className="w-4 h-4 mr-2" /> This listing is currently under review by our team. It will be visible to everyone once approved.
+            <Zap className="w-4 h-4 mr-2" /> {t('listing.under_review')}
           </p>
         </div>
       )}
 
       <button onClick={() => navigate(-1)} className="flex items-center text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary mb-6 transition-colors">
-        <ArrowLeft className="w-4 h-4 mr-1" /> Back
+        <ArrowLeft className="w-4 h-4 mr-1" /> {t('listing.back')}
       </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -584,7 +586,7 @@ const ListingDetail = () => {
                 <button 
                   onClick={handleShare}
                   className="p-2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur rounded-full shadow-lg hover:text-primary transition-colors text-gray-900 dark:text-gray-100"
-                  title="Share Listing"
+                  title={t('listing.share')}
                 >
                   <Share2 className="w-5 h-5" />
                 </button>
@@ -592,7 +594,7 @@ const ListingDetail = () => {
                   <button 
                     onClick={() => setShowReportModal(true)}
                     className="p-2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur rounded-full shadow-lg hover:text-secondary transition-colors text-gray-900 dark:text-gray-100"
-                    title="Report Listing"
+                    title={t('listing.report')}
                   >
                     <Flag className="w-5 h-5" />
                   </button>
@@ -624,7 +626,7 @@ const ListingDetail = () => {
                         listing.promotionTier === 'elite' ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400" :
                         listing.promotionTier === 'premium' ? "bg-primary/10 text-primary" : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
                       )}>
-                        <Zap className="w-3 h-3 mr-1" /> {listing.promotionTier || 'PROMOTED'}
+                        <Zap className="w-3 h-3 mr-1" /> {listing.promotionTier?.toUpperCase() || t('listing.promoted')}
                       </span>
                     </>
                   )}
@@ -635,26 +637,26 @@ const ListingDetail = () => {
                     <MapPin className="w-4 h-4 mr-1" />
                     {listing.location.town}, {listing.location.county}
                     <span className="mx-2 text-gray-300 dark:text-neutral-700">|</span>
-                    <span>Posted {formatDate(listing.createdAt)}</span>
+                    <span>{t('listing.posted')} {formatDate(listing.createdAt)}</span>
                   </div>
                   {user?.uid === listing.authorId && !listing.isPromoted && (
                     <Link 
                       to={`/promote/${listing.id}`}
                       className="flex items-center text-xs font-bold text-yellow-600 hover:text-yellow-700 mt-2 transition-colors"
                     >
-                      <Zap className="w-3 h-3 mr-1 fill-current" /> Promote this listing to get more views
+                      <Zap className="w-3 h-3 mr-1 fill-current" /> {t('listing.promote_cta')}
                     </Link>
                   )}
                   {listing.isPromoted && listing.featuredUntil && (
                     <p className="text-[10px] text-gray-500 mt-1">
-                      Promotion active until {formatDate(listing.featuredUntil)}
+                      {t('listing.promotion_until')} {formatDate(listing.featuredUntil)}
                     </p>
                   )}
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-3xl font-extrabold text-primary">
-                  {listing.price ? formatPrice(listing.price) : 'Contact for Price'}
+                  {listing.price ? formatPrice(listing.price) : t('listings.contact_price')}
                 </div>
               </div>
             </div>
@@ -670,9 +672,9 @@ const ListingDetail = () => {
                       <Box className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Availability</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">{t('listing.availability')}</p>
                       <p className="font-bold text-gray-900 dark:text-white">
-                        {listing.stock > 0 ? `${listing.stock} units left` : 'Out of stock'}
+                        {listing.stock > 0 ? t('listing.units_left').replace('{count}', listing.stock.toString()) : t('listing.out_of_stock')}
                       </p>
                     </div>
                   </div>
@@ -684,7 +686,7 @@ const ListingDetail = () => {
                       <Layers className="w-5 h-5 text-secondary" />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Available Sizes</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">{t('listing.available_sizes')}</p>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {listing.sizes.map((size, idx) => (
                           <span key={idx} className="bg-white dark:bg-neutral-700 px-2 py-0.5 rounded text-xs font-bold border border-gray-200 dark:border-neutral-600">
@@ -701,7 +703,7 @@ const ListingDetail = () => {
             {listing.specifications && Object.keys(listing.specifications).length > 0 && (
               <div className="space-y-4">
                 <h3 className="text-lg font-bold flex items-center text-gray-900 dark:text-white">
-                  <Settings className="w-5 h-5 mr-2 text-primary" /> Specifications
+                  <Settings className="w-5 h-5 mr-2 text-primary" /> {t('listing.specifications')}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {Object.entries(listing.specifications).map(([key, value]) => (
@@ -717,7 +719,7 @@ const ListingDetail = () => {
             <hr className="border-gray-100 dark:border-neutral-800" />
 
             <div>
-              <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">Description</h2>
+              <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">{t('listing.description')}</h2>
               <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap leading-relaxed">
                 {listing.description}
               </p>
@@ -727,13 +729,13 @@ const ListingDetail = () => {
           {/* Reviews Section */}
           <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
             <h2 className="text-2xl font-bold mb-8 flex items-center text-gray-900 dark:text-gray-100">
-              <Star className="w-6 h-6 mr-2 text-yellow-500" /> Reviews & Ratings
+              <Star className="w-6 h-6 mr-2 text-yellow-500" /> {t('listing.reviews')}
             </h2>
 
             {/* Review Form */}
             {user && user.uid !== listing.authorId && hasCompletedTransaction && (
               <form onSubmit={handleLeaveReview} className="mb-10 p-6 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800">
-                <h3 className="font-bold mb-4 text-gray-900 dark:text-gray-100">Leave a Review</h3>
+                <h3 className="font-bold mb-4 text-gray-900 dark:text-gray-100">{t('listing.leave_review')}</h3>
                 <div className="flex items-center space-x-2 mb-4">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -749,7 +751,7 @@ const ListingDetail = () => {
                 <textarea
                   required
                   rows={3}
-                  placeholder="Share your experience with this seller..."
+                  placeholder={t('listing.review_placeholder')}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-colors mb-4"
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
@@ -760,7 +762,7 @@ const ListingDetail = () => {
                   className="flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
-                  <span>{reviewing ? 'Submitting...' : 'Submit Review'}</span>
+                  <span>{reviewing ? t('common.submitting') : t('listing.submit_review')}</span>
                 </button>
               </form>
             )}
@@ -770,7 +772,7 @@ const ListingDetail = () => {
               {!hasCompletedTransaction && user && user.uid !== listing.authorId && (
                 <div className="mb-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/30 text-sm text-blue-700 dark:text-blue-400 flex items-center">
                   <Info className="w-4 h-4 mr-2" />
-                  <span>Only buyers who have completed a transaction can leave a review.</span>
+                  <span>{t('listing.review_restriction')}</span>
                 </div>
               )}
               {reviews.length > 0 ? (
@@ -789,7 +791,7 @@ const ListingDetail = () => {
                 ))
               ) : (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <p>No reviews yet. Be the first to review!</p>
+                  <p>{t('listing.no_reviews')}</p>
                 </div>
               )}
             </div>
@@ -800,7 +802,7 @@ const ListingDetail = () => {
         <div className="space-y-6">
           {/* Seller Card */}
           <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-gray-100 dark:border-neutral-800 shadow-sm transition-colors">
-            <h2 className="text-lg font-bold mb-6 text-gray-900 dark:text-gray-100">Seller Information</h2>
+            <h2 className="text-lg font-bold mb-6 text-gray-900 dark:text-gray-100">{t('listing.seller_info')}</h2>
             <div className="flex items-center space-x-4 mb-6">
               {author?.photoURL ? (
                 <img src={author.photoURL} alt={author.displayName} className="w-16 h-16 rounded-full object-cover" referrerPolicy="no-referrer" />
@@ -827,11 +829,11 @@ const ListingDetail = () => {
               {/* Transaction Status (Visible to both) */}
               {transaction && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Transaction Status</h3>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">{t('listing.transaction_status')}</h3>
                   {transaction.status === 'pending' && (
                     <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-2xl border border-yellow-100 dark:border-yellow-900/30">
                       <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium flex items-center">
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Payment is pending...
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('listing.payment_pending')}
                       </p>
                     </div>
                   )}
@@ -839,7 +841,7 @@ const ListingDetail = () => {
                   {transaction.status === 'deposited' && (
                     <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-2xl border border-green-100 dark:border-green-900/30">
                       <p className="text-sm text-green-800 dark:text-green-200 font-medium flex items-center">
-                        <ShieldCheck className="w-4 h-4 mr-2" /> Funds are safe in Escrow
+                        <ShieldCheck className="w-4 h-4 mr-2" /> {t('listing.funds_safe')}
                       </p>
                     </div>
                   )}
@@ -847,7 +849,7 @@ const ListingDetail = () => {
                   {transaction.status === 'released' && (
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30">
                       <p className="text-sm text-blue-800 dark:text-blue-200 font-medium flex items-center">
-                        <CheckCircle2 className="w-4 h-4 mr-2" /> Transaction Completed
+                        <CheckCircle2 className="w-4 h-4 mr-2" /> {t('listing.completed')}
                       </p>
                     </div>
                   )}
@@ -855,7 +857,7 @@ const ListingDetail = () => {
                   {transaction.status === 'disputed' && (
                     <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-100 dark:border-red-900/30">
                       <p className="text-sm text-red-800 dark:text-red-200 font-medium flex items-center">
-                        <AlertTriangle className="w-4 h-4 mr-2" /> Transaction in Dispute
+                        <AlertTriangle className="w-4 h-4 mr-2" /> {t('listing.disputed')}
                       </p>
                     </div>
                   )}
@@ -874,11 +876,10 @@ const ListingDetail = () => {
                         </div>
                         <div>
                           <p className="text-sm font-black text-red-700 dark:text-red-300 uppercase tracking-tighter mb-1">
-                            STRICT SAFETY WARNING
+                            {t('listing.safety_warning')}
                           </p>
                           <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed font-bold">
-                            NEVER pay outside HudumaLink. We are <span className="text-sm font-black underline decoration-2 underline-offset-2">NOT LIABLE</span> for any losses if you pay via M-Pesa directly or cash. 
-                            <span className="block mt-1 text-red-800 dark:text-red-200">Payment outside the platform VOIDS your buyer protection and escrow security.</span>
+                            {t('listing.safety_warning_desc')}
                           </p>
                         </div>
                       </div>
@@ -888,10 +889,10 @@ const ListingDetail = () => {
                   {!transaction && (
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-2xl">
                       <p className="text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest flex items-center mb-1">
-                        <Zap className="w-3 h-3 mr-1" /> Sandbox Mode
+                        <Zap className="w-3 h-3 mr-1" /> {t('listing.sandbox_mode')}
                       </p>
                       <p className="text-[11px] text-blue-600 dark:text-blue-400 leading-relaxed font-medium">
-                        Payments are currently in simulation mode for MVP testing. No real funds will be deducted from your M-Pesa.
+                        {t('listing.sandbox_desc')}
                       </p>
                     </div>
                   )}
@@ -909,13 +910,15 @@ const ListingDetail = () => {
                       ) : (
                         <Briefcase className="w-5 h-5" />
                       )}
-                      <span>{listing.type === 'product' ? 'Buy via Escrow' : 'Hire via Escrow'}</span>
+                      <span>{listing.type === 'product' ? t('listing.buy_escrow') : t('listing.hire_escrow')}</span>
                     </button>
                   )}
                   
                   {!transaction && (
                     <p className="text-[10px] text-center text-gray-500 dark:text-gray-400 px-4">
-                      By clicking above, you agree to our <Link to="/terms" className="underline">Terms</Link>. Your payment is held securely in Escrow until you confirm delivery.
+                      {t('listing.terms_agree').split('{terms}')[0]}
+                      <Link to="/terms" className="underline">{t('footer.terms')}</Link>
+                      {t('listing.terms_agree').split('{terms}')[1]}
                     </p>
                   )}
 
@@ -926,14 +929,14 @@ const ListingDetail = () => {
                         className="w-full flex items-center justify-center space-x-2 bg-primary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20"
                       >
                         <CheckCircle2 className="w-5 h-5" />
-                        <span>Confirm Delivery & Release Funds</span>
+                        <span>{t('listing.confirm_delivery')}</span>
                       </button>
                       <button 
                         onClick={() => setShowDisputeModal(true)}
                         className="w-full flex items-center justify-center space-x-2 bg-white dark:bg-neutral-800 text-red-500 border border-red-100 dark:border-red-900/30 py-3 rounded-2xl font-bold hover:bg-red-50 dark:hover:bg-red-900/10 transition-all"
                       >
                         <AlertTriangle className="w-4 h-4" />
-                        <span>Raise a Dispute</span>
+                        <span>{t('listing.raise_dispute')}</span>
                       </button>
                     </div>
                   )}
@@ -944,14 +947,14 @@ const ListingDetail = () => {
                       className="flex items-center justify-center space-x-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
                     >
                       <Phone className="w-4 h-4" />
-                      <span>Call</span>
+                      <span>{t('listing.call')}</span>
                     </a>
                     <button 
                       onClick={() => navigate(`/messages?listingId=${listing.id}`)}
                       className="flex items-center justify-center space-x-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
                     >
                       <MessageCircle className="w-4 h-4" />
-                      <span>Chat</span>
+                      <span>{t('listing.chat')}</span>
                     </button>
                   </div>
 
@@ -963,7 +966,7 @@ const ListingDetail = () => {
                       className="w-full flex items-center justify-center space-x-2 bg-green-500 text-white py-3 rounded-2xl font-bold hover:bg-opacity-90 transition-all"
                     >
                       <MessageCircle className="w-5 h-5" />
-                      <span>WhatsApp Chat</span>
+                      <span>{t('listing.whatsapp')}</span>
                     </a>
                   )}
                 </div>
@@ -977,13 +980,13 @@ const ListingDetail = () => {
                     className="w-full flex items-center justify-center space-x-2 bg-secondary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-secondary/20"
                   >
                     <Zap className="w-5 h-5" />
-                    <span>Boost Visibility</span>
+                    <span>{t('listing.boost')}</span>
                   </Link>
                   <button 
                     className="w-full flex items-center justify-center space-x-2 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-all"
                   >
                     <Settings className="w-5 h-5" />
-                    <span>Manage Listing</span>
+                    <span>{t('listing.manage')}</span>
                   </button>
                 </div>
               )}
@@ -994,29 +997,29 @@ const ListingDetail = () => {
           <div className="bg-yellow-50 dark:bg-yellow-900/10 rounded-3xl p-6 border border-yellow-100 dark:border-yellow-900/20 transition-colors">
             <h3 className="font-bold text-yellow-800 dark:text-yellow-200 mb-4 flex items-center">
               <ShieldCheck className="w-5 h-5 mr-2" />
-              Safety Tips
+              {t('listing.safety_tips')}
             </h3>
             <ul className="text-sm text-yellow-700 dark:text-yellow-300/80 space-y-3">
               <li className="flex gap-2">
                 <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                <span>Meet in a safe public place for physical items.</span>
+                <span>{t('listing.safety_tip_1')}</span>
               </li>
               <li className="flex gap-2">
                 <div className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                <span className="font-bold text-red-600 dark:text-red-400">Avoid direct M-Pesa payments to sellers.</span>
+                <span className="font-bold text-red-600 dark:text-red-400">{t('listing.safety_tip_2')}</span>
               </li>
               <li className="flex gap-2">
                 <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                <span>Inspect the item or service before releasing funds.</span>
+                <span>{t('listing.safety_tip_3')}</span>
               </li>
               <li className="flex gap-2">
                 <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                <span>Check the seller's profile, ratings, and KYC status.</span>
+                <span>{t('listing.safety_tip_4')}</span>
               </li>
             </ul>
             <div className="mt-6 pt-4 border-t border-yellow-200 dark:border-yellow-900/30">
               <Link to="/safety" className="text-xs font-bold text-yellow-800 dark:text-yellow-200 hover:underline flex items-center">
-                View Full Safety Guide <ChevronRight className="w-3 h-3 ml-1" />
+                {t('listing.view_safety')} <ChevronRight className="w-3 h-3 ml-1" />
               </Link>
             </div>
           </div>
@@ -1042,7 +1045,7 @@ const ListingDetail = () => {
             >
               <div className="p-6 border-b border-gray-100 dark:border-neutral-800 flex justify-between items-center">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-                  <AlertTriangle className="w-5 h-5 mr-2 text-secondary" /> Report Listing
+                  <AlertTriangle className="w-5 h-5 mr-2 text-secondary" /> {t('listing.report_title')}
                 </h3>
                 <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
                   <CloseIcon className="w-5 h-5 text-gray-500" />
@@ -1050,29 +1053,29 @@ const ListingDetail = () => {
               </div>
               <form onSubmit={handleReport} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reason for reporting</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('listing.report_reason')}</label>
                   <select 
                     required
                     value={reportReason}
                     onChange={(e) => setReportReason(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                   >
-                    <option value="">Select a reason</option>
-                    <option value="scam">Scam or Fraud</option>
-                    <option value="prohibited">Prohibited Item</option>
-                    <option value="misleading">Misleading Information</option>
-                    <option value="duplicate">Duplicate Listing</option>
-                    <option value="offensive">Offensive Content</option>
-                    <option value="other">Other</option>
+                    <option value="">{t('listing.select_reason')}</option>
+                    <option value="scam">{t('listing.scam')}</option>
+                    <option value="prohibited">{t('listing.prohibited')}</option>
+                    <option value="misleading">{t('listing.misleading')}</option>
+                    <option value="duplicate">{t('listing.duplicate')}</option>
+                    <option value="offensive">{t('listing.offensive')}</option>
+                    <option value="other">{t('listing.other')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Additional Details (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('listing.additional_details')}</label>
                   <textarea 
                     rows={4}
                     value={reportDetails}
                     onChange={(e) => setReportDetails(e.target.value)}
-                    placeholder="Provide more information to help our moderators..."
+                    placeholder={t('listing.report_placeholder')}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                   />
                 </div>
@@ -1085,10 +1088,10 @@ const ListingDetail = () => {
                     {submittingReport ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Submitting...
+                        {t('common.submitting')}
                       </>
                     ) : (
-                      'Submit Report'
+                      t('listing.submit_report')
                     )}
                   </button>
                 </div>
@@ -1117,7 +1120,7 @@ const ListingDetail = () => {
             >
               <div className="p-6 border-b border-gray-100 dark:border-neutral-800 flex justify-between items-center">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-                  <Shield className="w-5 h-5 mr-2 text-primary" /> Raise Dispute
+                  <Shield className="w-5 h-5 mr-2 text-primary" /> {t('listing.dispute_title')}
                 </h3>
                 <button onClick={() => setShowDisputeModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
                   <CloseIcon className="w-5 h-5 text-gray-500" />
@@ -1125,41 +1128,41 @@ const ListingDetail = () => {
               </div>
               <form onSubmit={handleDispute} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reason for dispute</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('listing.dispute_reason')}</label>
                   <select 
                     required
                     value={disputeReason}
                     onChange={(e) => setDisputeReason(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                   >
-                    <option value="">Select a reason</option>
-                    <option value="not_received">Item not received</option>
-                    <option value="not_as_described">Item not as described</option>
-                    <option value="poor_quality">Poor service quality</option>
-                    <option value="incomplete">Incomplete work</option>
-                    <option value="other">Other</option>
+                    <option value="">{t('listing.select_reason')}</option>
+                    <option value="not_received">{t('listing.not_received')}</option>
+                    <option value="not_as_described">{t('listing.not_as_described')}</option>
+                    <option value="poor_quality">{t('listing.poor_quality')}</option>
+                    <option value="incomplete">{t('listing.incomplete')}</option>
+                    <option value="other">{t('listing.other')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Additional Details</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('listing.additional_details')}</label>
                   <textarea 
                     required
                     rows={4}
                     value={disputeDetails}
                     onChange={(e) => setDisputeDetails(e.target.value)}
-                    placeholder="Explain the issue in detail..."
+                    placeholder={t('listing.report_placeholder')}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload Evidence (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('listing.upload_evidence')}</label>
                   <input 
                     type="file" 
                     accept="image/*,video/*"
                     onChange={(e) => setDisputeEvidence(e.target.files?.[0] || null)}
                     className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                   />
-                  <p className="text-[10px] text-gray-500 mt-1">Upload photos or videos to support your dispute.</p>
+                  <p className="text-[10px] text-gray-500 mt-1">{t('listing.upload_desc')}</p>
                 </div>
                 <div className="pt-2">
                   <button 
@@ -1170,10 +1173,10 @@ const ListingDetail = () => {
                     {submittingDispute ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Submitting...
+                        {t('common.submitting')}
                       </>
                     ) : (
-                      'Raise Dispute'
+                      t('listing.raise_dispute')
                     )}
                   </button>
                 </div>
@@ -1202,7 +1205,7 @@ const ListingDetail = () => {
             >
               <div className="p-6 border-b border-gray-100 dark:border-neutral-800 flex justify-between items-center">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-                  <CloseIcon className="w-5 h-5 mr-2 text-red-500" /> Cancel Order
+                  <CloseIcon className="w-5 h-5 mr-2 text-red-500" /> {t('listing.cancel_title')}
                 </h3>
                 <button onClick={() => setShowCancelModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
                   <CloseIcon className="w-5 h-5 text-gray-500" />
@@ -1210,23 +1213,23 @@ const ListingDetail = () => {
               </div>
               <form onSubmit={handleCancelOrder} className="p-6 space-y-4">
                 <div className="bg-red-50 dark:bg-red-900/10 p-4 rounded-xl border border-red-100 dark:border-red-900/20 text-xs text-red-700 dark:text-red-400">
-                  <p className="font-bold mb-1">Warning:</p>
-                  <p>Cancelling orders frequently may lead to account penalties. Please provide a valid reason.</p>
+                  <p className="font-bold mb-1">{t('common.warning')}:</p>
+                  <p>{t('listing.cancel_warning')}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reason for cancellation</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('listing.cancel_reason')}</label>
                   <select 
                     required
                     value={cancelReason}
                     onChange={(e) => setCancelReason(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                   >
-                    <option value="">Select a reason</option>
-                    <option value="change_of_mind">Changed my mind</option>
-                    <option value="found_better_price">Found a better price</option>
-                    <option value="seller_not_responding">Seller not responding</option>
-                    <option value="delivery_delay">Delivery delay</option>
-                    <option value="other">Other</option>
+                    <option value="">{t('listing.select_reason')}</option>
+                    <option value="change_of_mind">{t('listing.change_mind')}</option>
+                    <option value="found_better_price">{t('listing.better_price')}</option>
+                    <option value="seller_not_responding">{t('listing.no_response')}</option>
+                    <option value="delivery_delay">{t('listing.delivery_delay')}</option>
+                    <option value="other">{t('listing.other')}</option>
                   </select>
                 </div>
                 <div className="pt-2">
@@ -1238,10 +1241,10 @@ const ListingDetail = () => {
                     {submittingCancel ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Cancelling...
+                        {t('common.submitting')}
                       </>
                     ) : (
-                      'Confirm Cancellation'
+                      t('listing.confirm_cancel')
                     )}
                   </button>
                 </div>

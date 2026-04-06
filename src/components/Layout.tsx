@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, User, LogOut, Menu, X, PlusCircle, MessageSquare, Heart, Moon, Sun, Shield, AlertCircle, Bell, Facebook, Instagram, Twitter, MessageCircle } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import { useLanguage } from '../LanguageContext';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -12,6 +13,7 @@ import { Chatbot } from './Chatbot';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, refreshUser } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -81,19 +83,36 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   };
 
   const navLinks = [
-    { name: 'Home', path: '/' },
-    { name: 'Marketplace', path: '/listings?type=product' },
-    { name: 'Services', path: '/listings?type=service' },
-    { name: 'Contact Us', path: '/contact' },
-    { name: 'About Us', path: '/about' },
-    { name: 'FAQ', path: '/faq' },
+    { name: t('nav.home'), path: '/' },
+    { name: t('nav.marketplace'), path: '/listings?type=product' },
+    { name: t('nav.services'), path: '/listings?type=service' },
+    { name: t('nav.contact'), path: '/contact' },
+    { name: t('nav.about'), path: '/about' },
+    { name: t('nav.faq'), path: '/faq' },
   ];
 
   return (
     <div className="min-h-screen flex flex-col transition-colors duration-300">
       {/* Top Banner */}
-      <div className="bg-primary text-white py-1 px-4 text-center text-xs font-medium">
-        HudumaLink Kenya - Connecting Kenya's Best Service Providers & Sellers
+      <div className="bg-primary text-white py-1 px-4 text-center text-xs font-medium flex justify-between items-center">
+        <div className="flex-grow text-center">
+          {t('footer.tagline')}
+        </div>
+        <div className="flex items-center space-x-2">
+          <button 
+            onClick={() => setLanguage('en')}
+            className={cn("hover:text-secondary transition-colors", language === 'en' ? "font-black underline" : "opacity-70")}
+          >
+            EN
+          </button>
+          <span className="opacity-30">|</span>
+          <button 
+            onClick={() => setLanguage('sw')}
+            className={cn("hover:text-secondary transition-colors", language === 'sw' ? "font-black underline" : "opacity-70")}
+          >
+            SW
+          </button>
+        </div>
       </div>
 
       {/* Email Verification Banner */}
@@ -159,18 +178,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   {user.role !== 'customer' && (
                     <Link to="/create-listing" className="flex items-center space-x-1 bg-primary text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-opacity-90 transition-all">
                       <PlusCircle className="w-4 h-4" />
-                      <span>Post Ad</span>
+                      <span>{t('nav.post_ad')}</span>
                     </Link>
                   )}
                   {user.role === 'admin' && (
-                    <Link to="/admin" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors" title="Admin Dashboard">
+                    <Link to="/admin" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors" title={t('nav.admin')}>
                       <Shield className="w-5 h-5" />
                     </Link>
                   )}
-                  <Link to="/messages" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors relative">
+                  <Link to="/messages" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors relative" title={t('nav.messages')}>
                     <MessageSquare className="w-5 h-5" />
                   </Link>
-                  <Link to="/notifications" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors relative">
+                  <Link to="/notifications" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors relative" title={t('nav.notifications')}>
                     <Bell className="w-5 h-5" />
                     {unreadNotifications > 0 && (
                       <span className="absolute top-1 right-1 w-4 h-4 bg-secondary text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
@@ -178,7 +197,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       </span>
                     )}
                   </Link>
-                  <Link to="/profile" className="flex items-center space-x-2 p-1 rounded-full border border-gray-200 dark:border-neutral-700 hover:border-primary transition-all">
+                  <Link to="/profile" className="flex items-center space-x-2 p-1 rounded-full border border-gray-200 dark:border-neutral-700 hover:border-primary transition-all" title={t('nav.profile')}>
                     {user.photoURL ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
@@ -187,13 +206,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       </div>
                     )}
                   </Link>
-                  <button onClick={handleLogout} className="p-2 text-gray-500 dark:text-gray-400 hover:text-secondary transition-colors">
+                  <button onClick={handleLogout} className="p-2 text-gray-500 dark:text-gray-400 hover:text-secondary transition-colors" title={t('nav.logout')}>
                     <LogOut className="w-5 h-5" />
                   </button>
                 </>
               ) : (
                 <Link to="/auth" className="text-sm font-medium text-primary hover:underline">
-                  Sign In / Register
+                  {t('nav.signin_register')}
                 </Link>
               )}
             </div>
@@ -231,19 +250,19 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   <>
                     {user.role !== 'customer' && (
                       <Link to="/create-listing" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-primary">
-                        Post Ad
+                        {t('nav.post_ad')}
                       </Link>
                     )}
                     {user.role === 'admin' && (
                       <Link to="/admin" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-primary">
-                        Admin Dashboard
+                        {t('nav.admin')}
                       </Link>
                     )}
                     <Link to="/profile" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300">
-                      My Profile
+                      {t('nav.profile')}
                     </Link>
                     <Link to="/notifications" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300 relative">
-                      Notifications
+                      {t('nav.notifications')}
                       {unreadNotifications > 0 && (
                         <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-secondary rounded-full">
                           {unreadNotifications}
@@ -251,12 +270,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       )}
                     </Link>
                     <button onClick={handleLogout} className="block w-full text-left px-3 py-2 text-base font-medium text-secondary">
-                      Logout
+                      {t('nav.logout')}
                     </button>
                   </>
                 ) : (
                   <Link to="/auth" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-primary">
-                    Sign In / Register
+                    {t('nav.signin_register')}
                   </Link>
                 )}
               </div>
@@ -305,13 +324,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </div>
             </div>
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-300">Quick Links</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-300">{t('footer.quick_links')}</h3>
               <ul className="mt-4 space-y-2">
-                <li><Link to="/listings?type=product" className="text-gray-400 hover:text-white transition-colors">Marketplace</Link></li>
-                <li><Link to="/listings?type=service" className="text-gray-400 hover:text-white transition-colors">Services</Link></li>
-                <li><Link to="/about" className="text-gray-400 hover:text-white transition-colors">About Us</Link></li>
-                <li><Link to="/faq" className="text-gray-400 hover:text-white transition-colors">FAQ</Link></li>
-                <li><Link to="/contact" className="text-gray-400 hover:text-white transition-colors">Contact Support</Link></li>
+                <li><Link to="/listings?type=product" className="text-gray-400 hover:text-white transition-colors">{t('nav.marketplace')}</Link></li>
+                <li><Link to="/listings?type=service" className="text-gray-400 hover:text-white transition-colors">{t('nav.services')}</Link></li>
+                <li><Link to="/about" className="text-gray-400 hover:text-white transition-colors">{t('nav.about')}</Link></li>
+                <li><Link to="/faq" className="text-gray-400 hover:text-white transition-colors">{t('nav.faq')}</Link></li>
+                <li><Link to="/contact" className="text-gray-400 hover:text-white transition-colors">{t('nav.contact')}</Link></li>
               </ul>
             </div>
             <div>

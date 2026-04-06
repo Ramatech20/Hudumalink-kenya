@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'sonner';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './AuthContext';
+import { LanguageProvider } from './LanguageContext';
 import { Layout } from './components/Layout';
 import ScrollToTop from './components/ScrollToTop';
 
@@ -35,35 +36,37 @@ export default function App() {
   return (
     <HelmetProvider>
       <ErrorBoundary>
-        <AuthProvider>
-          <Router>
-          <ScrollToTop />
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/listings" element={<Listings />} />
-              <Route path="/listing/:id" element={<ListingDetail />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-              <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
-              <Route path="/create-listing" element={<PrivateRoute><CreateListing /></PrivateRoute>} />
-              <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
-              <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
-              <Route path="/kyc" element={<PrivateRoute><KYC /></PrivateRoute>} />
-              <Route path="/seller-dashboard" element={<PrivateRoute><SellerDashboard /></PrivateRoute>} />
-              <Route path="/promote/:id" element={<PrivateRoute><PromoteListing /></PrivateRoute>} />
-              <Route path="/transactions/:id" element={<PrivateRoute><TransactionDetail /></PrivateRoute>} />
-              <Route path="/about" element={<About />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/safety" element={<Safety />} />
-              <Route path="/faq" element={<FAQ />} />
-            </Routes>
-          </Layout>
-          <Toaster position="top-center" richColors />
-        </Router>
-      </AuthProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <Router>
+            <ScrollToTop />
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/listings" element={<Listings />} />
+                <Route path="/listing/:id" element={<ListingDetail />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+                <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
+                <Route path="/create-listing" element={<PrivateRoute><CreateListing /></PrivateRoute>} />
+                <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
+                <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
+                <Route path="/kyc" element={<PrivateRoute><KYC /></PrivateRoute>} />
+                <Route path="/seller-dashboard" element={<PrivateRoute><SellerDashboard /></PrivateRoute>} />
+                <Route path="/promote/:id" element={<PrivateRoute><PromoteListing /></PrivateRoute>} />
+                <Route path="/transactions/:id" element={<PrivateRoute><TransactionDetail /></PrivateRoute>} />
+                <Route path="/about" element={<About />} />
+                <Route path="/contact" element={<Contact />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/safety" element={<Safety />} />
+                <Route path="/faq" element={<FAQ />} />
+              </Routes>
+            </Layout>
+            <Toaster position="top-center" richColors />
+          </Router>
+        </AuthProvider>
+        </LanguageProvider>
       </ErrorBoundary>
     </HelmetProvider>
   );
