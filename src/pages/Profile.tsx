@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../AuthContext';
+import { useLanguage } from '../LanguageContext';
 import { db, storage, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError, handleValidationError } from '../lib/error-handler';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, increment, orderBy, limit } from 'firebase/firestore';
@@ -14,10 +15,17 @@ import { KENYAN_COUNTIES, TOWNS } from '../constants';
 
 const Profile = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [myListings, setMyListings] = useState<Listing[]>([]);
   const [myOrders, setMyOrders] = useState<Transaction[]>([]);
   const [myWithdrawals, setMyWithdrawals] = useState<any[]>([]);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showBecomeProviderModal, setShowBecomeProviderModal] = useState(false);
+  const [showGiveUpProviderModal, setShowGiveUpProviderModal] = useState(false);
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [giveUpReason, setGiveUpReason] = useState('');
+  const [giveUpConsent, setGiveUpConsent] = useState(false);
+  const [submittingRoleChange, setSubmittingRoleChange] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawMethod, setWithdrawMethod] = useState<'mpesa' | 'bank'>('mpesa');
   const [withdrawDetails, setWithdrawDetails] = useState({ phoneNumber: '', bankName: '', accountNumber: '' });
@@ -45,15 +53,45 @@ const Profile = () => {
   });
 
   const handleBecomeProvider = async () => {
-    if (!user) return;
+    if (!user || !agreeToTerms) return;
+    setSubmittingRoleChange(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         role: 'provider'
       });
       toast.success('Congratulations! You are now a Provider. You can now post listings.');
       setEditData(prev => ({ ...prev, role: 'provider' }));
+      setShowBecomeProviderModal(false);
     } catch (error: any) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    } finally {
+      setSubmittingRoleChange(false);
+    }
+  };
+
+  const handleGiveUpProvider = async () => {
+    if (!user || !giveUpConsent) return;
+    setSubmittingRoleChange(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        role: 'customer'
+      });
+      
+      // Hide all their listings
+      const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
+      const listingsSnapshot = await getDocs(listingsQ);
+      const batchPromises = listingsSnapshot.docs.map(listingDoc => 
+        updateDoc(doc(db, 'listings', listingDoc.id), { status: 'hidden' })
+      );
+      await Promise.all(batchPromises);
+
+      toast.success('Your account has been converted back to a Customer account.');
+      setEditData(prev => ({ ...prev, role: 'customer' }));
+      setShowGiveUpProviderModal(false);
+    } catch (error: any) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    } finally {
+      setSubmittingRoleChange(false);
     }
   };
 
@@ -385,9 +423,19 @@ const Profile = () => {
               </Link>
             )}
 
+            {user.role === 'provider' && (
+              <button 
+                onClick={() => setShowGiveUpProviderModal(true)}
+                className="mt-4 w-full flex items-center justify-center space-x-2 bg-red-500/10 text-red-600 py-3 rounded-xl text-sm font-bold hover:bg-red-500/20 transition-all"
+              >
+                <X className="w-4 h-4" />
+                <span>{t('profile.give_up_provider')}</span>
+              </button>
+            )}
+
             {user.role === 'customer' && (
               <button 
-                onClick={handleBecomeProvider}
+                onClick={() => setShowBecomeProviderModal(true)}
                 className="mt-4 w-full flex items-center justify-center space-x-2 bg-secondary text-white py-3 rounded-xl text-sm font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-secondary/20"
               >
                 <Briefcase className="w-4 h-4" />
@@ -986,6 +1034,135 @@ const Profile = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+        {/* Become Provider Modal */}
+        {showBecomeProviderModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-neutral-900 rounded-3xl p-6 max-w-md w-full shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('profile.become_provider_title')}</h2>
+                <button onClick={() => setShowBecomeProviderModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="space-y-4 mb-6">
+                <div className="p-4 bg-primary/5 rounded-2xl flex items-start space-x-3">
+                  <AlertTriangle className="w-5 h-5 text-primary mt-0.5" />
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {t('profile.become_provider_confirm')}
+                  </p>
+                </div>
+                
+                <label className="flex items-start space-x-3 cursor-pointer group">
+                  <div className="relative flex items-center mt-1">
+                    <input 
+                      type="checkbox" 
+                      checked={agreeToTerms}
+                      onChange={(e) => setAgreeToTerms(e.target.checked)}
+                      className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 dark:border-neutral-700 checked:bg-primary transition-all"
+                    />
+                    <CheckCircle2 className="absolute h-5 w-5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
+                  </div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200 transition-colors">
+                    {t('profile.become_provider_terms').replace('{terms}', '')}
+                    <Link to="/terms" className="text-primary font-bold hover:underline">{t('profile.terms_link')}</Link>
+                  </span>
+                </label>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => setShowBecomeProviderModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 text-gray-600 dark:text-gray-400 font-bold hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button 
+                  onClick={handleBecomeProvider}
+                  disabled={!agreeToTerms || submittingRoleChange}
+                  className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-bold hover:bg-opacity-90 transition-all disabled:opacity-50 flex items-center justify-center"
+                >
+                  {submittingRoleChange ? <Loader2 className="w-4 h-4 animate-spin" /> : t('profile.become_provider')}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Give Up Provider Modal */}
+        {showGiveUpProviderModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-neutral-900 rounded-3xl p-6 max-w-md w-full shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('profile.give_up_provider')}</h2>
+                <button onClick={() => setShowGiveUpProviderModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="space-y-4 mb-6">
+                <div className="p-4 bg-red-50 dark:bg-red-500/5 rounded-2xl flex items-start space-x-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="font-bold mb-1">{t('profile.give_up_title')}</p>
+                    <p className="text-xs opacity-80">{t('profile.give_up_desc')}</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('profile.give_up_reason')}</label>
+                  <textarea 
+                    value={giveUpReason}
+                    onChange={(e) => setGiveUpReason(e.target.value)}
+                    placeholder="Tell us why..."
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-red-500 transition-colors min-h-[100px] resize-none"
+                  />
+                </div>
+                
+                <label className="flex items-start space-x-3 cursor-pointer group">
+                  <div className="relative flex items-center mt-1">
+                    <input 
+                      type="checkbox" 
+                      checked={giveUpConsent}
+                      onChange={(e) => setGiveUpConsent(e.target.checked)}
+                      className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 dark:border-neutral-700 checked:bg-red-500 transition-all"
+                    />
+                    <CheckCircle2 className="absolute h-5 w-5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
+                  </div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200 transition-colors">
+                    {t('profile.give_up_consent')}
+                  </span>
+                </label>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => setShowGiveUpProviderModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 text-gray-600 dark:text-gray-400 font-bold hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button 
+                  onClick={handleGiveUpProvider}
+                  disabled={!giveUpConsent || submittingRoleChange}
+                  className="flex-1 px-4 py-3 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center"
+                >
+                  {submittingRoleChange ? <Loader2 className="w-4 h-4 animate-spin" /> : t('common.confirm')}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
