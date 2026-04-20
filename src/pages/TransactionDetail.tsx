@@ -151,6 +151,11 @@ const TransactionDetail = () => {
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white">{listing.title}</h3>
                 <p className="text-primary font-bold">{formatPrice(transaction.amount)}</p>
+                {transaction.tipAmount && (
+                  <p className="text-xs text-green-600 dark:text-green-400 font-bold mt-1">
+                    Includes {formatPrice(transaction.tipAmount)} tip
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 mt-1">Purchased on {formatDate(transaction.createdAt)}</p>
               </div>
             </div>

@@ -9,7 +9,7 @@ import { formatPrice, formatDate, cn } from '../lib/utils';
 import { sendNotification } from '../lib/notifications';
 import { getDeliveryQuotes, DeliveryQuote } from '../services/deliveryService';
 import { initiateEscrowPayment, simulatePaymentSuccess, releaseEscrowFunds } from '../services/paymentService';
-import { MapPin, Phone, MessageCircle, ShieldCheck, Share2, Heart, ArrowLeft, Star, Zap, Send, Flag, AlertTriangle, X as CloseIcon, Loader2, Shield, CheckCircle2, Bell, Box, Layers, Settings, Truck, CreditCard, ChevronRight, Info, ShoppingCart, Briefcase } from 'lucide-react';
+import { MapPin, Phone, MessageCircle, ShieldCheck, Share2, Heart, ArrowLeft, Star, Zap, Send, Flag, AlertTriangle, X as CloseIcon, Loader2, Shield, CheckCircle2, Bell, Box, Layers, Settings, Truck, CreditCard, ChevronRight, Info, ShoppingCart, Briefcase, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
@@ -47,6 +47,8 @@ const ListingDetail = () => {
   const [selectedQuote, setSelectedQuote] = useState<DeliveryQuote | null>(null);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [useMilestones, setUseMilestones] = useState(false);
+  const [tipAmount, setTipAmount] = useState(0);
+  const [showTipModal, setShowTipModal] = useState(false);
   const navigate = useNavigate();
 
   const milestones: Milestone[] = [
@@ -328,6 +330,7 @@ const ListingDetail = () => {
         sellerId: listing.authorId,
         listingTitle: listing.title,
         type: listing.type,
+        tipAmount: tipAmount > 0 ? tipAmount : undefined,
         deliveryQuote: selectedQuote ? {
           provider: selectedQuote.provider,
           price: selectedQuote.price
@@ -380,7 +383,8 @@ const ListingDetail = () => {
           listingId: listing.id,
           buyerId: user.uid,
           sellerId: listing.authorId,
-          amount: (listing.price || 0) + (selectedQuote?.price || 0),
+          amount: (listing.price || 0) + (selectedQuote?.price || 0) + tipAmount,
+          tipAmount: tipAmount > 0 ? tipAmount : undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         } as Transaction);
@@ -663,6 +667,33 @@ const ListingDetail = () => {
 
             <hr className="border-gray-100 dark:border-neutral-800" />
             
+            {/* Delivery Info */}
+            {listing.deliveryInfo && (listing.deliveryInfo.freeDeliveryPlaces || listing.deliveryInfo.deliveryTimeFrame) && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold flex items-center text-gray-900 dark:text-white">
+                  <Truck className="w-5 h-5 mr-2 text-primary" /> {t('listing.delivery_options')}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {listing.deliveryInfo.freeDeliveryPlaces && listing.deliveryInfo.freeDeliveryPlaces.length > 0 && (
+                    <div className="p-4 bg-green-50 dark:bg-green-900/10 rounded-2xl border border-green-100 dark:border-green-900/20">
+                      <p className="text-xs text-green-600 dark:text-green-400 font-bold uppercase tracking-wider mb-1">{t('listing.free_delivery')}</p>
+                      <p className="text-sm text-gray-900 dark:text-white font-medium">
+                        {listing.deliveryInfo.freeDeliveryPlaces.join(', ')}
+                      </p>
+                    </div>
+                  )}
+                  {listing.deliveryInfo.deliveryTimeFrame && (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/20">
+                      <p className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mb-1">{t('listing.delivery_time')}</p>
+                      <p className="text-sm text-gray-900 dark:text-white font-medium">
+                        {listing.deliveryInfo.deliveryTimeFrame}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Product Specifics */}
             {(listing.stock !== undefined || (listing.sizes && listing.sizes.length > 0) || (listing.specifications && Object.keys(listing.specifications).length > 0)) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
@@ -724,6 +755,60 @@ const ListingDetail = () => {
                 {listing.description}
               </p>
             </div>
+
+            {/* Tipping Section */}
+            {listing.tipEnabled && !transaction && (
+              <div className="pt-6 border-t border-gray-100 dark:border-neutral-800">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+                      <DollarSign className="w-5 h-5 mr-2 text-primary" /> {t('listing.tip_seller')}
+                    </h3>
+                    <p className="text-sm text-gray-500">{t('listing.tip_desc')}</p>
+                  </div>
+                  {tipAmount > 0 && (
+                    <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-bold">
+                      + {formatPrice(tipAmount)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[50, 100, 200, 500].map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => setTipAmount(amount)}
+                      className={cn(
+                        "px-4 py-2 rounded-xl border font-bold transition-all",
+                        tipAmount === amount 
+                          ? "bg-primary border-primary text-white shadow-lg shadow-primary/20" 
+                          : "bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-gray-300 hover:border-primary"
+                      )}
+                    >
+                      {formatPrice(amount)}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setShowTipModal(true)}
+                    className={cn(
+                      "px-4 py-2 rounded-xl border font-bold transition-all",
+                      tipAmount > 0 && ![50, 100, 200, 500].includes(tipAmount)
+                        ? "bg-primary border-primary text-white shadow-lg shadow-primary/20"
+                        : "bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-gray-300 hover:border-primary"
+                    )}
+                  >
+                    {tipAmount > 0 && ![50, 100, 200, 500].includes(tipAmount) ? formatPrice(tipAmount) : t('listing.custom_tip')}
+                  </button>
+                  {tipAmount > 0 && (
+                    <button
+                      onClick={() => setTipAmount(0)}
+                      className="px-4 py-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-all font-bold"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Reviews Section */}
@@ -1249,6 +1334,48 @@ const ListingDetail = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Tip Modal */}
+      <AnimatePresence>
+        {showTipModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white dark:bg-neutral-900 rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-white/10"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white">{t('listing.tip_amount')}</h2>
+                <button onClick={() => setShowTipModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
+                  <CloseIcon className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="space-y-6">
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">KES</span>
+                  <input
+                    type="number"
+                    autoFocus
+                    className="w-full pl-14 pr-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all text-xl font-bold"
+                    placeholder="0.00"
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val)) setTipAmount(val);
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => setShowTipModal(false)}
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20"
+                >
+                  {t('common.confirm')}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

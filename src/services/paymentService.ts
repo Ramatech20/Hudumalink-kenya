@@ -11,6 +11,7 @@ export interface PaymentRequest {
   sellerId: string;
   listingTitle: string;
   type: 'product' | 'service';
+  tipAmount?: number;
   deliveryQuote?: {
     provider: string;
     price: number;
@@ -29,6 +30,7 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
       buyerId: request.buyerId,
       sellerId: request.sellerId,
       amount: request.amount,
+      tipAmount: request.tipAmount,
       status: 'pending',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

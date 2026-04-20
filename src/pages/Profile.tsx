@@ -224,24 +224,27 @@ const Profile = () => {
     e.preventDefault();
     if (!user) return;
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        displayName: editData.displayName,
-        phoneNumber: editData.phoneNumber,
+      // Construction of update data to avoid undefined values which Firestore updateDoc rejects
+      const updateData: any = {
+        displayName: editData.displayName || '',
+        phoneNumber: editData.phoneNumber || '',
         location: {
-          county: editData.county,
-          town: editData.town,
-          lat: editData.lat,
-          lng: editData.lng
+          county: editData.county || '',
+          town: editData.town || '',
+          lat: editData.lat ?? null,
+          lng: editData.lng ?? null
         },
         role: editData.role,
-        photoURL: editData.photoURL,
-        dob: editData.dob,
-        countyOfBirth: editData.countyOfBirth,
-        residence: editData.residence,
-        area: editData.area,
-        gender: editData.gender,
-        occupation: editData.occupation
-      });
+        photoURL: editData.photoURL || '',
+        dob: editData.dob || '',
+        countyOfBirth: editData.countyOfBirth || '',
+        residence: editData.residence || '',
+        area: editData.area || '',
+        gender: editData.gender || '',
+        occupation: editData.occupation || ''
+      };
+
+      await updateDoc(doc(db, 'users', user.uid), updateData);
       toast.success('Profile updated successfully!');
       setIsEditing(false);
     } catch (error: any) {

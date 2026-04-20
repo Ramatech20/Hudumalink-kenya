@@ -7,7 +7,7 @@ import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { KENYAN_COUNTIES, CATEGORIES, TOWNS } from '../constants';
 import { toast } from 'sonner';
-import { Camera, MapPin, Tag, Info, DollarSign, Phone, MessageCircle, X, Upload, Loader2, Shield, ShoppingBag, Briefcase } from 'lucide-react';
+import { Camera, MapPin, Tag, Info, DollarSign, Phone, MessageCircle, X, Upload, Loader2, Shield, ShoppingBag, Briefcase, Truck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { moderateListing } from '../services/moderationService';
 
@@ -35,6 +35,9 @@ const CreateListing = () => {
     specifications: [] as { key: string, value: string }[],
     lat: undefined as number | undefined,
     lng: undefined as number | undefined,
+    freeDeliveryPlaces: '',
+    deliveryTimeFrame: '',
+    tipEnabled: false,
   });
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -242,18 +245,23 @@ const CreateListing = () => {
         location: {
           county: formData.county,
           town: formData.town,
-          lat: formData.lat,
-          lng: formData.lng
+          lat: formData.lat ?? null,
+          lng: formData.lng ?? null
         },
         contact: {
           phone: formData.phone,
-          whatsapp: formData.whatsapp
+          whatsapp: formData.whatsapp || null
         },
-        stock: formData.type === 'product' ? (formData.stock ? parseInt(formData.stock) : undefined) : undefined,
-        sizes: formData.type === 'product' && formData.sizes.length > 0 ? formData.sizes : undefined,
+        stock: formData.type === 'product' ? (formData.stock ? parseInt(formData.stock) : null) : null,
+        sizes: formData.type === 'product' && formData.sizes.length > 0 ? formData.sizes : null,
         specifications: formData.specifications.length > 0 
           ? Object.fromEntries(formData.specifications.map(s => [s.key, s.value]))
-          : undefined,
+          : null,
+        deliveryInfo: {
+          freeDeliveryPlaces: formData.freeDeliveryPlaces ? formData.freeDeliveryPlaces.split(',').map(p => p.trim()) : null,
+          deliveryTimeFrame: formData.deliveryTimeFrame || null,
+        },
+        tipEnabled: formData.tipEnabled,
         status: 'pending',
         aiModerationResult: modResult,
         createdAt: new Date().toISOString(),
@@ -462,6 +470,58 @@ const CreateListing = () => {
                   value={formData.description}
                   onChange={(e) => setFormData({...formData, description: e.target.value})}
                 />
+              </div>
+
+              <div className="pt-6 border-t border-gray-100 dark:border-neutral-800 space-y-4">
+                <div className="flex items-center space-x-3 text-primary mb-2">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Truck className="w-5 h-5" />
+                  </div>
+                  <h2 className="text-xl font-bold">Delivery & Tipping</h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Free Delivery Places</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Nairobi CBD, Westlands (comma separated)"
+                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                      value={formData.freeDeliveryPlaces}
+                      onChange={(e) => setFormData({...formData, freeDeliveryPlaces: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Delivery Time Frame</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 24 hours, 2-3 days"
+                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                      value={formData.deliveryTimeFrame}
+                      onChange={(e) => setFormData({...formData, deliveryTimeFrame: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl">
+                  <div>
+                    <p className="font-bold text-gray-900 dark:text-white">Enable Tipping</p>
+                    <p className="text-xs text-gray-500">Allow buyers to add a tip for your excellent service.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, tipEnabled: !formData.tipEnabled})}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-all relative",
+                      formData.tipEnabled ? "bg-primary" : "bg-gray-300 dark:bg-neutral-700"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 rounded-full bg-white transition-all",
+                      formData.tipEnabled ? "left-7" : "left-1"
+                    )} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-6">

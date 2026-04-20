@@ -84,6 +84,11 @@ export interface Listing {
   isPromoted?: boolean;
   promotionTier?: 'basic' | 'premium' | 'elite';
   featuredUntil?: string;
+  deliveryInfo?: {
+    freeDeliveryPlaces?: string[];
+    deliveryTimeFrame?: string;
+  };
+  tipEnabled?: boolean;
   createdAt: string;
 }
 
@@ -126,6 +131,7 @@ export interface Transaction {
     status: 'pending' | 'shipped' | 'delivered';
     trackingId?: string;
   };
+  tipAmount?: number;
   createdAt: string;
   updatedAt: string;
 }
