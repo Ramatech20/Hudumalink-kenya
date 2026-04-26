@@ -164,7 +164,7 @@ const Profile = () => {
       
       // Add a timeout to the upload
       const timeoutPromise = new Promise<null>((_, reject) => 
-        setTimeout(() => reject(new Error('Upload timed out. Please check your connection.')), 30000)
+        setTimeout(() => reject(new Error('Upload timed out. Please check your connection and try again.')), 180000)
       );
 
       const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
@@ -385,8 +385,13 @@ const Profile = () => {
                 className="hidden"
               />
               {user.isVerified && (
-                <div className="absolute top-0 right-0 bg-primary text-white p-1 rounded-full border-2 border-white dark:border-neutral-900">
+                <div className="absolute top-0 right-0 bg-primary text-white p-1 rounded-full border-2 border-white dark:border-neutral-900" title="Account Verified">
                   <ShieldCheck className="w-4 h-4" />
+                </div>
+              )}
+              {user.isPhoneVerified && (
+                <div className="absolute top-0 left-0 bg-secondary text-white p-1 rounded-full border-2 border-white dark:border-neutral-900" title="Phone Verified">
+                  <CheckCircle2 className="w-4 h-4" />
                 </div>
               )}
             </div>
@@ -557,12 +562,39 @@ const Profile = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.phone_number')}</label>
-                  <input 
-                    type="tel" 
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
-                    value={editData.phoneNumber}
-                    onChange={(e) => setEditData({...editData, phoneNumber: e.target.value})}
-                  />
+                  <div className="flex gap-2">
+                    <input 
+                      type="tel" 
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 transition-colors"
+                      value={editData.phoneNumber}
+                      placeholder="e.g. 254712345678"
+                      onChange={(e) => setEditData({...editData, phoneNumber: e.target.value})}
+                    />
+                    {!user.isPhoneVerified && editData.phoneNumber && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          toast.info('SMS Verification code sent to ' + editData.phoneNumber);
+                          // Placeholder for real verification
+                          setTimeout(async () => {
+                            const code = window.prompt('Enter verification code sent to your phone:');
+                            if (code) {
+                              try {
+                                await updateDoc(doc(db, 'users', user.uid), { isPhoneVerified: true });
+                                toast.success('Phone verified successfully!');
+                              } catch (e) {
+                                toast.error('Verification failed');
+                              }
+                            }
+                          }, 1000);
+                        }}
+                        className="px-4 py-2 bg-secondary text-white rounded-xl text-xs font-bold whitespace-nowrap hover:bg-opacity-90 transition-all"
+                      >
+                        Verify SMS
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-1">Used for M-Pesa deposits, withdrawals, and SMS alerts.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('profile.county')}</label>

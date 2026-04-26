@@ -2,7 +2,7 @@
 
 @theme {
   --color-primary: #006633; /* Kenyan Green */
-  --color-secondary: #BB0000; /* Kenyan Red */
+  --color-secondary: #E30000; /* Kenyan Red */
   --color-accent: #000000; /* Kenyan Black */
   --color-surface: #FFFFFF; /* Kenyan White */
   
@@ -20,5 +20,5 @@
 }
 
 .kenyan-gradient {
-  background: linear-gradient(to right, #006633, #000000, #BB0000);
+  background: linear-gradient(135deg, #006633 0%, #000000 50%, #E30000 100%);
 }

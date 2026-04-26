@@ -54,7 +54,7 @@ const KYC = () => {
       const uploadWithTimeout = async (storageRef: any, file: File) => {
         const uploadPromise = uploadBytes(storageRef, file);
         const timeoutPromise = new Promise<null>((_, reject) => 
-          setTimeout(() => reject(new Error(`Upload timed out for ${file.name}`)), 30000)
+          setTimeout(() => reject(new Error(`Upload timed out for ${file.name}. Please check your connection and try again.`)), 180000)
         );
         const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
         if (!snapshot) throw new Error(`Upload failed for ${file.name}`);

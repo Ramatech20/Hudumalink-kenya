@@ -4,7 +4,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { sendNotification } from '../lib/notifications';
-import { Listing, User, Report, UserKYC, Dispute, WithdrawalRequest, Appeal, Transaction } from '../types';
+import { Listing, User, Report, UserKYC, Dispute, WithdrawalRequest, Appeal, Transaction, UserRole } from '../types';
 import { toast } from 'sonner';
 import { CheckCircle, XCircle, Shield, User as UserIcon, Package, AlertTriangle, ExternalLink, Flag, Trash2, Eye, Wallet, Gavel, Clock, ArrowUpRight, Scale, TrendingUp, Zap } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -42,8 +42,25 @@ const Admin = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [showCreatePromoModal, setShowCreatePromoModal] = useState(false);
   const [flagReason, setFlagReason] = useState('');
   const [isDataLoading, setIsDataLoading] = useState(false);
+
+  const [newUserData, setNewUserData] = useState({
+    email: '',
+    displayName: '',
+    role: 'customer' as UserRole,
+    phoneNumber: ''
+  });
+
+  const [newPromoData, setNewPromoData] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'info' | 'success' | 'warning' | 'error',
+    target: 'all' as 'all' | 'providers' | 'sellers' | 'customers',
+    sendSmsPlaceholder: false
+  });
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -604,6 +621,90 @@ const Admin = () => {
       setSelectedUser(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsDataLoading(true);
+    try {
+      // In a real app, you'd use Firebase Admin SDK or a cloud function to create the auth user
+      // For this demo, we'll just simulate by adding a document to the users collection if it doesn't exist
+      // Usually admins invite users or use a specific API.
+      
+      const userId = `admin_created_${Date.now()}`;
+      const userRef = doc(db, 'users', userId);
+      
+      const userData = {
+        uid: userId,
+        email: newUserData.email,
+        displayName: newUserData.displayName,
+        role: newUserData.role,
+        phoneNumber: newUserData.phoneNumber,
+        referralCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+        referralEarnings: 0,
+        escrowBalance: 0,
+        createdAt: new Date().toISOString(),
+        isVerified: true, // Admin created users can be pre-verified
+        kycStatus: 'none'
+      };
+
+      await addDoc(collection(db, 'users'), userData);
+      toast.success('User created successfully (Simulated Auth)');
+      setShowCreateUserModal(false);
+      fetchTabData();
+    } catch (error: any) {
+      handleGeneralError(error, 'Failed to create user');
+    } finally {
+      setIsDataLoading(false);
+    }
+  };
+
+  const handleSendMassMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsDataLoading(true);
+    try {
+      let usersQuery;
+      if (newPromoData.target === 'all') {
+        usersQuery = query(collection(db, 'users'));
+      } else if (newPromoData.target === 'providers') {
+        usersQuery = query(collection(db, 'users'), where('role', '==', 'provider'));
+      } else if (newPromoData.target === 'sellers') {
+        usersQuery = query(collection(db, 'users'), where('role', '==', 'seller'));
+      } else {
+        usersQuery = query(collection(db, 'users'), where('role', '==', 'customer'));
+      }
+
+      const usersSnapshot = await getDocs(usersQuery);
+      const batchPromises = usersSnapshot.docs.map(userDoc => 
+        sendNotification(
+          userDoc.id,
+          newPromoData.title,
+          newPromoData.message,
+          newPromoData.type,
+          '/promotions'
+        )
+      );
+
+      await Promise.all(batchPromises);
+      
+      if (newPromoData.sendSmsPlaceholder) {
+        toast.info('SMS Notifications queued (Placeholder)');
+      }
+
+      toast.success(`Broadcasting to ${usersSnapshot.size} users completed`);
+      setShowCreatePromoModal(false);
+      setNewPromoData({
+        title: '',
+        message: '',
+        type: 'info',
+        target: 'all',
+        sendSmsPlaceholder: false
+      });
+    } catch (error: any) {
+      handleGeneralError(error, 'Failed to send mass messages');
+    } finally {
+      setIsDataLoading(false);
     }
   };
 
@@ -1366,6 +1467,13 @@ const Admin = () => {
               >
                 Verify Selected ({selectedItems.length})
               </button>
+              
+              <button 
+                onClick={() => setShowCreateUserModal(true)}
+                className="px-4 py-2 bg-secondary text-white rounded-xl text-sm font-bold hover:bg-secondary/90 transition-colors flex items-center"
+              >
+                <UserIcon className="w-4 h-4 mr-2" /> Add Member
+              </button>
             </div>
           </div>
 
@@ -1774,8 +1882,32 @@ const Admin = () => {
         </div>
       ) : activeTab === 'promotions' ? (
         <div className="space-y-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Promotions History</h2>
+          <div className="flex justify-between items-center bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Promotions & Campaigns</h2>
+              <p className="text-sm text-gray-500">Send mass notifications and manage paid promotions.</p>
+            </div>
+            <button 
+              onClick={() => setShowCreatePromoModal(true)}
+              className="px-6 py-3 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all flex items-center shadow-lg shadow-primary/20"
+            >
+              <Zap className="w-5 h-5 mr-2" /> Create Broadcast
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+              <h4 className="text-gray-500 text-xs font-bold uppercase mb-2">Active Campaigns</h4>
+              <p className="text-2xl font-black text-gray-900 dark:text-white">{promotions.filter(p => p.status === 'completed').length}</p>
+            </div>
+            <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+              <h4 className="text-gray-500 text-xs font-bold uppercase mb-2">Total Promotion Revenue</h4>
+              <p className="text-2xl font-black text-primary">{formatPrice(promotions.reduce((acc, p) => acc + (p.amount || 0), 0))}</p>
+            </div>
+            <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+              <h4 className="text-gray-500 text-xs font-bold uppercase mb-2">Pending Promotions</h4>
+              <p className="text-2xl font-black text-yellow-500">{promotions.filter(p => p.status === 'pending').length}</p>
+            </div>
           </div>
           {isDataLoading ? (
             <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -1819,8 +1951,9 @@ const Admin = () => {
         </div>
       ) : null}
 
-      {/* User Detail Modal */}
+      {/* Modals */}
       <AnimatePresence>
+        {/* User Detail Modal */}
         {showUserModal && selectedUser && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <motion.div
@@ -1965,6 +2098,155 @@ const Admin = () => {
                   </div>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Create User Modal */}
+        {showCreateUserModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white dark:bg-neutral-900 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 dark:border-neutral-800 flex justify-between items-center bg-gray-50 dark:bg-neutral-800/50">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add New Member</h2>
+                <button onClick={() => setShowCreateUserModal(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-neutral-700 rounded-full transition-colors">
+                  <XCircle className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+              <form onSubmit={handleCreateUser} className="p-8 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
+                  <input 
+                    type="text" required
+                    placeholder="John Doe"
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-primary"
+                    value={newUserData.displayName}
+                    onChange={(e) => setNewUserData({...newUserData, displayName: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
+                  <input 
+                    type="email" required
+                    placeholder="john@example.com"
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-primary"
+                    value={newUserData.email}
+                    onChange={(e) => setNewUserData({...newUserData, email: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
+                  <input 
+                    type="tel"
+                    placeholder="254712345678"
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-primary"
+                    value={newUserData.phoneNumber}
+                    onChange={(e) => setNewUserData({...newUserData, phoneNumber: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User Role</label>
+                  <select 
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-primary"
+                    value={newUserData.role}
+                    onChange={(e) => setNewUserData({...newUserData, role: e.target.value as UserRole})}
+                  >
+                    <option value="customer">Customer</option>
+                    <option value="provider">Provider</option>
+                    <option value="seller">Seller</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div className="pt-4">
+                  <button 
+                    type="submit" 
+                    disabled={isDataLoading}
+                    className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:bg-opacity-90 transition-all flex items-center justify-center disabled:opacity-50"
+                  >
+                    {isDataLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Create Account'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Create Broadcast Modal */}
+        {showCreatePromoModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white dark:bg-neutral-900 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 dark:border-neutral-800 flex justify-between items-center bg-gray-50 dark:bg-neutral-800/50">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Create Mass Broadcast</h2>
+                <button onClick={() => setShowCreatePromoModal(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-neutral-700 rounded-full transition-colors">
+                  <XCircle className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+              <form onSubmit={handleSendMassMessage} className="p-8 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Audience</label>
+                  <select 
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-primary"
+                    value={newPromoData.target}
+                    onChange={(e) => setNewPromoData({...newPromoData, target: e.target.value as any})}
+                  >
+                    <option value="all">Every User</option>
+                    <option value="providers">All Providers</option>
+                    <option value="sellers">All Sellers</option>
+                    <option value="customers">All Customers</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Broadcast Title</label>
+                  <input 
+                    type="text" required
+                    placeholder="e.g. New Feature Released!"
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-primary font-bold"
+                    value={newPromoData.title}
+                    onChange={(e) => setNewPromoData({...newPromoData, title: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Message Content</label>
+                  <textarea 
+                    required
+                    placeholder="Type your message here..."
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-primary"
+                    rows={4}
+                    value={newPromoData.message}
+                    onChange={(e) => setNewPromoData({...newPromoData, message: e.target.value})}
+                  />
+                </div>
+                <div className="flex items-center space-x-2 p-3 bg-gray-50 dark:bg-neutral-800 rounded-xl">
+                  <input 
+                    type="checkbox"
+                    id="sendSms"
+                    checked={newPromoData.sendSmsPlaceholder}
+                    onChange={(e) => setNewPromoData({...newPromoData, sendSmsPlaceholder: e.target.checked})}
+                    className="w-4 h-4 text-primary focus:ring-primary rounded"
+                  />
+                  <label htmlFor="sendSms" className="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer">
+                    Also send via SMS (Placeholder)
+                  </label>
+                </div>
+                <div className="pt-4">
+                  <button 
+                    type="submit" 
+                    disabled={isDataLoading}
+                    className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:bg-opacity-90 transition-all flex items-center justify-center shadow-lg shadow-primary/20 disabled:opacity-50"
+                  >
+                    {isDataLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Broadcast Message'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

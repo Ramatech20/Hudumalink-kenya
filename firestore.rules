@@ -15,7 +15,7 @@ service cloud.firestore {
     function isAdmin() { 
       return isSignedIn() && (
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'customer') == 'admin'
       ); 
     }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
@@ -28,26 +28,66 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return data.uid is string && data.uid == request.auth.uid &&
-             data.email is string && data.email.size() <= 100 &&
-             data.role in ['customer', 'provider', 'seller', 'admin'] &&
-             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 50)) &&
-             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500)) &&
-             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 20)) &&
+      return data.get('uid', request.auth.uid) == request.auth.uid &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
+             (!('role' in data) || (data.role in ['customer', 'provider', 'seller', 'admin'])) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 200)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1500)) &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 50)) &&
+             (!('isPhoneVerified' in data) || data.isPhoneVerified is bool) &&
+             (!('isVerified' in data) || data.isVerified is bool) &&
+             (!('emailVerified' in data) || data.emailVerified is bool) &&
+             (!('referralCode' in data) || (data.referralCode is string && data.referralCode.size() <= 50)) &&
+             (!('referredBy' in data) || (data.referredBy == null || data.referredBy is string)) &&
+             (!('createdAt' in data) || (data.createdAt is string)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string)) &&
+             (!('location' in data) || (data.location is map)) &&
+             (!('dob' in data) || (data.dob is string)) &&
+             (!('countyOfBirth' in data) || (data.countyOfBirth is string)) &&
+             (!('residence' in data) || (data.residence is string)) &&
+             (!('area' in data) || (data.area is string)) &&
+             (!('gender' in data) || (data.gender is string)) &&
+             (!('occupation' in data) || (data.occupation is string)) &&
+             (!('isOnline' in data) || data.isOnline is bool) &&
+             (!('lastSeen' in data) || (data.lastSeen is string)) &&
              (!('escrowBalance' in data) || data.escrowBalance is number) &&
              (!('referralEarnings' in data) || data.referralEarnings is number) &&
+             (!('completedPaymentsCount' in data) || data.completedPaymentsCount is number) &&
              (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']);
     }
 
     function isValidListing(data) {
       return data.authorId == request.auth.uid &&
-             data.title is string && data.title.size() <= 100 &&
-             data.description is string && data.description.size() <= 2000 &&
-             data.price is number && data.price >= 0 &&
+             data.title is string && data.title.size() <= 150 &&
+             data.description is string && data.description.size() <= 5000 &&
+             (!('price' in data) || data.price == null || (data.price is number && data.price >= 0)) &&
              data.type in ['product', 'service'] &&
              data.category is string &&
-             data.status in ['active', 'pending', 'sold', 'removed'] &&
-             data.images is list && data.images.size() <= 8;
+             data.status in ['active', 'pending', 'sold', 'removed', 'flagged'] &&
+             data.images is list && data.images.size() <= 10 &&
+             (!('stock' in data) || data.stock == null || data.stock is number) &&
+             (!('viewCount' in data) || data.viewCount is number) &&
+             (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidReview(data) {
+      return data.authorId == request.auth.uid &&
+             data.targetId is string &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             (!('comment' in data) || (data.comment is string && data.comment.size() <= 500));
+    }
+
+    function isValidDispute(data) {
+      return data.transactionId is string &&
+             data.raisedById == request.auth.uid &&
+             data.reason is string && data.reason.size() <= 1000 &&
+             data.status == 'open';
+    }
+
+    function isValidAppeal(data) {
+      return data.userId == request.auth.uid &&
+             data.reason is string && data.reason.size() <= 1000 &&
+             data.status == 'pending';
     }
 
     // ===============================================================
@@ -57,19 +97,40 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId);
       allow list: if isAdmin();
-      allow create: if isOwner(userId) && isValidUser(incoming()) && 
+      allow create: if (isOwner(userId) && isValidUser(incoming()) && 
                     incoming().role != 'admin' && 
-                    incoming().escrowBalance == 0 &&
-                    incoming().referralEarnings == 0;
+                    // No sneaky balances on create
+                    (!('escrowBalance' in incoming()) || incoming().escrowBalance == 0) &&
+                    (!('referralEarnings' in incoming()) || incoming().referralEarnings == 0)) || isAdmin();
       
-      allow update: if (isOwner(userId) && (
-        // Action: Update Profile Info
-        (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'phoneNumber', 'location', 'dob', 'countyOfBirth', 'residence', 'area', 'gender', 'occupation']) && isValidUser(incoming())) ||
-        // Action: Role Upgrade (Consent to become provider/seller)
-        (existing().role == 'customer' && incoming().diff(existing()).affectedKeys().hasOnly(['role']) && incoming().role in ['provider', 'seller']) ||
-        // Action: Role Downgrade (Give up being provider)
-        (existing().role != 'customer' && incoming().diff(existing()).affectedKeys().hasOnly(['role']) && incoming().role == 'customer')
-      )) || isAdmin();
+      allow update: if (isSignedIn() && (
+        (isOwner(userId) && (
+          // Action: Profile/Auth Update (General Owner Updates)
+          (isValidUser(incoming()) && 
+           incoming().diff(existing()).affectedKeys().hasOnly([
+             'uid', 'email', 'displayName', 'photoURL', 'phoneNumber', 
+             'isPhoneVerified', 'location', 'dob', 'countyOfBirth', 
+             'residence', 'area', 'gender', 'occupation', 'role', 
+             'completedPaymentsCount', 'emailVerified', 'referralCode', 
+             'referredBy', 'createdAt', 'updatedAt', 'isVerified', 
+             'kycStatus', 'isOnline', 'lastSeen', 'referralEarnings', 'escrowBalance'
+           ]) &&
+           // Protect critical fields from self-update
+           (!('escrowBalance' in incoming()) || incoming().escrowBalance == existing().get('escrowBalance', 0)) &&
+           (!('referralEarnings' in incoming()) || incoming().referralEarnings == existing().get('referralEarnings', 0)) &&
+           (existing().get('role', 'customer') == 'admin' || !('role' in incoming()) || incoming().role == existing().get('role', 'customer') || (existing().get('role', 'customer') == 'customer' && incoming().role in ['provider', 'seller']) || (existing().get('role', 'customer') != 'customer' && incoming().role == 'customer')) &&
+           (existing().get('isVerified', false) == true || !('isVerified' in incoming()) || incoming().isVerified == existing().get('isVerified', false)) &&
+           (existing().get('kycStatus', 'none') == 'verified' || !('kycStatus' in incoming()) || incoming().kycStatus == existing().get('kycStatus', 'none') || (incoming().get('kycStatus', 'none') == 'pending' && existing().get('kycStatus', 'none') == 'none'))
+          )
+        )) || 
+        // Action: Reward/Payment Settlement (Non-owner incrementing balances)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['escrowBalance', 'referralEarnings']) &&
+         (!('escrowBalance' in incoming()) || incoming().escrowBalance >= (existing().escrowBalance != null ? existing().escrowBalance : 0)) &&
+         (!('referralEarnings' in incoming()) || incoming().referralEarnings >= (existing().referralEarnings != null ? existing().referralEarnings : 0))
+        ) ||
+        isAdmin()
+      ));
+      allow delete: if isAdmin();
 
       match /kyc/data {
         allow get: if isOwner(userId) || isAdmin();
@@ -85,35 +146,47 @@ service cloud.firestore {
 
     match /listings/{listingId} {
       allow get: if isValidId(listingId) && (existing().status == 'active' || isOwner(existing().authorId) || isAdmin());
-      allow list: if resource.data.status == 'active' || (isSignedIn() && resource.data.authorId == request.auth.uid);
+      allow list: if resource.data.status == 'active' || (isSignedIn() && resource.data.authorId == request.auth.uid) || isAdmin();
       
-      allow create: if isVerified() && isValidId(listingId) && isValidListing(incoming()) && incoming().status == 'pending';
+      allow create: if isSignedIn() && isValidId(listingId) && isValidListing(incoming()) && incoming().status == 'pending';
       allow update: if isValidId(listingId) && (isAdmin() || (isOwner(existing().authorId) && 
                        isValidListing(incoming()) && (
                          // Update details (not status)
-                         (incoming().status == existing().status && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'price', 'category', 'images', 'location', 'contact', 'deliveryInfo', 'tipEnabled'])) ||
-                         // Mark as sold
-                         (existing().status == 'active' && incoming().status == 'sold' && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) ||
-                         // Hide/Remove
-                         (incoming().status == 'removed' && incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+                         (incoming().status == existing().status && 
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'title', 'description', 'price', 'category', 'images', 
+                            'location', 'contact', 'deliveryInfo', 'tipEnabled', 
+                            'stock', 'sizes', 'specifications', 'aiModerationResult', 
+                            'createdAt'
+                          ])) ||
+                         // Mark as sold/removed
+                         (incoming().status != existing().status && incoming().diff(existing()).affectedKeys().hasOnly(['status']))
                        )
                      ) || (
-                       // Allow system/others to update viewCount/reportsCount if needed
-                       incoming().diff(existing()).affectedKeys().hasOnly(['viewCount', 'reportsCount'])
+                       // Allow anyone to update viewCount
+                       incoming().diff(existing()).affectedKeys().hasOnly(['viewCount']) &&
+                       incoming().viewCount == existing().viewCount + 1
                      ));
       allow delete: if isAdmin();
     }
 
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId);
+      allow list: if true;
+      allow create: if isVerified() && isValidReview(incoming());
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || isOwner(existing().authorId);
+    }
+
     match /chats/{chatId} {
-      allow get: if isValidId(chatId) && isSignedIn() && request.auth.uid in resource.data.participants;
-      allow list: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow get: if isValidId(chatId) && isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
       allow create: if isValidId(chatId) && isSignedIn() && request.auth.uid in incoming().participants;
       allow update: if isValidId(chatId) && isSignedIn() && request.auth.uid in existing().participants && 
                     incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
 
       match /messages/{messageId} {
-        allow get: if isValidId(messageId) && isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
-        allow list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow get, list: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
         allow create: if isValidId(messageId) && isSignedIn() && incoming().senderId == request.auth.uid && 
                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
       }
@@ -127,9 +200,16 @@ service cloud.firestore {
       allow update: if isValidId(transactionId) && (isAdmin() || (isOwner(existing().buyerId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'cancellationReason', 'cancelledBy'])));
     }
 
+    match /disputes/{disputeId} {
+      allow get: if isValidId(disputeId) && isSignedIn() && (resource.data.raisedById == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.raisedById == request.auth.uid || isAdmin());
+      allow create: if isVerified() && isValidId(disputeId) && isValidDispute(incoming());
+      allow update: if isAdmin();
+    }
+
     match /notifications/{notificationId} {
-      allow get: if isValidId(notificationId) && isOwner(resource.data.userId);
-      allow list: if isSignedIn() && isOwner(resource.data.userId);
+      allow get: if isValidId(notificationId) && (isOwner(resource.data.userId) || isAdmin());
+      allow list: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
       allow delete: if isValidId(notificationId) && isOwner(resource.data.userId);
       allow update: if isValidId(notificationId) && isOwner(resource.data.userId) && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
       allow create: if isSignedIn();
@@ -142,14 +222,30 @@ service cloud.firestore {
       allow update: if isValidId(withdrawalId) && isAdmin();
     }
 
+    match /appeals/{appealId} {
+      allow get: if isValidId(appealId) && (isOwner(resource.data.userId) || isAdmin());
+      allow list: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+      allow create: if isVerified() && isValidId(appealId) && isValidAppeal(incoming());
+      allow update: if isAdmin();
+    }
+
+    match /promotions/{promotionId} {
+      allow get: if isValidId(promotionId) && (isOwner(resource.data.userId) || isAdmin());
+      allow list: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+      allow create: if isVerified() && isValidId(promotionId) && incoming().userId == request.auth.uid;
+      allow update: if isAdmin();
+    }
+
     match /referral_codes/{code} {
       allow read: if true;
       allow create: if isOwner(incoming().userId);
     }
     
     match /reports/{reportId} {
-      allow read: if isAdmin();
+      allow get: if isValidId(reportId) && (isSignedIn() && (resource.data.reporterId == request.auth.uid || isAdmin()));
+      allow list: if isSignedIn() && (resource.data.reporterId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && incoming().reporterId == request.auth.uid;
+      allow update: if isAdmin();
     }
   }
 }

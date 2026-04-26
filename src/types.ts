@@ -21,6 +21,7 @@ export interface User {
   rating?: number;
   reviewCount?: number;
   isVerified?: boolean;
+  isPhoneVerified?: boolean;
   isOnline?: boolean;
   lastSeen?: string;
   emailVerified?: boolean;

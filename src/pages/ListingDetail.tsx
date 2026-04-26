@@ -1380,6 +1380,48 @@ const ListingDetail = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Custom Tip Modal */}
+      <AnimatePresence>
+        {showTipModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white dark:bg-neutral-900 rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-white/10"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white">{t('listing.tip_amount')}</h2>
+                <button onClick={() => setShowTipModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition-colors">
+                  <CloseIcon className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="space-y-6">
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">KES</span>
+                  <input
+                    type="number"
+                    autoFocus
+                    className="w-full pl-14 pr-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all text-xl font-bold"
+                    placeholder="0.00"
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val)) setTipAmount(val);
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => setShowTipModal(false)}
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20"
+                >
+                  {t('common.confirm')}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

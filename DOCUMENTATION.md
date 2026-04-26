@@ -6,7 +6,7 @@ HudumaLink Kenya is a comprehensive service and product marketplace designed spe
 
 ### Color Palette (Kenyan National Colors)
 - **Primary**: `#006633` (Kenyan Green) - Represents our land and growth.
-- **Secondary**: `#BB0000` (Kenyan Red) - Represents the spirit of our people.
+- **Secondary**: `#E30000` (Kenyan Red) - Represents the spirit of our people.
 - **Accent**: `#000000` (Kenyan Black) - Represents our heritage.
 - **Surface**: `#FFFFFF` (Kenyan White) - Represents peace and unity.
 

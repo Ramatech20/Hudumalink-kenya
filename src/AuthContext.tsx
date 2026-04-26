@@ -60,10 +60,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         // Update online status using setDoc with merge to avoid failure if doc doesn't exist yet
         const userPath = `users/${firebaseUser.uid}`;
-        setDoc(doc(db, 'users', firebaseUser.uid), {
+        updateDoc(doc(db, 'users', firebaseUser.uid), {
           isOnline: true,
           lastSeen: new Date().toISOString()
-        }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, userPath));
+        }).catch(error => {
+          // If doc doesn't exist, it's a new user, ignore status update error
+          if (error instanceof Error && error.message.includes('NOT_FOUND')) return;
+          handleFirestoreError(error, OperationType.UPDATE, userPath);
+        });
 
         // Set up real-time listener for user profile
         unsubscribeSnapshot = onSnapshot(doc(db, 'users', firebaseUser.uid), async (docSnap) => {
@@ -153,10 +157,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (user?.uid) {
           // Update offline status
           const userPath = `users/${user.uid}`;
-          setDoc(doc(db, 'users', user.uid), {
+          updateDoc(doc(db, 'users', user.uid), {
             isOnline: false,
             lastSeen: new Date().toISOString()
-          }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, userPath));
+          }).catch(error => {
+            if (error instanceof Error && error.message.includes('NOT_FOUND')) return;
+            handleFirestoreError(error, OperationType.UPDATE, userPath);
+          });
         }
         if (unsubscribeSnapshot) unsubscribeSnapshot();
         setUser(null);
@@ -169,10 +176,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleVisibilityChange = async () => {
       if (auth.currentUser) {
         const isOnline = document.visibilityState === 'visible';
-        setDoc(doc(db, 'users', auth.currentUser.uid), {
+        updateDoc(doc(db, 'users', auth.currentUser.uid), {
           isOnline,
           lastSeen: new Date().toISOString()
-        }, { merge: true }).catch(console.error);
+        }).catch(() => {}); // Silent for visibility change
       }
     };
 

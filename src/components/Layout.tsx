@@ -146,13 +146,23 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             {/* Logo */}
-            <Link to="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 kenyan-gradient rounded-lg flex items-center justify-center text-white font-bold">
-                HL
+            <Link to="/" className="flex items-center space-x-3 group">
+              <div className="relative w-10 h-10 kenyan-gradient rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-105">
+                <div className="text-white font-black text-xl leading-none flex items-center">
+                  <span className="relative">H</span>
+                  <span className="text-sm absolute left-3 top-1 opacity-80">L</span>
+                </div>
               </div>
-              <span className="text-xl font-bold tracking-tight text-primary">
-                Huduma<span className="text-secondary">Link</span>
-              </span>
+              <div className="flex flex-col">
+                <span className="text-lg font-black tracking-tighter leading-tight text-accent dark:text-white uppercase">
+                  Huduma<span className="text-secondary">Link</span>
+                </span>
+                <div className="flex items-center space-x-1">
+                  <div className="h-[1px] flex-grow bg-primary" />
+                  <span className="text-[8px] font-black tracking-[0.2em] text-primary uppercase">Kenya</span>
+                  <div className="h-[1px] flex-grow bg-secondary" />
+                </div>
+              </div>
             </Link>
 
             {/* Desktop Nav */}

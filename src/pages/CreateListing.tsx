@@ -175,9 +175,9 @@ const CreateListing = () => {
       const storageRef = ref(storage, `listings/${user?.uid}/${Date.now()}-${file.name}`);
       const uploadPromise = uploadBytes(storageRef, file);
       
-      // Add a timeout to each upload
+      // Add a timeout to each upload (increased to 180s)
       const timeoutPromise = new Promise<null>((_, reject) => 
-        setTimeout(() => reject(new Error(`Upload timed out for ${file.name}`)), 30000) // 30 second timeout per image
+        setTimeout(() => reject(new Error(`Upload timed out for ${file.name}. Please check your connection and try again.`)), 180000)
       );
 
       const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
