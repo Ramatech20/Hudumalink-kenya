@@ -21,6 +21,7 @@ import KYC from './pages/KYC';
 import SellerDashboard from './pages/SellerDashboard';
 import PromoteListing from './pages/PromoteListing';
 import TransactionDetail from './pages/TransactionDetail';
+import Careers from './pages/Careers';
 import { About, Contact, Terms, Privacy, Safety, FAQ } from './pages/StaticPages';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -61,6 +62,7 @@ export default function App() {
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/safety" element={<Safety />} />
                 <Route path="/faq" element={<FAQ />} />
+                <Route path="/careers" element={<Careers />} />
               </Routes>
             </Layout>
             <Toaster position="top-center" richColors />

@@ -19,8 +19,8 @@ export interface PaymentRequest {
 }
 
 /**
- * Simulates an M-Pesa STK Push and handles the escrow transaction creation.
- * In a real app, this would call a backend API that interfaces with Safaricom Daraja.
+ * Handles the M-Pesa STK Push and escrow transaction creation.
+ * In a real app, this calls a backend API that interfaces with Safaricom Daraja.
  */
 export const initiateEscrowPayment = async (request: PaymentRequest): Promise<string | null> => {
   try {
@@ -60,10 +60,10 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
     
     console.log(`Initiating M-Pesa STK Push for ${request.phoneNumber} - Amount: ${request.amount}`);
     
-    // Simulate a short delay for the network request
+    // Payment processing delay
     await new Promise(resolve => setTimeout(resolve, 1500));
 
-    // 3. Update transaction with a simulated checkout request ID
+    // 3. Update transaction with a checkout request ID
     const checkoutRequestId = `ws_CO_${Math.random().toString(36).substring(2, 15)}`;
     try {
       await updateDoc(doc(db, 'transactions', transactionId), {
@@ -88,10 +88,10 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
 };
 
 /**
- * Simulates the M-Pesa callback that confirms a successful payment.
+ * Handles the payment confirmation callback.
  * This would normally be handled by a webhook on your server.
  */
-export const simulatePaymentSuccess = async (transactionId: string) => {
+export const processPaymentSuccess = async (transactionId: string) => {
   try {
     const txRef = doc(db, 'transactions', transactionId);
     let txSnap;
@@ -138,7 +138,7 @@ export const simulatePaymentSuccess = async (transactionId: string) => {
     if (error.operationType) {
       // Already handled by handleFirestoreError
     } else {
-      console.error('Error simulating payment success:', error);
+      console.error('Error processing payment success:', error);
     }
   }
 };

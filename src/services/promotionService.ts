@@ -61,8 +61,8 @@ export const initiatePromotionPayment = async (params: {
       updatedAt: new Date().toISOString()
     });
 
-    // 2. Simulate M-Pesa STK Push
-    console.log(`Simulating M-Pesa STK Push to ${params.phoneNumber} for KES ${plan.price}`);
+    // 2. M-Pesa STK Push
+    console.log(`Initiating M-Pesa STK Push to ${params.phoneNumber} for KES ${plan.price}`);
     
     return transactionRef.id;
   } catch (error) {

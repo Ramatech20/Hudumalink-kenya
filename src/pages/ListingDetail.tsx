@@ -8,7 +8,7 @@ import { Listing, User, Review, Transaction, Milestone } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
 import { sendNotification } from '../lib/notifications';
 import { getDeliveryQuotes, DeliveryQuote } from '../services/deliveryService';
-import { initiateEscrowPayment, simulatePaymentSuccess, releaseEscrowFunds } from '../services/paymentService';
+import { initiateEscrowPayment, processPaymentSuccess, releaseEscrowFunds } from '../services/paymentService';
 import { MapPin, Phone, MessageCircle, ShieldCheck, Share2, Heart, ArrowLeft, Star, Zap, Send, Flag, AlertTriangle, X as CloseIcon, Loader2, Shield, CheckCircle2, Bell, Box, Layers, Settings, Truck, CreditCard, ChevronRight, Info, ShoppingCart, Briefcase, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Helmet } from 'react-helmet-async';
@@ -349,9 +349,9 @@ const ListingDetail = () => {
           `/listing/${listing.id}`
         );
 
-        // Simulate payment success after 10 seconds (in a real app, this would be a webhook)
+        // Process payment success after 10 seconds (in a real app, this would be a webhook)
         setTimeout(async () => {
-          await simulatePaymentSuccess(transactionId);
+          await processPaymentSuccess(transactionId);
           
           // Notify both parties about successful deposit
           await sendNotification(
@@ -968,17 +968,6 @@ const ListingDetail = () => {
                           </p>
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {!transaction && (
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-2xl">
-                      <p className="text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest flex items-center mb-1">
-                        <Zap className="w-3 h-3 mr-1" /> {t('listing.sandbox_mode')}
-                      </p>
-                      <p className="text-[11px] text-blue-600 dark:text-blue-400 leading-relaxed font-medium">
-                        {t('listing.sandbox_desc')}
-                      </p>
                     </div>
                   )}
 

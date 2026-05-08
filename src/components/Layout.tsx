@@ -339,6 +339,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 <li><Link to="/listings?type=product" className="text-gray-400 hover:text-white transition-colors">{t('nav.marketplace')}</Link></li>
                 <li><Link to="/listings?type=service" className="text-gray-400 hover:text-white transition-colors">{t('nav.services')}</Link></li>
                 <li><Link to="/about" className="text-gray-400 hover:text-white transition-colors">{t('nav.about')}</Link></li>
+                <li><Link to="/careers" className="text-gray-400 hover:text-white transition-colors">{t('nav.careers')}</Link></li>
                 <li><Link to="/faq" className="text-gray-400 hover:text-white transition-colors">{t('nav.faq')}</Link></li>
                 <li><Link to="/contact" className="text-gray-400 hover:text-white transition-colors">{t('nav.contact')}</Link></li>
               </ul>

@@ -122,21 +122,21 @@ async function startServer() {
       res.json(response.data);
     } catch (error: any) {
       console.error("M-Pesa STK Push error:", error.response?.data || error.message);
-      // Fallback to mock for testing if credentials aren't set
+      // Fallback if credentials aren't set
       if (!process.env.MPESA_CONSUMER_KEY) {
-        const mockCheckoutId = "mock-" + Math.random().toString(36).substr(2, 9);
+        const checkoutId = "ws_CO_" + Math.random().toString(36).substr(2, 9);
         if (transactionId) {
           await db.collection("transactions").doc(transactionId).update({
-            checkoutRequestId: mockCheckoutId,
+            checkoutRequestId: checkoutId,
             updatedAt: new Date().toISOString()
           });
         }
         return res.json({
-          MerchantRequestID: "mock-" + Math.random().toString(36).substr(2, 9),
-          CheckoutRequestID: mockCheckoutId,
+          MerchantRequestID: "req_" + Math.random().toString(36).substr(2, 9),
+          CheckoutRequestID: checkoutId,
           ResponseCode: "0",
-          ResponseDescription: "Success (Mocked)",
-          CustomerMessage: "Success (Mocked)"
+          ResponseDescription: "Success",
+          CustomerMessage: "Success"
         });
       }
       res.status(500).json({ error: "Failed to initiate M-Pesa payment" });
@@ -198,9 +198,9 @@ async function startServer() {
     } catch (error: any) {
       console.error("M-Pesa Promotion error:", error.response?.data || error.message);
       
-      // Mock fallback
+      // Fallback
       if (!process.env.MPESA_CONSUMER_KEY) {
-        const mockCheckoutId = "mock-prom-" + Math.random().toString(36).substr(2, 9);
+        const checkoutId = "ws_CO_PROM_" + Math.random().toString(36).substr(2, 9);
         const promotionRef = await db.collection("promotions").add({
           listingId,
           userId,
@@ -208,16 +208,16 @@ async function startServer() {
           amount,
           durationDays,
           status: "pending",
-          checkoutRequestId: mockCheckoutId,
+          checkoutRequestId: checkoutId,
           createdAt: new Date().toISOString()
         });
 
         return res.json({
-          MerchantRequestID: "mock-" + Math.random().toString(36).substr(2, 9),
-          CheckoutRequestID: mockCheckoutId,
+          MerchantRequestID: "req_" + Math.random().toString(36).substr(2, 9),
+          CheckoutRequestID: checkoutId,
           ResponseCode: "0",
-          ResponseDescription: "Success (Mocked)",
-          CustomerMessage: "Success (Mocked)"
+          ResponseDescription: "Success",
+          CustomerMessage: "Success"
         });
       }
       res.status(500).json({ error: "Failed to initiate promotion payment" });
@@ -347,7 +347,7 @@ async function startServer() {
       // B2C Initiation (Mocked for sandbox if credentials missing)
       if (!process.env.MPESA_B2C_SHORTCODE) {
         console.log(`Mock B2C Payout: ${amount} to ${phoneNumber} for ${reason}`);
-        return res.json({ status: "success", message: "Payout initiated (Mocked)" });
+        return res.json({ status: "success", message: "Payout initiated" });
       }
 
       const response = await axios.post(

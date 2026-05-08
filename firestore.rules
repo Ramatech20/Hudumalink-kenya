@@ -126,7 +126,10 @@ service cloud.firestore {
         // Action: Reward/Payment Settlement (Non-owner incrementing balances)
         (incoming().diff(existing()).affectedKeys().hasOnly(['escrowBalance', 'referralEarnings']) &&
          (!('escrowBalance' in incoming()) || incoming().escrowBalance >= (existing().escrowBalance != null ? existing().escrowBalance : 0)) &&
-         (!('referralEarnings' in incoming()) || incoming().referralEarnings >= (existing().referralEarnings != null ? existing().referralEarnings : 0))
+         (!('referralEarnings' in incoming()) || (
+           incoming().referralEarnings >= (existing().referralEarnings != null ? existing().referralEarnings : 0) &&
+           existing().get('kycStatus', 'none') == 'verified'
+         ))
         ) ||
         isAdmin()
       ));
@@ -196,8 +199,35 @@ service cloud.firestore {
       allow get: if isValidId(transactionId) && isSignedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
       
-      allow create: if isVerified() && isValidId(transactionId) && incoming().buyerId == request.auth.uid && incoming().status == 'pending';
-      allow update: if isValidId(transactionId) && (isAdmin() || (isOwner(existing().buyerId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'cancellationReason', 'cancelledBy'])));
+      allow create: if isVerified() && isValidId(transactionId) && incoming().buyerId == request.auth.uid && 
+                    incoming().status == 'pending' && incoming().amount >= 0;
+      
+      allow update: if isValidId(transactionId) && (
+        isAdmin() || 
+        (isSignedIn() && (
+          // Buyer Actions
+          (isOwner(existing().buyerId) && (
+            // Action: Cancel (Only before delivery)
+            (incoming().status == 'cancelled' && existing().status in ['pending', 'paid'] && 
+             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'cancellationReason', 'cancelledBy'])) ||
+            // Action: Confirm Delivery / Release Funds (Only after delivery)
+            (incoming().status == 'completed' && existing().status == 'delivered' && 
+             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'completedAt'])) ||
+            // Action: Raise Dispute
+            (incoming().status == 'disputed' && existing().status in ['paid', 'delivered'] && 
+             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'disputeReason']))
+          )) ||
+          // Seller Actions
+          (isOwner(existing().sellerId) && (
+            // Action: Mark as Delivered
+            (incoming().status == 'delivered' && existing().status == 'paid' && 
+             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'deliveryMetadata'])) ||
+            // Action: Accept Cancellation (if pending)
+            (incoming().status == 'cancelled' && existing().status == 'pending' && 
+             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'cancelledBy']))
+          ))
+        ))
+      );
     }
 
     match /disputes/{disputeId} {

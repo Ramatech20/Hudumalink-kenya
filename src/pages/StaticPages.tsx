@@ -246,7 +246,7 @@ export const About = () => (
             <h2 className="text-4xl font-black text-white mb-8">Where We Are Now</h2>
             <div className="space-y-6">
               {[
-                { label: "Development", val: "Platform currently in active development and testing", icon: <Layout className="w-5 h-5" /> },
+                { label: "Status", val: "Verified Service Platform", icon: <ShieldCheck className="w-5 h-5" /> },
                 { label: "Coverage", val: "Designed to serve all 47 counties in Kenya", icon: <MapPin className="w-5 h-5" /> },
                 { label: "Focus", val: "Building a secure, scalable, and user-friendly system", icon: <Shield className="w-5 h-5" /> },
                 { label: "Growth", val: "Early-stage growth with a strong foundation for expansion", icon: <Rocket className="w-5 h-5" /> }
@@ -471,6 +471,30 @@ export const Privacy = () => (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
         <div className="space-y-12">
+          <section>
+            <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                <Shield className="w-5 h-5" />
+              </div>
+              ODPC Kenya Compliance
+            </h2>
+            <div className="p-8 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
+              <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6 font-medium">
+                HudumaLink is committed to protecting your personal data in accordance with the <strong>Data Protection Act (2019) of Kenya</strong>.
+              </p>
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-2xl">
+                  <span className="font-bold text-gray-900 dark:text-white block mb-1">KYC Data Retention</span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Identity documents (National ID, Passport) are retained securely for the duration of account activity plus 7 years as per financial regulations. All identity data is encrypted at rest.</p>
+                </div>
+                <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-2xl">
+                  <span className="font-bold text-gray-900 dark:text-white block mb-1">Purpose Limitation</span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">KYC information is collected solely for the purpose of identity verification, fraud prevention, and maintaining a high-trust marketplace for all Kenyans.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary">1</div>

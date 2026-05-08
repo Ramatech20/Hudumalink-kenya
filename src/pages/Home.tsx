@@ -15,7 +15,6 @@ import { Helmet } from 'react-helmet-async';
 const Home = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
-  const [showTestingNotice, setShowTestingNotice] = useState(true);
   const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
   const [nearbyListings, setNearbyListings] = useState<Listing[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
@@ -101,36 +100,6 @@ const Home = () => {
         <meta property="og:description" content="Connect with trusted fundis and local sellers in Kenya. Secure payments via M-Pesa escrow." />
         <meta property="og:image" content="https://picsum.photos/seed/hudumalink-og/1200/630" />
       </Helmet>
-
-      {/* Testing Notice Banner */}
-      <AnimatePresence>
-        {showTestingNotice && (
-          <motion.section 
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="bg-accent/10 border-b border-accent/20 overflow-hidden"
-          >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-accent/20 rounded-full text-accent animate-pulse">
-                  <Zap className="w-4 h-4" />
-                </div>
-                <p className="text-sm font-medium text-accent-700 dark:text-accent-400">
-                  <span className="font-black uppercase tracking-widest mr-2">{t('common.testing_title')}:</span>
-                  {t('common.testing_notice')}
-                </p>
-              </div>
-              <button 
-                onClick={() => setShowTestingNotice(false)}
-                className="px-4 py-1.5 bg-accent text-white rounded-full text-xs font-bold hover:scale-105 transition-all shadow-lg shadow-accent/20 whitespace-nowrap"
-              >
-                {t('common.testing_btn')}
-              </button>
-            </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
 
       {/* Profile Completion Banner */}
       {user && (!user.dob || !user.gender || !user.occupation) && (

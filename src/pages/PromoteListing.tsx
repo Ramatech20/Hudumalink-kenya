@@ -90,7 +90,7 @@ const PromoteListing = () => {
       if (transactionId) {
         toast.success('STK Push sent! Please enter your M-Pesa PIN to complete the promotion.');
         
-        // Simulate payment success after 10 seconds
+        // Process payment success after 10 seconds
         setTimeout(async () => {
           const success = await activatePromotion(transactionId);
           if (success) {

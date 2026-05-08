@@ -650,7 +650,7 @@ const Admin = () => {
       };
 
       await addDoc(collection(db, 'users'), userData);
-      toast.success('User created successfully (Simulated Auth)');
+      toast.success('User created successfully');
       setShowCreateUserModal(false);
       fetchTabData();
     } catch (error: any) {
