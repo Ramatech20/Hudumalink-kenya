@@ -811,7 +811,10 @@ const Admin = () => {
         // 2. Initiate M-Pesa Refund (B2C)
         const payoutRes = await fetch('/api/admin/payout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Admin-ID': user?.uid || ''
+          },
           body: JSON.stringify({
             userId: txData.buyerId,
             amount: txData.amount,
@@ -939,7 +942,10 @@ const Admin = () => {
         // 1. Initiate M-Pesa Payout (B2C)
         const payoutRes = await fetch('/api/admin/payout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Admin-ID': user?.uid || ''
+          },
           body: JSON.stringify({
             userId,
             amount,

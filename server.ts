@@ -74,6 +74,22 @@ async function startServer() {
     }
   };
 
+// Middleware to verify Admin
+const verifyAdmin = async (req: any, res: any, next: any) => {
+  const adminId = req.headers['x-admin-id'];
+  if (!adminId) return res.status(401).json({ error: "Missing Admin ID" });
+
+  try {
+    const userDoc = await db.collection("users").doc(adminId).get();
+    if (!userDoc.exists || userDoc.data()?.role !== 'admin') {
+      return res.status(403).json({ error: "Unauthorized. Admin access required." });
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
   app.post("/api/mpesa/stkpush", async (req, res) => {
     const { phoneNumber, amount, accountReference, transactionDesc, transactionId } = req.body;
 
@@ -225,6 +241,12 @@ async function startServer() {
   });
 
   app.post("/api/mpesa/callback", async (req, res) => {
+    const callbackToken = req.query.token;
+    if (process.env.MPESA_CALLBACK_TOKEN && callbackToken !== process.env.MPESA_CALLBACK_TOKEN) {
+      console.warn("M-Pesa Callback: Unauthorized attempt with invalid token");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     console.log("M-Pesa Callback received:", JSON.stringify(req.body, null, 2));
     
     const { Body } = req.body;
@@ -336,8 +358,19 @@ async function startServer() {
     }
   });
 
+  // B2C Callback handlers
+  app.post("/api/mpesa/b2c/result", async (req, res) => {
+    console.log("M-Pesa B2C Result received:", JSON.stringify(req.body, null, 2));
+    res.json({ ResultCode: 0, ResultDesc: "Accepted" });
+  });
+
+  app.post("/api/mpesa/b2c/timeout", async (req, res) => {
+    console.log("M-Pesa B2C Timeout received:", JSON.stringify(req.body, null, 2));
+    res.json({ ResultCode: 0, ResultDesc: "Accepted" });
+  });
+
   // Admin Actions: B2C Payouts (Withdrawals & Refunds)
-  app.post("/api/admin/payout", async (req, res) => {
+  app.post("/api/admin/payout", verifyAdmin, async (req, res) => {
     const { userId, amount, phoneNumber, reason, type } = req.body;
     // In a real app, you'd verify the admin's session here
 

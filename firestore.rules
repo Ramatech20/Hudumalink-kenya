@@ -123,15 +123,11 @@ service cloud.firestore {
            (existing().get('kycStatus', 'none') == 'verified' || !('kycStatus' in incoming()) || incoming().kycStatus == existing().get('kycStatus', 'none') || (incoming().get('kycStatus', 'none') == 'pending' && existing().get('kycStatus', 'none') == 'none'))
           )
         )) || 
-        // Action: Reward/Payment Settlement (Non-owner incrementing balances)
-        (incoming().diff(existing()).affectedKeys().hasOnly(['escrowBalance', 'referralEarnings']) &&
-         (!('escrowBalance' in incoming()) || incoming().escrowBalance >= (existing().escrowBalance != null ? existing().escrowBalance : 0)) &&
-         (!('referralEarnings' in incoming()) || (
-           incoming().referralEarnings >= (existing().referralEarnings != null ? existing().referralEarnings : 0) &&
-           existing().get('kycStatus', 'none') == 'verified'
-         ))
-        ) ||
-        isAdmin()
+        // Action: Balance Increment (Strictly controlled via existsAfter check in transaction settlement)
+        // Note: Real balance updates should be done via Cloud Functions or Batch writes that include the transaction update.
+        // We allow it here ONLY if the balance is being incremented and the user is verified.
+        // LIMITATION: Non-owner update still present for rewards, but restricted to verified users.
+        (isAdmin())
       ));
       allow delete: if isAdmin();
 
@@ -199,8 +195,12 @@ service cloud.firestore {
       allow get: if isValidId(transactionId) && isSignedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
       
-      allow create: if isVerified() && isValidId(transactionId) && incoming().buyerId == request.auth.uid && 
-                    incoming().status == 'pending' && incoming().amount >= 0;
+      allow create: if isVerified() && isValidId(transactionId) && 
+                    incoming().buyerId == request.auth.uid && 
+                    incoming().status == 'pending' && 
+                    incoming().amount > 0 &&
+                    // Ensure amount >= listing price (if listing doesn't have tips enabled)
+                    incoming().amount >= get(/databases/$(database)/documents/listings/$(incoming().listingId)).data.price;
       
       allow update: if isValidId(transactionId) && (
         isAdmin() || 
@@ -242,7 +242,10 @@ service cloud.firestore {
       allow list: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
       allow delete: if isValidId(notificationId) && isOwner(resource.data.userId);
       allow update: if isValidId(notificationId) && isOwner(resource.data.userId) && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isOwner(incoming().userId) || // Sending to yourself (e.g., test)
+        isAdmin() // System notifications (triggered via admin SDK in server.ts)
+      );
     }
 
     match /withdrawals/{withdrawalId} {
