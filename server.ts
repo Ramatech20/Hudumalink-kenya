@@ -369,6 +369,92 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     res.json({ ResultCode: 0, ResultDesc: "Accepted" });
   });
 
+  // Transaction Settlement: Confirm Delivery & Release Funds
+  app.post("/api/transactions/release", async (req, res) => {
+    const { transactionId, userId } = req.body;
+
+    if (!transactionId || !userId) {
+      return res.status(400).json({ error: "Missing transactionId or userId" });
+    }
+
+    try {
+      const txRef = db.collection("transactions").doc(transactionId);
+      const txDoc = await txRef.get();
+
+      if (!txDoc.exists) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+
+      const txData = txDoc.data();
+      if (!txData) return res.status(500).json({ error: "Data error" });
+
+      // Verify that the person releasing is the buyer
+      if (txData.buyerId !== userId) {
+        return res.status(403).json({ error: "Only the buyer can release funds" });
+      }
+
+      // Check status
+      if (txData.status !== "deposited" && txData.status !== "delivered") {
+        return res.status(400).json({ error: "Transaction in wrong state to release" });
+      }
+
+      const batch = db.batch();
+
+      // 1. Update Transaction
+      batch.update(txRef, {
+        status: "completed",
+        releasedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      // 2. Pay the Seller
+      const sellerRef = db.collection("users").doc(txData.sellerId);
+      batch.update(sellerRef, {
+        escrowBalance: admin.firestore.FieldValue.increment(txData.amount)
+      });
+
+      // 3. Handle Referral Reward
+      if (txData.referralId) {
+        const referralSettingsDoc = await db.collection("settings").doc("referral").get();
+        const settings = referralSettingsDoc.data();
+        
+        if (settings?.isEnabled) {
+          const referrerRef = db.collection("users").doc(txData.referralId);
+          batch.update(referrerRef, {
+            referralEarnings: admin.firestore.FieldValue.increment(settings.rewardAmount || 100)
+          });
+
+          // Notify Referrer
+          batch.set(db.collection("notifications").doc(), {
+            userId: txData.referralId,
+            title: "Referral Reward!",
+            message: `You earned a reward of KES ${settings.rewardAmount || 100} because your referral completed a transaction.`,
+            type: "success",
+            read: false,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+
+      // 4. Notify Seller
+      batch.set(db.collection("notifications").doc(), {
+        userId: txData.sellerId,
+        title: "Funds Released",
+        message: `KES ${txData.amount} has been added to your balance for order ${transactionId}.`,
+        type: "success",
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+
+      await batch.commit();
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error releasing transaction funds:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Admin Actions: B2C Payouts (Withdrawals & Refunds)
   app.post("/api/admin/payout", verifyAdmin, async (req, res) => {
     const { userId, amount, phoneNumber, reason, type } = req.body;
@@ -408,6 +494,61 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     } catch (error: any) {
       console.error("M-Pesa B2C error:", error.response?.data || error.message);
       res.status(500).json({ error: "Failed to initiate payout" });
+    }
+  });
+
+  // Withdrawal Requests
+  app.post("/api/withdrawals/create", async (req, res) => {
+    const { userId, amount, method, details } = req.body;
+
+    if (!userId || !amount || !method || !details) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const fee = method === "mpesa" ? 15 : 50;
+    const totalToDeduct = amount + fee;
+
+    try {
+      const userRef = db.collection("users").doc(userId);
+      
+      const result = await db.runTransaction(async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists) throw new Error("User not found");
+        
+        const userData = userDoc.data();
+        const currentBalance = userData?.escrowBalance || 0;
+        
+        if (currentBalance < totalToDeduct) {
+          throw new Error(`Insufficient balance. Available: KES ${currentBalance}`);
+        }
+
+        // 1. Deduct from balance
+        transaction.update(userRef, {
+          escrowBalance: admin.firestore.FieldValue.increment(-totalToDeduct),
+          updatedAt: new Date().toISOString()
+        });
+
+        // 2. Add withdrawal record
+        const withdrawalRef = db.collection("withdrawals").doc();
+        transaction.set(withdrawalRef, {
+          userId,
+          userName: userData?.displayName || "Unknown",
+          amount,
+          fee,
+          totalDeducted: totalToDeduct,
+          method,
+          details,
+          status: "pending",
+          createdAt: new Date().toISOString()
+        });
+
+        return { success: true };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Withdrawal error:", error);
+      res.status(500).json({ error: error.message });
     }
   });
 

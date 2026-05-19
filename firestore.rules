@@ -113,7 +113,7 @@ service cloud.firestore {
              'residence', 'area', 'gender', 'occupation', 'role', 
              'completedPaymentsCount', 'emailVerified', 'referralCode', 
              'referredBy', 'createdAt', 'updatedAt', 'isVerified', 
-             'kycStatus', 'isOnline', 'lastSeen', 'referralEarnings', 'escrowBalance'
+             'kycStatus', 'isOnline', 'lastSeen'
            ]) &&
            // Protect critical fields from self-update
            (!('escrowBalance' in incoming()) || incoming().escrowBalance == existing().get('escrowBalance', 0)) &&
@@ -123,10 +123,7 @@ service cloud.firestore {
            (existing().get('kycStatus', 'none') == 'verified' || !('kycStatus' in incoming()) || incoming().kycStatus == existing().get('kycStatus', 'none') || (incoming().get('kycStatus', 'none') == 'pending' && existing().get('kycStatus', 'none') == 'none'))
           )
         )) || 
-        // Action: Balance Increment (Strictly controlled via existsAfter check in transaction settlement)
-        // Note: Real balance updates should be done via Cloud Functions or Batch writes that include the transaction update.
-        // We allow it here ONLY if the balance is being incremented and the user is verified.
-        // LIMITATION: Non-owner update still present for rewards, but restricted to verified users.
+        // Action: Balance Increment (ONLY Admin/Server)
         (isAdmin())
       ));
       allow delete: if isAdmin();
@@ -210,9 +207,6 @@ service cloud.firestore {
             // Action: Cancel (Only before delivery)
             (incoming().status == 'cancelled' && existing().status in ['pending', 'paid'] && 
              incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'cancellationReason', 'cancelledBy'])) ||
-            // Action: Confirm Delivery / Release Funds (Only after delivery)
-            (incoming().status == 'completed' && existing().status == 'delivered' && 
-             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'completedAt'])) ||
             // Action: Raise Dispute
             (incoming().status == 'disputed' && existing().status in ['paid', 'delivered'] && 
              incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'disputeReason']))

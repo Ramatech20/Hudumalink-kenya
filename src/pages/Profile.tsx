@@ -272,50 +272,29 @@ const Profile = () => {
 
     setSubmittingWithdraw(true);
     try {
-      const userRef = doc(db, 'users', user.uid);
-      
-      // Use a transaction to ensure balance is deducted and withdrawal is recorded
-      try {
-        await runTransaction(db, async (transaction) => {
-          const userDoc = await transaction.get(userRef);
-          if (!userDoc.exists()) throw new Error("User not found");
-          
-          const currentBalance = userDoc.data().escrowBalance || 0;
-          if (currentBalance < totalToDeduct) throw new Error("Insufficient balance");
+      const response = await fetch('/api/withdrawals/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.uid,
+          amount,
+          method: withdrawMethod,
+          details: withdrawMethod === 'mpesa' 
+            ? { phoneNumber: withdrawDetails.phoneNumber }
+            : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber }
+        })
+      });
 
-          // 1. Deduct from balance
-          transaction.update(userRef, {
-            escrowBalance: increment(-totalToDeduct)
-          });
-
-          // 2. Add withdrawal record
-          const withdrawalRef = doc(collection(db, 'withdrawals'));
-          transaction.set(withdrawalRef, {
-            userId: user.uid,
-            userName: user.displayName,
-            amount,
-            fee,
-            totalDeducted: totalToDeduct,
-            method: withdrawMethod,
-            details: withdrawMethod === 'mpesa' 
-              ? { phoneNumber: withdrawDetails.phoneNumber }
-              : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber },
-            status: 'pending',
-            createdAt: new Date().toISOString()
-          });
-        });
-      } catch (error: any) {
-        handleFirestoreError(error, OperationType.WRITE, 'withdrawals');
-        throw error;
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to submit withdrawal');
       }
       
       toast.success('Withdrawal request submitted! Funds have been moved to pending.');
       setShowWithdrawModal(false);
       setWithdrawAmount('');
     } catch (error: any) {
-      if (!error.operationType) {
-        handleGeneralError(error, 'Failed to submit withdrawal');
-      }
+      handleGeneralError(error, 'Failed to submit withdrawal');
     } finally {
       setSubmittingWithdraw(false);
     }
