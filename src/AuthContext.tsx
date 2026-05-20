@@ -3,6 +3,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { User } from './types';
+import { getDeviceFingerprint } from './lib/fingerprint';
 
 interface AuthContextType {
   user: User | null;
@@ -58,11 +59,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Update online status using setDoc with merge to avoid failure if doc doesn't exist yet
+        // Update online status and device snapshot
         const userPath = `users/${firebaseUser.uid}`;
+        const fingerprint = getDeviceFingerprint();
         updateDoc(doc(db, 'users', firebaseUser.uid), {
           isOnline: true,
-          lastSeen: new Date().toISOString()
+          lastSeen: new Date().toISOString(),
+          deviceFingerprint: fingerprint
         }).catch(error => {
           // If doc doesn't exist, it's a new user, ignore status update error
           if (error instanceof Error && error.message.includes('NOT_FOUND')) return;
@@ -109,6 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             // Create a default profile if it doesn't exist
             const isAdminEmail = firebaseUser.email === 'ramadhanwambia83@gmail.com';
+            const fingerprint = getDeviceFingerprint();
             const newUser: User = {
               uid: firebaseUser.uid,
               displayName: firebaseUser.displayName || 'Anonymous User',
@@ -123,6 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               escrowBalance: 0,
               emailVerified: firebaseUser.emailVerified,
               createdAt: new Date().toISOString(),
+              deviceFingerprint: fingerprint,
             };
             try {
               await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });

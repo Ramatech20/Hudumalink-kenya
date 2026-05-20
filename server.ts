@@ -6,11 +6,11 @@ import axios from "axios";
 import admin from "firebase-admin";
 import fs from "fs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const _filename = typeof __filename !== "undefined" ? __filename : fileURLToPath(import.meta.url);
+const _dirname = typeof __dirname !== "undefined" ? __dirname : path.dirname(_filename);
 
 // Initialize Firebase Admin
-const firebaseConfigPath = path.join(__dirname, "firebase-applet-config.json");
+const firebaseConfigPath = path.join(_dirname, "firebase-applet-config.json");
 try {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     // Support for production environment variables (Base64 encoded JSON)
@@ -40,6 +40,88 @@ try {
 }
 
 const db = admin.firestore();
+
+/**
+ * Multi-tier Platform commission calculation engine.
+ * Service standard fee: 10%.
+ * Goods bracket fees with 10% below 100, 10% up to 799, 8% up to 2499, 7% up to 4999, and 5% above 5000.
+ * Operations utilize Math.round to protect against fraction leaks.
+ */
+export function calculateCommission(type: 'service' | 'goods', amount: number): number {
+  if (type === 'service') {
+    return Math.round(amount * 0.10);
+  }
+  // Goods brackets
+  if (amount >= 5000) {
+    return Math.round(amount * 0.05);
+  } else if (amount >= 2500) {
+    return Math.round(amount * 0.07);
+  } else if (amount >= 800) {
+    return Math.round(amount * 0.08);
+  } else {
+    return Math.round(amount * 0.10);
+  }
+}
+
+const getClientIp = (req: any): string => {
+  const xForwardedFor = req.headers['x-forwarded-for'];
+  if (xForwardedFor) {
+    const parts = typeof xForwardedFor === 'string' ? xForwardedFor.split(',') : (xForwardedFor as string[]);
+    return parts[0].trim();
+  }
+  return req.socket.remoteAddress || req.ip || "";
+};
+
+const unlockPendingBalances = async (userId: string) => {
+  const now = new Date().toISOString();
+  try {
+    const locksQuery = await db.collection("hold_ledgers")
+      .where("userId", "==", userId)
+      .where("status", "==", "locked")
+      .where("releaseTime", "<=", now)
+      .get();
+
+    if (locksQuery.empty) return;
+
+    for (const lockDoc of locksQuery.docs) {
+      const lockData = lockDoc.data();
+      const lockAmount = lockData.amount || 0;
+
+      await db.runTransaction(async (transaction) => {
+        const currentLockDoc = await transaction.get(lockDoc.ref);
+        if (!currentLockDoc.exists || currentLockDoc.data()?.status !== "locked") return;
+
+        // Mark ledger as unlocked
+        transaction.update(lockDoc.ref, {
+          status: "unlocked",
+          unlockedAt: new Date().toISOString()
+        });
+
+        // Atomic balances transfer
+        const userRef = db.collection("users").doc(userId);
+        transaction.update(userRef, {
+          pendingWithdrawalBalance: admin.firestore.FieldValue.increment(-lockAmount),
+          escrowBalance: admin.firestore.FieldValue.increment(lockAmount),
+          updatedAt: new Date().toISOString()
+        });
+
+        // Send confirmation notification
+        const notificationRef = db.collection("notifications").doc();
+        transaction.set(notificationRef, {
+          userId,
+          title: "Hold Period Concluded",
+          message: `Your security hold has ended. KES ${lockAmount} has successfully cleared and is available for immediate withdrawal.`,
+          type: "success",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      });
+    }
+    console.log(`Successfully completed balance maturation checks for user ${userId}`);
+  } catch (err) {
+    console.error(`Error unlocking pending balances for user ${userId}:`, err);
+  }
+};
 
 async function startServer() {
   const app = express();
@@ -84,6 +166,18 @@ const verifyUser = async (req: any, res: any, next: any) => {
       const fallbackUid = req.headers["x-user-id"] || (req.body && req.body.userId);
       if (fallbackUid) {
         req.user = { uid: fallbackUid };
+        
+        // Asynchronously update coordinates
+        const fingerprint = req.headers['x-device-fingerprint'] || (req.body && req.body.deviceFingerprint);
+        const userIp = getClientIp(req);
+        if (fingerprint || userIp) {
+          db.collection("users").doc(fallbackUid).update({
+            ...(fingerprint && { deviceFingerprint: fingerprint }),
+            ...(userIp && { lastActiveIp: userIp }),
+            lastSeen: new Date().toISOString()
+          }).catch(() => {});
+        }
+        
         return next();
       }
     }
@@ -94,6 +188,16 @@ const verifyUser = async (req: any, res: any, next: any) => {
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     req.user = decodedToken;
+    
+    // Automatically capture IP and device fingerprint on authenticated API calls
+    const fingerprint = req.headers['x-device-fingerprint'] || (req.body && req.body.deviceFingerprint);
+    const userIp = getClientIp(req);
+    const updateData: any = { lastSeen: new Date().toISOString() };
+    if (fingerprint) updateData.deviceFingerprint = fingerprint;
+    if (userIp) updateData.lastActiveIp = userIp;
+    
+    db.collection("users").doc(decodedToken.uid).update(updateData).catch(() => {});
+    
     next();
   } catch (error) {
     console.error("Firebase Auth verifyIdToken failure:", error);
@@ -414,7 +518,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
 
   // Transaction Settlement: Confirm Delivery & Release Funds (Race-condition safe via runTransaction)
   app.post("/api/transactions/release", verifyUser, async (req: any, res: any) => {
-    const { transactionId } = req.body;
+    const { transactionId, deviceFingerprint } = req.body;
     const userId = req.user.uid; // Identity verified from the cryptographic auth token
 
     if (!transactionId) {
@@ -423,80 +527,221 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
 
     try {
       const txRef = db.collection("transactions").doc(transactionId);
+      const txSnap = await txRef.get();
+      if (!txSnap.exists) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+
+      const txData = txSnap.data();
+      if (!txData) {
+        return res.status(500).json({ error: "Data empty or invalid" });
+      }
+
+      // Verify that the person initiating the release is indeed the buyer
+      if (txData.buyerId !== userId) {
+        return res.status(403).json({ error: "Only the buyer can release funds" });
+      }
+
+      // Check status - must be deposited or delivered
+      if (txData.status !== "deposited" && txData.status !== "delivered") {
+        return res.status(400).json({ error: "Transaction in wrong state to release or already completed" });
+      }
+
+      // Anti-Exit Scam: Fetch seller's historical completed average outside transaction block
+      const sellerHistoryQuery = await db.collection("transactions")
+        .where("sellerId", "==", txData.sellerId)
+        .where("status", "==", "completed")
+        .get();
+
+      let sumAmount = 0;
+      let countOfMatched = 0;
+      sellerHistoryQuery.docs.forEach(docSnap => {
+        const d = docSnap.data();
+        if (d && typeof d.amount === 'number') {
+          sumAmount += d.amount;
+          countOfMatched++;
+        }
+      });
+
+      const avgCompleted = countOfMatched > 0 ? (sumAmount / countOfMatched) : 0;
+      const currentAmount = txData.amount || 0;
+
+      // Extreme velocity jump threshold: orders >= 2 with price > 400% of average (Seller reputation ramp filter)
+      const isExtremeJump = countOfMatched >= 2 && currentAmount > (4 * avgCompleted);
+
+      if (isExtremeJump) {
+        // Atomic status and freeze triggers
+        await db.runTransaction(async (transaction) => {
+          transaction.update(txRef, {
+            status: "flagged_audit",
+            auditReason: `Severe reputation velocity jump: Transaction amount (KES ${currentAmount}) exceeds 400% of historical average KES ${avgCompleted.toFixed(2)} across ${countOfMatched} completed payments.`,
+            updatedAt: new Date().toISOString()
+          });
+
+          // Enforce 72-hour wallet freeze on vendor
+          const sellerRef = db.collection("users").doc(txData.sellerId);
+          const freezeUntil = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+          transaction.update(sellerRef, {
+            walletFrozenUntil: freezeUntil,
+            walletFreezeReason: `Automated velocity trigger: Order ${transactionId} (KES ${currentAmount}) hit 400% reputation expansion freeze. Historical average: KES ${avgCompleted.toFixed(2)}.`,
+            updatedAt: new Date().toISOString()
+          });
+
+          // Alert vendor
+          const sellerNotificationRef = db.collection("notifications").doc();
+          transaction.set(sellerNotificationRef, {
+            userId: txData.sellerId,
+            title: "Wallet Freeze & Audit Initiated",
+            message: `Your wallet is frozen for 72 hours due to an extreme transaction size jump (KES ${currentAmount} vs avg KES ${avgCompleted.toFixed(2)}). Order ${transactionId} is held for compliance review.`,
+            type: "error",
+            read: false,
+            createdAt: new Date().toISOString()
+          });
+
+          // Alert administrators
+          const adminNotificationRef = db.collection("notifications").doc();
+          transaction.set(adminNotificationRef, {
+            userId: "admin",
+            title: "Scam Detection Active",
+            message: `Seller ${txData.sellerId} flagged for exit scam velocity (400%+ jump) on order ${transactionId}. Wallet locked.`,
+            type: "warning",
+            read: false,
+            createdAt: new Date().toISOString()
+          });
+        });
+
+        return res.status(403).json({
+          error: "Transaction flagged for security audit due to a severe velocity/reputation jump. It will be reviewed by administrators within 24-72 hours."
+        });
+      }
+
+      // Process standard, genuine settlement
+      const buyerIp = getClientIp(req);
 
       const result = await db.runTransaction(async (transaction) => {
         const txDoc = await transaction.get(txRef);
-
-        if (!txDoc.exists) {
-          throw new Error("Transaction not found");
+        if (!txDoc.exists) throw new Error("Transaction not found");
+        const currentTxData = txDoc.data();
+        if (!currentTxData || currentTxData.status === "completed") {
+          throw new Error("Transaction already completed or processed");
         }
 
-        const txData = txDoc.data();
-        if (!txData) throw new Error("Data error");
+        const buyerRef = db.collection("users").doc(currentTxData.buyerId);
+        const sellerRef = db.collection("users").doc(currentTxData.sellerId);
 
-        // Verify that the person initiating the release is indeed the buyer
-        if (txData.buyerId !== userId) {
-          throw new Error("Only the buyer can release funds");
-        }
+        const [buyerDoc, sellerDoc] = await Promise.all([
+          transaction.get(buyerRef),
+          transaction.get(sellerRef)
+        ]);
 
-        // Check status - must be deposited or delivered
-        if (txData.status !== "deposited" && txData.status !== "delivered") {
-          throw new Error("Transaction in wrong state to release or already completed");
-        }
+        const buyerData = buyerDoc.data() || {};
+        const sellerData = sellerDoc.data() || {};
 
-        // 1. Update Transaction status atomically
+        // 1. Convert Transaction status to completed
         transaction.update(txRef, {
           status: "completed",
           releasedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
 
-        // 2. Pay the Seller
-        const sellerRef = db.collection("users").doc(txData.sellerId);
+        // 2. Protect Platform: Enforce hold locks (24 hours standard, 48 hours for values >= 5000 KES)
+        const holdPeriodHours = currentTxData.amount >= 5000 ? 48 : 24;
+        const releaseTime = new Date();
+        releaseTime.setHours(releaseTime.getHours() + holdPeriodHours);
+
         transaction.update(sellerRef, {
-          escrowBalance: admin.firestore.FieldValue.increment(txData.amount)
+          pendingWithdrawalBalance: admin.firestore.FieldValue.increment(currentTxData.amount),
+          completedPaymentsCount: admin.firestore.FieldValue.increment(1),
+          updatedAt: new Date().toISOString()
         });
 
-        // 3. Handle Referral Reward (Locking down with genuine-transaction checks)
-        if (txData.referralId) {
+        const holdLedgerRef = db.collection("hold_ledgers").doc();
+        transaction.set(holdLedgerRef, {
+          userId: currentTxData.sellerId,
+          transactionId: transactionId,
+          amount: currentTxData.amount,
+          releaseTime: releaseTime.toISOString(),
+          status: "locked",
+          createdAt: new Date().toISOString()
+        });
+
+        // 3. Counter Referral Exploits (Locking down collusion & system bleed loops)
+        if (currentTxData.referralId) {
           const referralSettingsRef = db.collection("settings").doc("referral");
           const referralSettingsDoc = await transaction.get(referralSettingsRef);
           const settings = referralSettingsDoc.data();
-          
-          // Referrals are eligible ONLY for genuine transactions above threshold (e.g. >= 1000 KES)
-          const isGenuineAmount = txData.amount >= 1000;
-          
-          if (settings?.isEnabled && isGenuineAmount) {
-            const referrerRef = db.collection("users").doc(txData.referralId);
-            transaction.update(referrerRef, {
-              referralEarnings: admin.firestore.FieldValue.increment(settings.rewardAmount || 100)
-            });
 
-            // Notify Referrer
-            const referrerNotificationRef = db.collection("notifications").doc();
-            transaction.set(referrerNotificationRef, {
-              userId: txData.referralId,
-              title: "Referral Reward Received!",
-              message: `You earned a reward of KES ${settings.rewardAmount || 100} because your referral completed a completed transaction.`,
-              type: "success",
-              read: false,
-              createdAt: new Date().toISOString()
-            });
+          const isGenuineAmount = currentTxData.amount >= 1000;
+
+          if (settings?.isEnabled && isGenuineAmount) {
+            // Check cross-parameters
+            const isSelfReferral = buyerData.referredBy === currentTxData.sellerId;
+            const bFinger = buyerData.deviceFingerprint || "BUYER-EMPTY";
+            const sFinger = sellerData.deviceFingerprint || "SELLER-EMPTY";
+            const isDeviceCollusion = (bFinger !== "BUYER-EMPTY" && bFinger !== "SELLER-EMPTY" && bFinger === sFinger) || 
+                                       (deviceFingerprint && deviceFingerprint === sFinger);
+            const bIp = buyerData.lastActiveIp || buyerIp;
+            const sIp = sellerData.lastActiveIp || "";
+            const isIpCollusion = (bIp && sIp && bIp === sIp);
+
+            const isReferralFraud = isSelfReferral || isDeviceCollusion || isIpCollusion;
+
+            if (isReferralFraud) {
+              console.warn(`Referral payment BLOCKED: Collusion detected for transaction ${transactionId}. selfReferral=${isSelfReferral}, deviceCollusion=${isDeviceCollusion}, ipCollusion=${isIpCollusion}`);
+              
+              // Increment suspicion indicators on accounts
+              transaction.update(buyerRef, {
+                fraudSuspicionScore: admin.firestore.FieldValue.increment(1),
+                referralFraudAttempts: admin.firestore.FieldValue.increment(1)
+              });
+              transaction.update(sellerRef, {
+                fraudSuspicionScore: admin.firestore.FieldValue.increment(1),
+                referralFraudAttempts: admin.firestore.FieldValue.increment(1)
+              });
+            } else {
+              // Legitimate referral relationship
+              const referrerRef = db.collection("users").doc(currentTxData.referralId);
+              transaction.update(referrerRef, {
+                referralEarnings: admin.firestore.FieldValue.increment(settings.rewardAmount || 100)
+              });
+
+              // Notify Referrer
+              const referrerNotificationRef = db.collection("notifications").doc();
+              transaction.set(referrerNotificationRef, {
+                userId: currentTxData.referralId,
+                title: "Referral Bonus Received!",
+                message: `You earned a referral bonus of KES ${settings.rewardAmount || 100} because your referral completed a transaction.`,
+                type: "success",
+                read: false,
+                createdAt: new Date().toISOString()
+              });
+            }
           }
         }
 
-        // 4. Notify Seller
+        // 4. Notify Seller with precise cooling-off constraints
         const sellerNotificationRef = db.collection("notifications").doc();
         transaction.set(sellerNotificationRef, {
-          userId: txData.sellerId,
-          title: "Funds Released",
-          message: `KES ${txData.amount} has been added to your balance for order ${transactionId}.`,
+          userId: currentTxData.sellerId,
+          title: "Escrow Hold Placed",
+          message: `KES ${currentTxData.amount} has been added to your pending hold balance for order ${transactionId}. It matures to withdrawable state in ${holdPeriodHours} hours.`,
+          type: "info",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        // 5. Notify Buyer
+        const buyerNotificationRef = db.collection("notifications").doc();
+        transaction.set(buyerNotificationRef, {
+          userId: currentTxData.buyerId,
+          title: "Transaction Confirmed",
+          message: `You have successfully released KES ${currentTxData.amount} to the service provider for order ${transactionId}.`,
           type: "success",
           read: false,
           createdAt: new Date().toISOString()
         });
 
-        return { success: true };
+        return { success: true, holdHours: holdPeriodHours };
       });
 
       res.json(result);
@@ -557,39 +802,89 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    if (amount <= 0) {
+    const withdrawalAmount = Number(amount);
+    if (isNaN(withdrawalAmount) || withdrawalAmount <= 0) {
       return res.status(400).json({ error: "Withdrawal amount must be greater than zero" });
     }
 
     const fee = method === "mpesa" ? 15 : 50;
-    const totalToDeduct = amount + fee;
+    const totalToDeduct = withdrawalAmount + fee;
 
     try {
+      // 1. Instantly mature and unlock any expired pending holds before evaluating balances!
+      await unlockPendingBalances(userId);
+
       const userRef = db.collection("users").doc(userId);
-      
+      const userDoc = await userRef.get();
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: "User profile not found." });
+      }
+
+      const userData = userDoc.data() || {};
+
+      // 2. Strict Security: Check if wallet is frozen due to velocity jump alert
+      if (userData.walletFrozenUntil && new Date(userData.walletFrozenUntil) > new Date()) {
+        return res.status(403).json({
+          error: `Wallet Forbidden: Your withdrawals are currently frozen until ${new Date(userData.walletFrozenUntil).toLocaleString()} due to an unusual transaction velocity jump alert. Our security compliance team is manually auditing your listings.`
+        });
+      }
+
+      // 3. Strict Security: Sum successful and pending withdrawals in the last 24 hours to enforce daily velocity caps
+      const past24hRange = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const recentWithdrawals = await db.collection("withdrawals")
+        .where("userId", "==", userId)
+        .where("createdAt", ">=", past24hRange)
+        .get();
+
+      let dailySum = 0;
+      recentWithdrawals.docs.forEach(docSnap => {
+        const wData = docSnap.data();
+        if (wData && wData.status !== "failed" && wData.status !== "cancelled") {
+          dailySum += wData.amount || 0;
+        }
+      });
+
+      // 4. Client Classification: Tier 2 (KYC complete AND at least 5 completed payments) vs Tier 1
+      const isVerifiedKYC = userData.kycStatus === "verified";
+      const completedCount = userData.completedPaymentsCount || 0;
+      const isTier2 = isVerifiedKYC && completedCount >= 5;
+
+      const dailyCap = isTier2 ? 50000 : 1500;
+
+      if (dailySum + withdrawalAmount > dailyCap) {
+        if (!isTier2) {
+          return res.status(400).json({
+            error: `Daily Limit Exceeded: As a Tier 1 (Unverified) account, your absolute daily withdrawal cap is KES 1,500. You have already withdrawn KES ${dailySum} in the last 24 hours. To upgrade to Tier 2 (KES 50,000 daily limit), please verify your KYC document and successfully complete 5 transacted gigs.`
+          });
+        } else {
+          return res.status(400).json({
+            error: `Daily Limit Exceeded: As a Tier 2 account, your absolute daily withdrawal cap is KES 50,000. You have already withdrawn KES ${dailySum} in the last 24 hours.`
+          });
+        }
+      }
+
+      // 5. Atomic Transaction write
       const result = await db.runTransaction(async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists) throw new Error("User not found");
-        
-        const userData = userDoc.data();
-        const currentBalance = userData?.escrowBalance || 0;
-        
+        const refreshedUserDoc = await transaction.get(userRef);
+        const refreshedUserData = refreshedUserDoc.data();
+        const currentBalance = refreshedUserData?.escrowBalance || 0;
+
         if (currentBalance < totalToDeduct) {
-          throw new Error(`Insufficient balance. Available: KES ${currentBalance}`);
+          throw new Error(`Insufficient balance. Your withdrawable balance is KES ${currentBalance.toFixed(2)}. This withdrawal request requires KES ${totalToDeduct.toFixed(2)} inclusive of KES ${fee} processing fee.`);
         }
 
-        // 1. Deduct from balance atomically
+        // Deduct from balance atomically
         transaction.update(userRef, {
           escrowBalance: admin.firestore.FieldValue.increment(-totalToDeduct),
           updatedAt: new Date().toISOString()
         });
 
-        // 2. Add withdrawal record
+        // Add withdrawal record
         const withdrawalRef = db.collection("withdrawals").doc();
         transaction.set(withdrawalRef, {
           userId,
-          userName: userData?.displayName || "Unknown",
-          amount,
+          userName: refreshedUserData?.displayName || "Unknown",
+          amount: withdrawalAmount,
           fee,
           totalDeducted: totalToDeduct,
           method,
@@ -598,13 +893,13 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
           createdAt: new Date().toISOString()
         });
 
-        return { success: true };
+        return { success: true, withdrawalId: withdrawalRef.id };
       });
 
       res.json(result);
     } catch (error: any) {
       console.error("Withdrawal error:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message || "Internal server error" });
     }
   });
 
@@ -652,6 +947,17 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
                   return; // already processed or status changed
                 }
 
+                const buyerRef = db.collection("users").doc(currentTxData.buyerId);
+                const sellerRef = db.collection("users").doc(currentTxData.sellerId);
+
+                const [buyerDoc, sellerDoc] = await Promise.all([
+                  transaction.get(buyerRef),
+                  transaction.get(sellerRef)
+                ]);
+
+                const buyerData = buyerDoc.data() || {};
+                const sellerData = sellerDoc.data() || {};
+
                 // 1. Mark transaction as completed (auto-released)
                 transaction.update(txDoc.ref, {
                   status: "completed",
@@ -660,49 +966,86 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
                   autoReleased: true
                 });
 
-                // 2. Escrow payout directly to seller balance
-                const sellerRef = db.collection("users").doc(currentTxData.sellerId);
+                // 2. Protect Platform: Enforce hold locks (24 hours standard, 48 hours for values >= 5000 KES)
+                const holdPeriodHours = currentTxData.amount >= 5000 ? 48 : 24;
+                const releaseTime = new Date();
+                releaseTime.setHours(releaseTime.getHours() + holdPeriodHours);
+
                 transaction.update(sellerRef, {
-                  escrowBalance: admin.firestore.FieldValue.increment(currentTxData.amount)
+                  pendingWithdrawalBalance: admin.firestore.FieldValue.increment(currentTxData.amount),
+                  completedPaymentsCount: admin.firestore.FieldValue.increment(1),
+                  updatedAt: new Date().toISOString()
                 });
 
-                // 3. Optional referral bonus for high-quality transactions (>= 1,000 KES to prevent referral circle fraud)
+                const holdLedgerRef = db.collection("hold_ledgers").doc();
+                transaction.set(holdLedgerRef, {
+                  userId: currentTxData.sellerId,
+                  transactionId: txId,
+                  amount: currentTxData.amount,
+                  releaseTime: releaseTime.toISOString(),
+                  status: "locked",
+                  createdAt: new Date().toISOString()
+                });
+
+                // 3. Optional referral bonus with collusion locks (>= 1,000 KES limits)
                 if (currentTxData.referralId && currentTxData.amount >= 1000) {
                   const referralSettingsRef = db.collection("settings").doc("referral");
                   const referralSettingsDoc = await transaction.get(referralSettingsRef);
                   const settings = referralSettingsDoc.data();
                   
                   if (settings?.isEnabled) {
-                    const referrerRef = db.collection("users").doc(currentTxData.referralId);
-                    transaction.update(referrerRef, {
-                      referralEarnings: admin.firestore.FieldValue.increment(settings.rewardAmount || 100)
-                    });
+                    const isSelfReferral = buyerData.referredBy === currentTxData.sellerId;
+                    const bFinger = buyerData.deviceFingerprint || "BUYER-EMPTY";
+                    const sFinger = sellerData.deviceFingerprint || "SELLER-EMPTY";
+                    const isDeviceCollusion = (bFinger !== "BUYER-EMPTY" && bFinger !== "SELLER-EMPTY" && bFinger === sFinger);
+                    const bIp = buyerData.lastActiveIp || "";
+                    const sIp = sellerData.lastActiveIp || "";
+                    const isIpCollusion = (bIp && sIp && bIp === sIp);
 
-                    // Notification record for the referrer
-                    const referrerNotificationRef = db.collection("notifications").doc();
-                    transaction.set(referrerNotificationRef, {
-                      userId: currentTxData.referralId,
-                      title: "Referral Reward (Auto-Release)",
-                      message: `You earned KES ${settings.rewardAmount || 100} because your referral completed a transaction.`,
-                      type: "success",
-                      read: false,
-                      createdAt: new Date().toISOString()
-                    });
+                    const isReferralFraud = isSelfReferral || isDeviceCollusion || isIpCollusion;
+
+                    if (isReferralFraud) {
+                      console.warn(`Referral payment BLOCKED (Auto-Release): Collusion check failed on transaction ${txId}. selfReferral=${isSelfReferral}, deviceCollusion=${isDeviceCollusion}, ipCollusion=${isIpCollusion}`);
+                      transaction.update(buyerRef, {
+                        fraudSuspicionScore: admin.firestore.FieldValue.increment(1),
+                        referralFraudAttempts: admin.firestore.FieldValue.increment(1)
+                      });
+                      transaction.update(sellerRef, {
+                        fraudSuspicionScore: admin.firestore.FieldValue.increment(1),
+                        referralFraudAttempts: admin.firestore.FieldValue.increment(1)
+                      });
+                    } else {
+                      const referrerRef = db.collection("users").doc(currentTxData.referralId);
+                      transaction.update(referrerRef, {
+                        referralEarnings: admin.firestore.FieldValue.increment(settings.rewardAmount || 100)
+                      });
+
+                      // Notification record for the referrer
+                      const referrerNotificationRef = db.collection("notifications").doc();
+                      transaction.set(referrerNotificationRef, {
+                        userId: currentTxData.referralId,
+                        title: "Referral Reward (Auto-Release)",
+                        message: `You earned KES ${settings.rewardAmount || 100} because your referral completed a transaction.`,
+                        type: "success",
+                        read: false,
+                        createdAt: new Date().toISOString()
+                      });
+                    }
                   }
                 }
 
-                // 4. Notify merchant of manual status payout
+                // 4. Notify merchant of automatic status payout and lock period
                 const sellerNotificationRef = db.collection("notifications").doc();
                 transaction.set(sellerNotificationRef, {
                   userId: currentTxData.sellerId,
-                  title: "Funds Auto-Released",
-                  message: `KES ${currentTxData.amount} has been auto-released into your dashboard balance for transaction ${txId}.`,
-                  type: "success",
+                  title: "Funds Auto-Released (On Hold)",
+                  message: `KES ${currentTxData.amount} has been auto-released into your pending holds folder for order ${txId}. It clears in ${holdPeriodHours} hours.`,
+                  type: "info",
                   read: false,
                   createdAt: new Date().toISOString()
                 });
 
-                // 5. Notify customer
+                // 2. Notify customer
                 const buyerNotificationRef = db.collection("notifications").doc();
                 transaction.set(buyerNotificationRef, {
                   userId: currentTxData.buyerId,
@@ -755,6 +1098,299 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
   runAutoReleaseJob().catch((err) => console.error("Boot Time Auto-Release Failure:", err));
 
   // API routes
+  // fintech-grade escrow completion and referral tracking engine
+  app.post("/api/escrow/complete", verifyUser, async (req: any, res: any) => {
+    const { transactionId } = req.body;
+    const userId = req.user.uid;
+
+    if (!transactionId) {
+      return res.status(400).json({ error: "Missing transactionId" });
+    }
+
+    try {
+      const txRef = db.collection("transactions").doc(transactionId);
+      
+      const result = await db.runTransaction(async (transaction) => {
+        const txDoc = await transaction.get(txRef);
+        if (!txDoc.exists) {
+          throw new Error("Transaction not found");
+        }
+
+        const txData = txDoc.data();
+        if (!txData) {
+          throw new Error("Transaction data is empty");
+        }
+
+        if (txData.status === "completed" || txData.status === "released") {
+          throw new Error("Transaction already completed or released");
+        }
+
+        let listingType: 'service' | 'goods' = 'service';
+        if (txData.listingId) {
+          const listingDoc = await transaction.get(db.collection("listings").doc(txData.listingId));
+          if (listingDoc.exists) {
+            const lData = listingDoc.data();
+            if (lData && (lData.type === 'product' || lData.type === 'goods')) {
+              listingType = 'goods';
+            }
+          }
+        }
+
+        const grossAmount = txData.amount || 0;
+        const commission = calculateCommission(listingType, grossAmount);
+        const netEarnings = Math.max(0, Math.round(grossAmount - commission));
+
+        const sellerId = txData.sellerId;
+        const buyerId = txData.buyerId;
+
+        const sellerRef = db.collection("users").doc(sellerId);
+        const buyerRef = db.collection("users").doc(buyerId);
+
+        const [sellerDoc, buyerDoc] = await Promise.all([
+          transaction.get(sellerRef),
+          transaction.get(buyerRef)
+        ]);
+
+        if (!sellerDoc.exists) {
+          throw new Error("Seller profile not found");
+        }
+        if (!buyerDoc.exists) {
+          throw new Error("Buyer profile not found");
+        }
+
+        const sellerData = sellerDoc.data() || {};
+        const buyerData = buyerDoc.data() || {};
+
+        // 1. Transaction Status completion
+        transaction.update(txRef, {
+          status: "completed",
+          commissionDeducted: commission,
+          netEarnings: netEarnings,
+          updatedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString()
+        });
+
+        // 2. Clear Vendor payouts and write dashboard indicators
+        const sellerPrevEarnings = sellerData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+        const newSellerEarnings = {
+          totalVolume: (sellerPrevEarnings.totalVolume || 0) + grossAmount,
+          withdrawableBalance: (sellerPrevEarnings.withdrawableBalance || 0) + netEarnings,
+          pendingHoldBalance: sellerPrevEarnings.pendingHoldBalance || 0
+        };
+
+        transaction.update(sellerRef, {
+          escrowBalance: admin.firestore.FieldValue.increment(netEarnings),
+          completedPaymentsCount: admin.firestore.FieldValue.increment(1),
+          earnings: newSellerEarnings,
+          updatedAt: new Date().toISOString()
+        });
+
+        // Write to vendor transaction log explicitly (Gross, platform commission, Net earnings added)
+        const dashboardLogRef = db.collection("dashboard_transaction_logs").doc();
+        transaction.set(dashboardLogRef, {
+          userId: sellerId,
+          transactionId: transactionId,
+          grossAmount: grossAmount,
+          commissionDeducted: commission,
+          netEarningsAdded: netEarnings,
+          type: "credit",
+          description: `Payout and Commission Settlement for completed transaction ${transactionId}`,
+          createdAt: new Date().toISOString()
+        });
+
+        // 3. Evaluate conditional multi-tiered referral trigger atomically
+        const referredBy = buyerData.referredBy;
+        const hasTriggeredReferral = buyerData.hasTriggeredReferral || false;
+        
+        let referralProcessed = false;
+        let referralReward = 0;
+        let referrerId = "";
+
+        if (grossAmount >= 1000 && referredBy && !hasTriggeredReferral && referredBy !== sellerId) {
+          referrerId = referredBy;
+          const referrerRef = db.collection("users").doc(referrerId);
+          const referrerDoc = await transaction.get(referrerRef);
+
+          if (referrerDoc.exists) {
+            const referrerData = referrerDoc.data() || {};
+            const successfulReferralsCount = referrerData.successfulReferrals || 0;
+
+            // Tiered referral payouts
+            referralReward = successfulReferralsCount < 5 ? 70 : 40;
+
+            const referrerPrevEarnings = referrerData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+            const newReferrerEarnings = {
+              totalVolume: referrerPrevEarnings.totalVolume || 0,
+              withdrawableBalance: (referrerPrevEarnings.withdrawableBalance || 0) + referralReward,
+              pendingHoldBalance: referrerPrevEarnings.pendingHoldBalance || 0
+            };
+
+            // Update Referrer profile metrics
+            transaction.update(referrerRef, {
+              successfulReferrals: admin.firestore.FieldValue.increment(1),
+              referralEarnings: admin.firestore.FieldValue.increment(referralReward),
+              escrowBalance: admin.firestore.FieldValue.increment(referralReward),
+              earnings: newReferrerEarnings,
+              updatedAt: new Date().toISOString()
+            });
+
+            // Mark buyer referral trigger as activated
+            transaction.update(buyerRef, {
+              hasTriggeredReferral: true,
+              updatedAt: new Date().toISOString()
+            });
+
+            // Trigger notification
+            const referrerNotifRef = db.collection("notifications").doc();
+            transaction.set(referrerNotifRef, {
+              userId: referrerId,
+              title: "Referral Reward Cleared!",
+              message: `Your referral relationship cleared a transaction. You earned KSh ${referralReward} credited to your withdrawable balance!`,
+              type: "success",
+              read: false,
+              createdAt: new Date().toISOString()
+            });
+
+            referralProcessed = true;
+          }
+        }
+
+        // Standard notifications
+        const sellerNotifRef = db.collection("notifications").doc();
+        transaction.set(sellerNotifRef, {
+          userId: sellerId,
+          title: "Order Cleared Successfully",
+          message: `Order ${transactionId} has cleared. KSh ${netEarnings} (after KSh ${commission} commission) added to withdrawable balance.`,
+          type: "success",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        const buyerNotifRef = db.collection("notifications").doc();
+        transaction.set(buyerNotifRef, {
+          userId: buyerId,
+          title: "Delivery Completed",
+          message: `You marked order ${transactionId} as completed. Service is settled.`,
+          type: "info",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        return {
+          transactionId,
+          grossAmount,
+          commissionDeducted: commission,
+          netEarningsAdded: netEarnings,
+          referralProcessed,
+          referralReward,
+          referrerId
+        };
+      });
+
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      console.error("Escrow complete API error:", err);
+      res.status(400).json({ error: err.message || "Failed to process escrow completeness transaction" });
+    }
+  });
+
+  // Client M-Pesa B2C instant cash-out proxy
+  app.post("/api/withdrawals/execute", verifyUser, async (req: any, res: any) => {
+    const { amount, phoneNumber } = req.body;
+    const userId = req.user.uid;
+
+    if (!amount || !phoneNumber) {
+      return res.status(400).json({ error: "Missing withdrawal amount or phoneNumber" });
+    }
+
+    const requestedAmount = Number(amount);
+    if (isNaN(requestedAmount) || requestedAmount <= 0) {
+      return res.status(400).json({ error: "Invalid requested withdrawal amount" });
+    }
+
+    if (requestedAmount <= 15) {
+      return res.status(400).json({ error: "Requested amount must be greater than the KSh 15 platform fee" });
+    }
+
+    try {
+      const userRef = db.collection("users").doc(userId);
+      
+      const payoutResult = await db.runTransaction(async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists) {
+          throw new Error("User profile not found");
+        }
+
+        const userData = userDoc.data() || {};
+        const withdrawableBalance = userData.earnings?.withdrawableBalance ?? userData.escrowBalance ?? 0;
+
+        if (withdrawableBalance < requestedAmount) {
+          throw new Error(`Insufficient funds. Your withdrawable balance is KSh ${withdrawableBalance.toLocaleString()}`);
+        }
+
+        const mpesaDispatchAmount = requestedAmount - 15;
+
+        // Mock Safaricom Daraja B2C API payout invocation block
+        const mockDarajaReceipt = "MPESA-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+        console.log(`[DARAJA B2C] Dispatching payment: PartyB=${phoneNumber}, PayloadAmount=${mpesaDispatchAmount}, Fee=15, Receipt=${mockDarajaReceipt}`);
+
+        // Deduct complete Requested Amount from both new and legacy balances
+        const prevEarnings = userData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+        const newEarnings = {
+          totalVolume: prevEarnings.totalVolume || 0,
+          withdrawableBalance: Math.max(0, (prevEarnings.withdrawableBalance || 0) - requestedAmount),
+          pendingHoldBalance: prevEarnings.pendingHoldBalance || 0
+        };
+
+        transaction.update(userRef, {
+          escrowBalance: admin.firestore.FieldValue.increment(-requestedAmount), 
+          earnings: newEarnings,
+          updatedAt: new Date().toISOString()
+        });
+
+        // Add to persistent records
+        const withdrawalRef = db.collection("withdrawals").doc();
+        transaction.set(withdrawalRef, {
+          userId,
+          amount: requestedAmount,
+          fee: 15,
+          actualPayout: mpesaDispatchAmount,
+          phoneNumber,
+          receiptNumber: mockDarajaReceipt,
+          status: "completed",
+          method: "mpesa",
+          createdAt: new Date().toISOString()
+        });
+
+        // Create transaction notification
+        const notificationRef = db.collection("notifications").doc();
+        transaction.set(notificationRef, {
+          userId,
+          title: "M-Pesa Cash-Out Completed",
+          message: `Your withdrawal of KSh ${requestedAmount} was successful. KSh 15 platform charge applied. KSh ${mpesaDispatchAmount} sent to ${phoneNumber}. MPesa Ref: ${mockDarajaReceipt}`,
+          type: "success",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        return {
+          withdrawalId: withdrawalRef.id,
+          receiptNumber: mockDarajaReceipt,
+          requestedAmount,
+          dispatchedAmount: mpesaDispatchAmount,
+          platformCharge: 15,
+          phoneNumber
+        };
+      });
+
+      res.json({ success: true, ...payoutResult });
+    } catch (err: any) {
+      console.error("Withdrawal execution error:", err);
+      res.status(400).json({ error: err.message || "Failed to execute Safaricom M-Pesa payout withdrawal" });
+    }
+  });
+
+  // API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
@@ -771,7 +1407,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     app.get("*", async (req, res, next) => {
       const url = req.originalUrl;
       try {
-        let template = fs.readFileSync(path.resolve(__dirname, "index.html"), "utf-8");
+        let template = fs.readFileSync(path.resolve(_dirname, "index.html"), "utf-8");
         template = await vite.transformIndexHtml(url, template);
         res.status(200).set({ "Content-Type": "text/html" }).end(template);
       } catch (e) {

@@ -40,6 +40,16 @@ export interface User {
   referredBy?: string;
   referralEarnings: number;
   escrowBalance: number;
+  pendingWithdrawalBalance?: number;
+  earnings?: {
+    totalVolume: number;
+    withdrawableBalance: number;
+    pendingHoldBalance: number;
+  };
+  successfulReferrals?: number;
+  hasTriggeredReferral?: boolean;
+  deviceFingerprint?: string;
+  lastActiveIp?: string;
   createdAt: string;
 }
 

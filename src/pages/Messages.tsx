@@ -11,7 +11,8 @@ import {
   updateDoc, 
   getDoc,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  increment
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
@@ -19,8 +20,9 @@ import { sendNotification } from '../lib/notifications';
 import { useAuth } from '../AuthContext';
 import { Message, Chat, User, Listing } from '../types';
 import { formatDistanceToNow } from 'date-fns';
-import { Send, User as UserIcon, Search, ArrowLeft, MoreVertical, MessageSquare } from 'lucide-react';
+import { Send, User as UserIcon, Search, ArrowLeft, MoreVertical, MessageSquare, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
+import { scanForBypassFraud } from '../lib/bypassScanner';
 
 const Messages = () => {
   const { user } = useAuth();
@@ -183,6 +185,9 @@ const Messages = () => {
     return () => unsubscribe();
   }, [selectedChatId, chats, user]);
 
+  // State to track if the current chat user triggered a bypass warning
+  const [showBypassWarning, setShowBypassWarning] = useState(false);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedChatId || !newMessage.trim()) return;
@@ -190,21 +195,42 @@ const Messages = () => {
     const messageText = newMessage.trim();
     setNewMessage('');
 
+    // Pre-flight anti-fraud scanner
+    const scanResult = scanForBypassFraud(messageText);
+
     try {
       const messageData = {
         chatId: selectedChatId,
         senderId: user.uid,
-        text: messageText,
-        createdAt: new Date().toISOString()
+        text: scanResult.maskedText,
+        createdAt: new Date().toISOString(),
+        ...(scanResult.isBlocked && {
+          flagged: true,
+          flagDetails: scanResult.foundPattern
+        })
       };
 
       await addDoc(collection(db, `chats/${selectedChatId}/messages`), messageData);
       
       // Update chat's last message and timestamp
       await updateDoc(doc(db, 'chats', selectedChatId), {
-        lastMessage: messageText,
+        lastMessage: scanResult.maskedText,
         updatedAt: new Date().toISOString()
       });
+
+      // Handle bypass triggers
+      if (scanResult.isBlocked) {
+        setShowBypassWarning(true);
+        toast.error("Bypass Detected! Please transact strictly within HudumaLink Escrow to prevent scams.", {
+          duration: 6000
+        });
+
+        // Increment user's fraud suspicion score in Firestore
+        await updateDoc(doc(db, 'users', user.uid), {
+          fraudSuspicionScore: increment(1),
+          updatedAt: new Date().toISOString()
+        }).catch(err => console.error("Error setting suspicion score:", err));
+      }
 
       // Notify recipient
       const currentChat = chats.find(c => c.id === selectedChatId);
@@ -212,7 +238,7 @@ const Messages = () => {
         await sendNotification(
           currentChat.otherUser.uid,
           'New Message',
-          `${user.displayName}: ${messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText}`,
+          `${user.displayName}: ${scanResult.maskedText.length > 50 ? scanResult.maskedText.substring(0, 50) + '...' : scanResult.maskedText}`,
           'info',
           `/messages?chatId=${selectedChatId}`
         );
@@ -330,6 +356,22 @@ const Messages = () => {
                   <MoreVertical className="w-5 h-5" />
                 </button>
               </div>
+
+              {/* Dynamic Security Warnings */}
+              {showBypassWarning && (
+                <div className="mx-6 mt-4 p-4 bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-200 rounded-2xl flex items-start gap-3 shadow-md">
+                  <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 text-xs">
+                    <p className="font-extrabold uppercase tracking-widest text-[10px] text-red-500 mb-1">Escrow Security Alert</p>
+                    <p className="leading-relaxed">
+                      You recently attempted to bypass the secure escrow system. Sharing direct mobile numbers, M-Pesa Till numbers, or personal social media handles (like WhatsApp) violates HudumaLink Ke's Anti-Fraud Terms. Your safety is only guaranteed when transacting within our system. Continued violations will lead to permanent account suspension.
+                    </p>
+                    <button onClick={() => setShowBypassWarning(false)} className="mt-2 text-[10px] font-bold underline hover:text-red-700 cursor-pointer">
+                      Acknowledge & Dismiss Warnings
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Messages Area */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4">

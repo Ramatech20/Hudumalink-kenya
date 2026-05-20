@@ -456,7 +456,10 @@ const Profile = () => {
                     {t('profile.withdraw')}
                   </button>
                 </div>
-                <p className="text-[10px] text-gray-500 mt-1">Funds from completed sales</p>
+                <div className="flex justify-between items-center mt-1 text-[10px]">
+                  <span className="text-gray-500">Withdrawable funds</span>
+                  <span className="text-amber-600 font-semibold font-mono">Hold: {formatPrice((user as any).pendingWithdrawalBalance || 0)}</span>
+                </div>
               </div>
               <div className="bg-secondary/5 p-4 rounded-2xl">
                 <div className="flex items-center text-secondary text-xs mb-1 font-bold">

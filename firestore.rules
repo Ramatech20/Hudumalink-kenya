@@ -281,6 +281,18 @@ service cloud.firestore {
       allow create: if isOwner(incoming().userId);
     }
     
+    match /hold_ledgers/{ledgerId} {
+      allow get: if isValidId(ledgerId) && (isOwner(resource.data.userId) || isAdmin());
+      allow list: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+      allow create, update, delete: if false;
+    }
+
+    match /dashboard_transaction_logs/{logId} {
+      allow get: if isValidId(logId) && (isOwner(resource.data.userId) || isAdmin());
+      allow list: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+      allow create, update, delete: if false;
+    }
+    
     match /reports/{reportId} {
       allow get: if isValidId(reportId) && (isSignedIn() && (resource.data.reporterId == request.auth.uid || isAdmin()));
       allow list: if isSignedIn() && (resource.data.reporterId == request.auth.uid || isAdmin());
