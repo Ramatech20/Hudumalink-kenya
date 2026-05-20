@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadWithFallback } from '../lib/upload-helper';
 import { toast } from 'sonner';
 import { Shield, Upload, Camera, CheckCircle, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -48,34 +48,12 @@ const KYC = () => {
 
     setLoading(true);
     try {
-      const frontRef = ref(storage, `kyc/${user.uid}/front_${Date.now()}`);
-      const selfieRef = ref(storage, `kyc/${user.uid}/selfie_${Date.now()}`);
-      
-      const uploadWithTimeout = async (storageRef: any, file: File) => {
-        const uploadPromise = uploadBytes(storageRef, file);
-        const timeoutPromise = new Promise<null>((_, reject) => 
-          setTimeout(() => reject(new Error(`Upload timed out for ${file.name}. Please check your connection and try again.`)), 180000)
-        );
-        const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
-        if (!snapshot) throw new Error(`Upload failed for ${file.name}`);
-        return snapshot;
-      };
-
-      const [frontSnap, selfieSnap] = await Promise.all([
-        uploadWithTimeout(frontRef, frontImage),
-        uploadWithTimeout(selfieRef, selfieImage)
-      ]);
-
-      const [frontUrl, selfieUrl] = await Promise.all([
-        getDownloadURL(frontSnap.ref),
-        getDownloadURL(selfieSnap.ref)
-      ]);
+      const frontUrl = await uploadWithFallback(`kyc/${user.uid}/front_${Date.now()}`, frontImage);
+      const selfieUrl = await uploadWithFallback(`kyc/${user.uid}/selfie_${Date.now()}`, selfieImage);
 
       let backUrl = '';
       if (backImage) {
-        const backRef = ref(storage, `kyc/${user.uid}/back_${Date.now()}`);
-        const backSnap = await uploadWithTimeout(backRef, backImage);
-        backUrl = await getDownloadURL(backSnap.ref);
+        backUrl = await uploadWithFallback(`kyc/${user.uid}/back_${Date.now()}`, backImage);
       }
 
       const userPath = `users/${user.uid}`;

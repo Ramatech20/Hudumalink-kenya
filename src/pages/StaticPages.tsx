@@ -374,6 +374,14 @@ export const Terms = () => (
                   <Zap className="w-6 h-6 text-secondary flex-shrink-0" />
                   <p><strong>Service Fees:</strong> Fees are clearly displayed before payment and are non-refundable once successfully completed.</p>
                 </div>
+                <div className="flex gap-4 border-t border-secondary/10 pt-6">
+                  <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0" />
+                  <p><strong>M-Pesa Limits & Wallets:</strong> Users are strictly responsible for ensuring their personal M-Pesa wallets have sufficient capacity to receive B2C payouts. HudumaLink is not liable for delayed payloads or API execution rejections caused by Safaricom consumer account holding limits (maximum account holding balance of KSh 500,000).</p>
+                </div>
+                <div className="flex gap-4 border-t border-secondary/10 pt-6">
+                  <ShoppingBag className="w-6 h-6 text-secondary flex-shrink-0" />
+                  <p><strong>Physical Inspection Mandate:</strong> For physical products, buyers are legally required to thoroughly inspect the item at the point of delivery BEFORE clicking "Confirm Delivery". Once a user clicks "Confirm", the escrow contract is legally finalized, funds are released immediately via our automated pipeline, and HudumaLink cannot recover or refund those funds.</p>
+                </div>
               </div>
             </div>
           </section>
@@ -393,14 +401,20 @@ export const Terms = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent">5</div>
-              Dispute Resolution
+              Dispute Resolution & Admissible Evidence
             </h2>
-            <div className="p-10 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6">
+            <div className="p-10 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm space-y-6">
+              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
                 HudumaLink acts as a neutral mediator. Decisions are made based on fairness, available evidence, and platform policies. Funds may be held until a resolution is reached.
               </p>
+              <div className="p-6 bg-amber-550/5 rounded-2xl border border-amber-500/10 text-xs text-amber-700 dark:text-amber-400 space-y-2">
+                <span className="font-bold block text-sm text-gray-900 dark:text-white">Strict Definition of Admissible Evidence:</span>
+                <p>
+                  To prevent fraud and fabricated screenshots, <strong>only communications, chat histories, and files uploaded directly within the HudumaLink platform portal</strong>, official system timestamps, and native file submissions are admissible as evidence in a dispute resolution. Screenshots of WhatsApp chats, external SMS logs, or off-platform communication links are completely inadmissible and will be discarded to ensure system integrity.
+                </p>
+              </div>
               <div className="p-6 bg-gray-50 dark:bg-neutral-800 rounded-2xl text-center italic font-bold text-gray-900 dark:text-white">
-                "Fairness is the core of our community."
+                "Fairness is the core of our community — backed by untampered internal session records."
               </div>
             </div>
           </section>
@@ -706,8 +720,10 @@ export const Safety = () => (
               </div>
               <div className="p-6 bg-gray-50 dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
                 <ShoppingBag className="w-8 h-8 text-accent mb-4" />
-                <h4 className="font-bold text-gray-900 dark:text-white mb-2">For Buyers</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">Confirm details, request photos, and only release payment when satisfied.</p>
+                <h4 className="font-bold text-gray-900 dark:text-white mb-2">For Buyers (Inspection Mandate)</h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                  For physical products, buyers are legally required to thoroughly inspect the item at the point of delivery <strong>BEFORE</strong> clicking "Confirm Delivery". Once you click "Confirm", the escrow is legally completed, funds are released immediately via our automated pipeline, and HudumaLink cannot recover or refund those payments.
+                </p>
               </div>
               <div className="p-6 bg-gray-50 dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
                 <Briefcase className="w-8 h-8 text-accent mb-4" />
@@ -756,6 +772,15 @@ export const Safety = () => (
                 </li>
               ))}
             </ul>
+          </div>
+
+          <div className="p-8 bg-red-650 text-white dark:bg-red-950/40 rounded-[2.5rem] shadow-xl border border-red-500/20">
+            <ShieldAlert className="w-12 h-12 mb-6 text-red-500" />
+            <h3 className="text-xl font-bold mb-3">Login & PIN Integrity 🔒</h3>
+            <p className="text-xs text-gray-200 dark:text-gray-300 leading-relaxed font-semibold">
+              HudumaLink Kenya will <strong>never</strong> ask you for your account login passwords or security tokens — they are your secret, never disclose them to anyone. 
+              Further, <strong>we will never ask you for your M-Pesa PIN</strong> under any circumstances. Anyone demanding these credentials is attempting fraud; please report them immediately.
+            </p>
           </div>
 
           <div className="p-8 bg-neutral-900 text-white rounded-[2.5rem] shadow-xl">

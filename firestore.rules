@@ -61,6 +61,9 @@ service cloud.firestore {
              data.title is string && data.title.size() <= 150 &&
              data.description is string && data.description.size() <= 5000 &&
              (!('price' in data) || data.price == null || (data.price is number && data.price >= 0)) &&
+             (!('originalPrice' in data) || data.originalPrice == null || (data.originalPrice is number && data.originalPrice >= 0)) &&
+             (!('offerText' in data) || data.offerText == null || data.offerText is string) &&
+             (!('giftText' in data) || data.giftText == null || data.giftText is string) &&
              data.type in ['product', 'service'] &&
              data.category is string &&
              data.status in ['active', 'pending', 'sold', 'removed', 'flagged'] &&
@@ -150,7 +153,7 @@ service cloud.firestore {
                          // Update details (not status)
                          (incoming().status == existing().status && 
                           incoming().diff(existing()).affectedKeys().hasOnly([
-                            'title', 'description', 'price', 'category', 'images', 
+                            'title', 'description', 'price', 'originalPrice', 'offerText', 'giftText', 'category', 'images', 
                             'location', 'contact', 'deliveryInfo', 'tipEnabled', 
                             'stock', 'sizes', 'specifications', 'aiModerationResult', 
                             'createdAt'
@@ -163,7 +166,7 @@ service cloud.firestore {
                        incoming().diff(existing()).affectedKeys().hasOnly(['viewCount']) &&
                        incoming().viewCount == existing().viewCount + 1
                      ));
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || isOwner(existing().authorId);
     }
 
     match /reviews/{reviewId} {

@@ -4,7 +4,7 @@ import { useLanguage } from '../LanguageContext';
 import { db, auth, storage, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError, handleValidationError } from '../lib/error-handler';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, increment, orderBy, limit } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadWithFallback } from '../lib/upload-helper';
 import { Listing, User, Transaction } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
 import { Link, useNavigate } from 'react-router-dom';
@@ -159,18 +159,7 @@ const Profile = () => {
 
     setUploading(true);
     try {
-      const storageRef = ref(storage, `profiles/${user.uid}`);
-      const uploadPromise = uploadBytes(storageRef, file);
-      
-      // Add a timeout to the upload
-      const timeoutPromise = new Promise<null>((_, reject) => 
-        setTimeout(() => reject(new Error('Upload timed out. Please check your connection and try again.')), 180000)
-      );
-
-      const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
-      if (!snapshot) throw new Error('Upload failed');
-
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      const downloadURL = await uploadWithFallback(`profiles/${user.uid}`, file);
       
       setEditData(prev => ({ ...prev, photoURL: downloadURL }));
       
@@ -755,7 +744,7 @@ const Profile = () => {
                               {t('profile.mark_sold')}
                             </button>
                           )}
-                          <Link to={`/listing/${listing.id}`} className="p-2 text-gray-400 hover:text-primary transition-colors">
+                          <Link to={`/listing/${listing.id}?edit=true`} className="p-2 text-gray-400 hover:text-primary transition-colors">
                             <Edit3 className="w-5 h-5" />
                           </Link>
                           <button 

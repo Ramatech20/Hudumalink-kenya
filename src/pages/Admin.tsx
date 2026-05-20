@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy, increment, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy, increment, limit, deleteDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
@@ -29,6 +29,7 @@ const Admin = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'listings' | 'users' | 'reports' | 'kyc' | 'disputes' | 'withdrawals' | 'appeals' | 'promotions'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [userFilter, setUserFilter] = useState<'all' | 'unverified' | 'flagged' | 'provider' | 'seller'>('all');
+  const [listingFilter, setListingFilter] = useState<'pending' | 'active' | 'removed' | 'all'>('pending');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [stats, setStats] = useState({
@@ -103,7 +104,7 @@ const Admin = () => {
     if (isAdmin) {
       fetchTabData();
     }
-  }, [activeTab, isAdmin]);
+  }, [activeTab, listingFilter, userFilter, isAdmin]);
 
   const fetchOverviewStats = async () => {
     try {
@@ -176,12 +177,21 @@ const Admin = () => {
           await fetchOverviewStats();
           break;
         case 'listings':
-          const listingsQuery = query(collection(db, 'listings'), where('status', '==', 'pending'));
+          let listingsQuery;
+          if (listingFilter === 'pending') {
+            listingsQuery = query(collection(db, 'listings'), where('status', '==', 'pending'));
+          } else if (listingFilter === 'active') {
+            listingsQuery = query(collection(db, 'listings'), where('status', '==', 'active'));
+          } else if (listingFilter === 'removed') {
+            listingsQuery = query(collection(db, 'listings'), where('status', '==', 'removed'));
+          } else {
+            listingsQuery = query(collection(db, 'listings'), limit(100));
+          }
           let listingsSnapshot;
           try {
             listingsSnapshot = await getDocs(listingsQuery);
           } catch (error: any) {
-            handleFirestoreError(error, OperationType.LIST, 'listings/pending');
+            handleFirestoreError(error, OperationType.LIST, `listings/${listingFilter}`);
             throw error;
           }
           setPendingListings(listingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing)));
@@ -527,6 +537,21 @@ const Admin = () => {
     }
   };
 
+  const deleteListing = async (id: string) => {
+    if (!window.confirm("Are you sure you want to PERMANENTLY delete this listing from HudumaLink Ke? This action cannot be undone.")) return;
+    
+    setIsDataLoading(true);
+    try {
+      await deleteDoc(doc(db, 'listings', id));
+      toast.success('Listing permanently deleted!');
+      setPendingListings(prev => prev.filter(l => l.id !== id));
+    } catch (error: any) {
+      handleFirestoreError(error, OperationType.DELETE, `listings/${id}`);
+    } finally {
+      setIsDataLoading(false);
+    }
+  };
+
   const verifyUser = async (uid: string) => {
     try {
       try {
@@ -550,6 +575,23 @@ const Admin = () => {
       if (!error.operationType) {
         handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
       }
+    }
+  };
+
+  const deleteUser = async (uid: string) => {
+    if (!window.confirm("Are you sure you want to PERMANENTLY delete this user from HudumaLink Ke? Their profile document will be removed and this action is irreversible!")) return;
+    
+    setIsDataLoading(true);
+    try {
+      await deleteDoc(doc(db, 'users', uid));
+      toast.success('User permanently deleted!');
+      setUnverifiedUsers(prev => prev.filter(u => u.uid !== uid));
+      setShowUserModal(false);
+      fetchTabData();
+    } catch (error: any) {
+      handleFirestoreError(error, OperationType.DELETE, `users/${uid}`);
+    } finally {
+      setIsDataLoading(false);
     }
   };
 
@@ -1355,18 +1397,29 @@ const Admin = () => {
               <Eye className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
             
-            <div className="flex gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+              <select 
+                value={listingFilter}
+                onChange={(e) => setListingFilter(e.target.value as any)}
+                className="px-4 py-2 bg-gray-50 dark:bg-neutral-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none font-bold text-gray-700 dark:text-gray-300"
+              >
+                <option value="pending">Pending Approval</option>
+                <option value="active">Active (Approved)</option>
+                <option value="removed">Removed / Rejected</option>
+                <option value="all">Every Listing</option>
+              </select>
+
               <button 
                 onClick={() => handleBulkAction('approve')}
                 disabled={selectedItems.length === 0}
-                className="flex-1 md:flex-none px-4 py-2 bg-green-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-green-600 transition-colors"
+                className="px-4 py-2 bg-green-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-green-600 transition-colors"
               >
                 Approve Selected ({selectedItems.length})
               </button>
               <button 
                 onClick={() => handleBulkAction('reject')}
                 disabled={selectedItems.length === 0}
-                className="flex-1 md:flex-none px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-600 transition-colors"
+                className="px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-600 transition-colors"
               >
                 Reject Selected
               </button>
@@ -1412,6 +1465,14 @@ const Admin = () => {
                     <span className="bg-gray-100 dark:bg-neutral-800 px-2 py-1 rounded uppercase font-bold text-xs">{listing.type}</span>
                     <span>{listing.category}</span>
                     <span>{listing.location.town}, {listing.location.county}</span>
+                    <span className={cn(
+                      "px-2 py-1 rounded text-xs font-bold uppercase",
+                      listing.status === 'active' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                      listing.status === 'pending' ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
+                      "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                    )}>
+                      Status: {listing.status || 'pending'}
+                    </span>
                     {listing.aiModerationResult && (
                       <span className={`px-2 py-1 rounded text-xs font-bold ${
                         listing.aiModerationResult.isSafe 
@@ -1431,17 +1492,27 @@ const Admin = () => {
                   >
                     <ExternalLink className="w-4 h-4 mr-2" /> View
                   </Link>
+                  {listing.status !== 'active' && (
+                    <button 
+                      onClick={() => approveListing(listing.id)}
+                      className="flex-grow md:w-full px-4 py-2 bg-green-500 text-white rounded-xl font-bold text-sm hover:bg-green-600 transition-colors flex items-center justify-center cursor-pointer"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" /> Approve
+                    </button>
+                  )}
+                  {listing.status !== 'removed' && (
+                    <button 
+                      onClick={() => rejectListing(listing.id)}
+                      className="flex-grow md:w-full px-4 py-2 bg-amber-500 text-white rounded-xl font-bold text-sm hover:bg-amber-600 transition-colors flex items-center justify-center cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4 mr-2" /> {listing.status === 'active' ? 'Deactivate' : 'Reject'}
+                    </button>
+                  )}
                   <button 
-                    onClick={() => approveListing(listing.id)}
-                    className="flex-grow md:w-full px-4 py-2 bg-green-500 text-white rounded-xl font-bold text-sm hover:bg-green-600 transition-colors flex items-center justify-center"
+                    onClick={() => deleteListing(listing.id)}
+                    className="flex-grow md:w-full px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 transition-colors flex items-center justify-center cursor-pointer"
                   >
-                    <CheckCircle className="w-4 h-4 mr-2" /> Approve
-                  </button>
-                  <button 
-                    onClick={() => rejectListing(listing.id)}
-                    className="flex-grow md:w-full px-4 py-2 bg-red-500 text-white rounded-xl font-bold text-sm hover:bg-red-600 transition-colors flex items-center justify-center"
-                  >
-                    <XCircle className="w-4 h-4 mr-2" /> Reject
+                    <Trash2 className="w-4 h-4 mr-2" /> Delete
                   </button>
                 </div>
               </div>
@@ -1531,24 +1602,75 @@ const Admin = () => {
                       <AlertTriangle className="w-3 h-3 mr-1" /> Flagged: {user.flagReason || 'Excessive Cancellations'}
                     </div>
                   )}
-                  <div className="flex gap-2 w-full">
-                    {!user.isVerified && (
+                  <div className="flex flex-col gap-2 w-full mt-2">
+                    <div className="flex gap-2 w-full">
+                      {!user.isVerified && (
+                        <button 
+                          onClick={() => verifyUser(user.uid)}
+                          className="flex-1 px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center cursor-pointer"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" /> Verify
+                        </button>
+                      )}
                       <button 
-                        onClick={() => verifyUser(user.uid)}
-                        className="flex-1 px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowUserModal(true);
+                        }}
+                        className="flex-1 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 rounded-xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
                       >
-                        <CheckCircle className="w-4 h-4 mr-2" /> Verify
+                        Details
                       </button>
-                    )}
-                    <button 
-                      onClick={() => {
-                        setSelectedUser(user);
-                        setShowUserModal(true);
-                      }}
-                      className="flex-1 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 rounded-xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-neutral-700 transition-colors"
-                    >
-                      Details
-                    </button>
+                    </div>
+                    <div className="flex gap-2 w-full">
+                      <button 
+                        onClick={() => {
+                          if (user.isFlagged) {
+                            unflagUser(user.uid);
+                          } else {
+                            const reason = window.prompt("Enter reason for flagging this user:");
+                            if (reason !== null) {
+                              const proceedFlag = async () => {
+                                try {
+                                  await updateDoc(doc(db, 'users', user.uid), {
+                                    isFlagged: true,
+                                    flagReason: reason || 'Violation of Platform Rules',
+                                    updatedAt: new Date().toISOString()
+                                  });
+                                  toast.success('User flagged');
+                                  await sendNotification(
+                                    user.uid,
+                                    'Account Flagged',
+                                    `Your account has been flagged by an admin. Reason: ${reason || 'Violation of Platform Rules'}.`,
+                                    'error',
+                                    '/profile'
+                                  );
+                                  fetchTabData();
+                                } catch (e: any) {
+                                  handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
+                                }
+                              };
+                              proceedFlag();
+                            }
+                          }
+                        }}
+                        className={cn(
+                          "flex-1 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer",
+                          user.isFlagged 
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200" 
+                            : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 hover:bg-yellow-200"
+                        )}
+                      >
+                        <Flag className="w-3.5 h-3.5" /> {user.isFlagged ? "Unflag" : "Flag"}
+                      </button>
+                      <button 
+                        onClick={() => deleteUser(user.uid)}
+                        className="px-3 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-xl font-bold text-xs hover:bg-red-200 hover:text-red-850 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center cursor-pointer"
+                        title="Delete User permanently from HudumaLink"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -2064,7 +2186,7 @@ const Admin = () => {
                             verifyUser(selectedUser.uid);
                             setShowUserModal(false);
                           }}
-                          className="flex-1 py-2 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-all"
+                          className="flex-1 py-2 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-all cursor-pointer"
                         >
                           Verify User
                         </button>
@@ -2075,7 +2197,7 @@ const Admin = () => {
                             approveKYC(selectedUser.uid);
                             setShowUserModal(false);
                           }}
-                          className="flex-1 py-2 bg-green-500 text-white rounded-xl font-bold text-sm hover:bg-green-600 transition-all"
+                          className="flex-1 py-2 bg-green-500 text-white rounded-xl font-bold text-sm hover:bg-green-600 transition-all cursor-pointer"
                         >
                           Approve KYC
                         </button>
@@ -2089,7 +2211,7 @@ const Admin = () => {
                         </div>
                         <button 
                           onClick={() => unflagUser(selectedUser.uid)}
-                          className="w-full py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition-all shadow-lg shadow-green-500/20"
+                          className="w-full py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition-all shadow-lg shadow-green-500/20 cursor-pointer"
                         >
                           Unflag Account
                         </button>
@@ -2105,12 +2227,20 @@ const Admin = () => {
                         />
                         <button 
                           onClick={() => flagUser(selectedUser.uid)}
-                          className="w-full py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                          className="w-full py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 cursor-pointer"
                         >
                           Flag Account
                         </button>
                       </div>
                     )}
+                    <div className="mt-4 pt-4 border-t border-red-200 dark:border-red-900/20">
+                      <button 
+                        onClick={() => deleteUser(selectedUser.uid)}
+                        className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" /> Permanent Delete User
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

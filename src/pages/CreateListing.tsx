@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc, query, where, getCountFromServer } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { uploadWithFallback } from '../lib/upload-helper';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { KENYAN_COUNTIES, CATEGORIES, TOWNS } from '../constants';
@@ -24,6 +24,9 @@ const CreateListing = () => {
     title: '',
     description: '',
     price: '',
+    originalPrice: '',
+    offerText: '',
+    giftText: '',
     type: 'product' as 'product' | 'service',
     category: '',
     county: '',
@@ -172,18 +175,7 @@ const CreateListing = () => {
 
   const uploadImages = async (): Promise<string[]> => {
     const uploadPromises = selectedFiles.map(async (file) => {
-      const storageRef = ref(storage, `listings/${user?.uid}/${Date.now()}-${file.name}`);
-      const uploadPromise = uploadBytes(storageRef, file);
-      
-      // Add a timeout to each upload (increased to 180s)
-      const timeoutPromise = new Promise<null>((_, reject) => 
-        setTimeout(() => reject(new Error(`Upload timed out for ${file.name}. Please check your connection and try again.`)), 180000)
-      );
-
-      const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
-      if (!snapshot) throw new Error(`Upload failed for ${file.name}`);
-      
-      return getDownloadURL(snapshot.ref);
+      return uploadWithFallback(`listings/${user?.uid}/${Date.now()}-${file.name}`, file);
     });
     return Promise.all(uploadPromises);
   };
@@ -239,6 +231,9 @@ const CreateListing = () => {
         title: formData.title,
         description: formData.description,
         price: formData.price ? parseFloat(formData.price) : null,
+        originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : null,
+        offerText: formData.offerText || null,
+        giftText: formData.giftText || null,
         type: formData.type,
         category: formData.category,
         images: imageUrls,
@@ -431,6 +426,28 @@ const CreateListing = () => {
                     />
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest flex items-center justify-between">
+                    <span>Original Price (Was)</span>
+                    {formData.originalPrice && formData.price && parseFloat(formData.originalPrice) > parseFloat(formData.price) && (
+                      <span className="text-[10px] bg-red-500/10 text-red-600 font-extrabold px-1.5 py-0.5 rounded">
+                        -{Math.round(((parseFloat(formData.originalPrice) - parseFloat(formData.price)) / parseFloat(formData.originalPrice)) * 100)}%
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">KES</span>
+                    <input 
+                      type="number" 
+                      placeholder="Before discount (optional)"
+                      className="w-full pl-14 pr-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                      value={formData.originalPrice}
+                      onChange={(e) => setFormData({...formData, originalPrice: e.target.value})}
+                    />
+                  </div>
+                </div>
+
                 {formData.type === 'product' && (
                   <div>
                     <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Stock Level <span className="text-red-500">*</span></label>
@@ -444,6 +461,28 @@ const CreateListing = () => {
                     />
                   </div>
                 )}
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Special Offer / Promo (Optional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. SAVE20 or Buy 2 Get 1 Free"
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                    value={formData.offerText}
+                    onChange={(e) => setFormData({...formData, offerText: e.target.value})}
+                  />
+                </div>
+
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Free Gift with Purchase (Optional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Free dynamic protection case & fast-charging pad included!"
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                    value={formData.giftText}
+                    onChange={(e) => setFormData({...formData, giftText: e.target.value})}
+                  />
+                </div>
               </div>
 
               <div>

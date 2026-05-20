@@ -90,6 +90,9 @@ export interface Listing {
     deliveryTimeFrame?: string;
   };
   tipEnabled?: boolean;
+  originalPrice?: number;
+  offerText?: string;
+  giftText?: string;
   createdAt: string;
 }
 
