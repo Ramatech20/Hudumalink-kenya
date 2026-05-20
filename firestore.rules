@@ -209,8 +209,13 @@ service cloud.firestore {
                     incoming().buyerId == request.auth.uid && 
                     incoming().status == 'pending' && 
                     incoming().amount > 0 &&
-                    // Ensure amount >= listing price (if listing doesn't have tips enabled)
-                    incoming().amount >= get(/databases/$(database)/documents/listings/$(incoming().listingId)).data.price;
+                    (
+                      // Promotion transaction bypasses listing price check
+                      ('type' in incoming() && incoming().type == 'promotion') ||
+                      // Standard transactions check price if listing exists
+                      (!exists(/databases/$(database)/documents/listings/$(incoming().listingId)) ||
+                       incoming().amount >= get(/databases/$(database)/documents/listings/$(incoming().listingId)).data.price)
+                    );
       
       allow update: if isValidId(transactionId) && (
         isAdmin() || 

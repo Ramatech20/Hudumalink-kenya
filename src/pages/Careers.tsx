@@ -35,7 +35,7 @@ const jobs: Job[] = [
   {
     id: '2',
     title: 'Customer Experience Lead',
-    location: 'Nairobi',
+    location: 'Eldoret',
     type: 'Full-time',
     mode: 'Hybrid',
     description: 'As our Customer Experience Lead, you will define how HudumaLink interacts with its users. You will manage a growing team of support agents and drive customer satisfaction.',
@@ -67,7 +67,7 @@ const jobs: Job[] = [
   {
     id: '4',
     title: 'Operations Coordinator',
-    location: 'Nairobi',
+    location: 'Eldoret',
     type: 'Full-time',
     mode: 'Hybrid',
     description: 'Ensure the smooth day-to-day operation of the marketplace. You will handle logistics partnerships, seller onboarding, and dispute mediation oversight.',
@@ -99,7 +99,7 @@ const jobs: Job[] = [
   {
     id: '6',
     title: 'Community Manager',
-    location: 'Nairobi / Remote',
+    location: 'Eldoret',
     type: 'Full-time',
     mode: 'Hybrid',
     description: 'Build and nurture our seller and buyer communities. You will organize events, manage forums, and act as the voice of our users within the company.',
@@ -147,7 +147,7 @@ const jobs: Job[] = [
   {
     id: '9',
     title: 'Sales & Partnerships Executive',
-    location: 'Nairobi (Field)',
+    location: 'Eldoret (Field)',
     type: 'Full-time',
     mode: 'Hybrid',
     description: 'Onboard high-quality sellers and establish partnerships with logistics and finance providers. You will be the face of HudumaLink in the field.',
@@ -163,7 +163,7 @@ const jobs: Job[] = [
   {
     id: '10',
     title: 'Legal & Compliance Officer',
-    location: 'Nairobi',
+    location: 'Eldoret',
     type: 'Part-time / Contract',
     mode: 'Hybrid',
     description: 'Ensure HudumaLink complies with Kenyan laws, including the Data Protection Act and consumer protection regulations. You will draft contracts and manage legal disputes.',
@@ -265,8 +265,8 @@ const Careers = () => {
           <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white dark:from-neutral-900 to-transparent z-10" />
           
           <motion.div 
-            initial={{ x: "-100%" }}
-            animate={{ x: "100%" }}
+            initial={{ x: "100%" }}
+            animate={{ x: "-100%" }}
             transition={{ 
               repeat: Infinity, 
               duration: 20, 

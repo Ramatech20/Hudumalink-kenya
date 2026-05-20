@@ -907,8 +907,6 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
   const runAutoReleaseJob = async (): Promise<{ processedCount: number; errorsCount: number }> => {
     console.log("Running scheduled 72-hour escrow auto-release routine...");
     const limitCount = 100;
-    let lastDoc: admin.firestore.QueryDocumentSnapshot | null = null;
-    let hasMore = true;
     let processedCount = 0;
     let errorsCount = 0;
 
@@ -916,23 +914,13 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     seventyTwoHoursAgo.setHours(seventyTwoHoursAgo.getHours() - 72);
     const cutoffIso = seventyTwoHoursAgo.toISOString();
 
-    while (hasMore) {
-      try {
-        let query = db.collection("transactions")
-          .where("status", "==", "delivered")
-          .orderBy("updatedAt")
-          .limit(limitCount);
+    try {
+      const snapshot = await db.collection("transactions")
+        .where("status", "==", "delivered")
+        .limit(limitCount)
+        .get();
 
-        if (lastDoc) {
-          query = query.startAfter(lastDoc);
-        }
-
-        const snapshot = await query.get();
-        if (snapshot.empty) {
-          hasMore = false;
-          break;
-        }
-
+      if (!snapshot.empty) {
         for (const txDoc of snapshot.docs) {
           const txData = txDoc.data();
           const updatedAt = txData.updatedAt || txData.createdAt;
@@ -1063,16 +1051,9 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
             }
           }
         }
-
-        if (snapshot.docs.length < limitCount) {
-          hasMore = false;
-        } else {
-          lastDoc = snapshot.docs[snapshot.docs.length - 1];
-        }
-      } catch (queryError) {
-        console.error("Auto-release batched query execution error:", queryError);
-        hasMore = false;
       }
+    } catch (queryError) {
+      console.error("Auto-release batched query execution error:", queryError);
     }
 
     console.log(`Auto-release complete. Processed: ${processedCount}, Errors: ${errorsCount}`);
