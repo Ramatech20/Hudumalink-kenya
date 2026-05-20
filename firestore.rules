@@ -188,9 +188,19 @@ service cloud.firestore {
       }
     }
 
-    match /transactions/{transactionId} {
-      allow get: if isValidId(transactionId) && isSignedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
+     match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (
+        resource.data.buyerId == request.auth.uid || 
+        resource.data.sellerId == request.auth.uid || 
+        isAdmin()
+      );
+      
+      // Enforce strict identity constraints on collection query listings to prevent cross-tenant data leaks and scrapers
+      allow list: if isSignedIn() && (
+        (resource.data.buyerId == request.auth.uid) || 
+        (resource.data.sellerId == request.auth.uid) || 
+        isAdmin()
+      );
       
       allow create: if isVerified() && isValidId(transactionId) && 
                     incoming().buyerId == request.auth.uid && 

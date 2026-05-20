@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
-import { db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { db, auth, storage, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError, handleValidationError } from '../lib/error-handler';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, increment, orderBy, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -272,11 +272,14 @@ const Profile = () => {
 
     setSubmittingWithdraw(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const response = await fetch('/api/withdrawals/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
-          userId: user.uid,
           amount,
           method: withdrawMethod,
           details: withdrawMethod === 'mpesa' 

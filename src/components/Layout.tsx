@@ -349,6 +349,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <ul className="mt-4 space-y-2">
                 <li><Link to="/terms" className="text-gray-400 hover:text-white transition-colors">Terms of Service</Link></li>
                 <li><Link to="/privacy" className="text-gray-400 hover:text-white transition-colors">Privacy Policy</Link></li>
+                <li><Link to="/escrow-policy" className="text-gray-400 hover:text-white transition-colors">Escrow Policy</Link></li>
+                <li><Link to="/cookies" className="text-gray-400 hover:text-white transition-colors">Cookie Notice</Link></li>
                 <li><Link to="/safety" className="text-gray-400 hover:text-white transition-colors">Safety Tips</Link></li>
               </ul>
             </div>

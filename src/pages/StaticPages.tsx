@@ -1037,20 +1037,253 @@ export const Contact = () => {
               </div>
             </div>
 
-            <div className="p-10 bg-primary text-white rounded-[2.5rem] shadow-xl shadow-primary/20">
-              <h3 className="text-2xl font-bold mb-4">Follow Us</h3>
-              <p className="text-white/80 mb-8">Stay updated with the latest news and features.</p>
-              <div className="flex gap-4">
-                {[<Facebook />, <Twitter />, <Instagram />, <MessageCircle />].map((icon, i) => (
-                  <button key={i} className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition-all">
-                    {React.cloneElement(icon as React.ReactElement<any>, { className: "w-6 h-6" })}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
+export const EscrowPolicy = () => (
+  <div className="bg-white dark:bg-neutral-950 transition-colors">
+    {/* Hero Section */}
+    <div className="relative py-24 overflow-hidden">
+      <div className="absolute inset-0 bg-primary/5 dark:bg-primary/10 -skew-y-6 origin-top-left transform scale-110"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative text-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="inline-flex items-center justify-center w-20 h-20 bg-primary/10 rounded-3xl text-primary mb-8"
+        >
+          <Handshake className="w-10 h-10" />
+        </motion.div>
+        <h1 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
+          Escrow, Refund & <span className="text-primary">Dispute Policy</span> 🤝
+        </h1>
+        <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto leading-relaxed">
+          The legal and technical framework governing M-Pesa payments, escrow holds, dispute resolutions, and administration on HudumaLink Kenya.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
+          <span>Effective Date: May 20, 2026</span>
+          <span>•</span>
+          <span>Jurisdiction: Eldoret, Kenya</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
+        <div className="lg:col-span-2 space-y-16">
+          
+          <section id="deposit-phase">
+            <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-4">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">1</div>
+              The Safe Deposit Phase (M-Pesa STK Push)
+            </h2>
+            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
+              <p className="text-gray-650 dark:text-gray-300 leading-relaxed text-base">
+                When a buyer initiates a purchase or hires a service provider, payment is collected via a secure <strong>M-Pesa STK Push</strong>. 
+                Upon a successful Safaricom transaction, the funds enter the neutral, secure <strong>HudumaLink Escrow Ledger</strong>.
+              </p>
+              <div className="p-6 bg-white dark:bg-neutral-950 rounded-2xl border border-gray-200 dark:border-neutral-800 flex gap-4 items-start">
+                <ShieldCheck className="w-6 h-6 text-green-500 flex-shrink-0 mt-1" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <strong className="text-gray-900 dark:text-white block mb-1">Neutral Custodian Rule</strong>
+                  These funds are legally locked inside the HudumaLink ledger as custody. Under no circumstances can the seller/provider access, borrow, or draw down on these funds prior to delivery validation, and buyers cannot double-spend or retreat on active contracts.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section id="auto-release">
+            <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-4">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">2</div>
+              The 72-Hour Auto-Release Latch
+            </h2>
+            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
+              <p className="text-gray-650 dark:text-gray-300 leading-relaxed text-base">
+                Once a product is dispatched or a service is completed, the seller/provider marks the transaction status as <strong className="text-primary">"Delivered"</strong>. 
+                This action invokes an absolute, deterministic cryptographic and legal countdown.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-6 bg-amber-500/5 rounded-2xl border border-amber-500/10">
+                  <span className="font-bold text-gray-900 dark:text-white block mb-1">Absolute 72-Hour Window</span>
+                  <p className="text-xs text-gray-550 dark:text-gray-400">
+                    The buyer must either click <strong>"Confirm Delivery"</strong> (to release the escrow funds directly to the provider's wallet balance) or click <strong>"File Dispute"</strong> within exactly <strong>72 hours</strong>.
+                  </p>
+                </div>
+                <div className="p-6 bg-red-500/5 rounded-2xl border border-red-500/10">
+                  <span className="font-bold text-gray-900 dark:text-white block mb-1">Irreversible Auto-Release</span>
+                  <p className="text-xs text-gray-550 dark:text-gray-400">
+                    If the buyer takes no action within 72 hours, the background auto-release routine will execute automatically, releasing the escrow balance to the seller's wallet. Once executed, auto-releases are legally and technically final and cannot be reverted or disputed.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="immutable-lock">
+            <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-4">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">3</div>
+              The Immutable Contract Lock
+            </h2>
+            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
+              <p className="text-gray-650 dark:text-gray-300 leading-relaxed text-base">
+                To eliminate payment defaults, buyer fraud, and bad-faith cancelations, certain statuses create an <strong>immutable contract lock</strong>:
+              </p>
+              <ul className="space-y-3">
+                <li className="flex gap-3 text-sm text-gray-500 dark:text-gray-400">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <span>Once the seller claims delivery, the buyer is technically barred from unilaterally canceling the order or demanding self-service refunds.</span>
+                </li>
+                <li className="flex gap-3 text-sm text-gray-500 dark:text-gray-400">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <span>Sellers are bound to deliver exactly what was specified in the marketplace listing or in communications on the platform. Any off-platform modifications violate these terms.</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section id="disputes">
+            <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-4">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">4</div>
+              Dispute Resolution & Administrative Override
+            </h2>
+            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-6">
+              <p className="text-gray-650 dark:text-gray-300 leading-relaxed text-base">
+                If the buyer files a dispute, the funds remain frozen in the escrow locker. Both parties will be prompted to submit valid physical or digital proofs of execution or non-execution (e.g., GPS coordination photos, client chats, service logs, sign-off forms) within <strong>48 hours</strong>.
+              </p>
+              <div className="p-6 bg-red-500/5 border border-red-500/20 text-red-700 dark:text-red-400 rounded-2xl">
+                <span className="font-bold block mb-1 uppercase tracking-wider text-xs flex items-center gap-2">
+                  <Scale className="w-4 h-4" /> Legal Administrative Override
+                </span>
+                <p className="text-xs leading-relaxed mt-1">
+                  HudumaLink Kenya acts as a neutral, third-party binding arbiter. Based on the objective evidence presented, HudumaLink reserves the absolute legal right to perform an <strong>administrative override</strong>. This override will either programmatically trigger a payout to the seller or return a B2C M-Pesa refund to the buyer. HudumaLink's final decision is contractually binding.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section id="fees">
+            <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-4">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">5</div>
+              Non-Refundable Platform and Payment Fees
+            </h2>
+            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
+              <p className="text-gray-620 dark:text-gray-300 leading-relaxed text-base">
+                Safaricom channels and automated systems impose transactional and ledger operation fees. 
+                Our commission fee structured to power HudumaLink escrow custody is non-refundable.
+              </p>
+              <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
+                <li className="flex gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                  <span>The 2% HudumaLink administrative escrow fee is non-refundable upon successful delivery.</span>
+                </li>
+                <li className="flex gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                  <span>Standard Safaricom M-Pesa transaction rates for STK Push and B2C payouts are fully borne by the respective contracting users and are consumed instantly upon transit.</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-8">
+          <div className="p-8 bg-neutral-900 text-white rounded-[2.5rem] border border-neutral-800 shadow-xl">
+            <Scale className="w-12 h-12 text-primary mb-6" />
+            <h3 className="text-xl font-bold mb-4">Kenyan Escrow Adherence</h3>
+            <p className="text-gray-400 text-xs leading-relaxed mb-6">
+              This policy complies with Section 79 of the <strong>Kenya Information and Communications Act (KICA)</strong> and Chapter III of the <strong>Kenyan Contract Act</strong>, forming a valid digital escrow trust.
+            </p>
+            <div className="p-4 bg-white/5 rounded-2xl text-[10px] text-gray-500 font-mono tracking-wider uppercase">
+              HLK-ESCROW-2026-V1
+            </div>
+          </div>
+
+          <div className="p-8 bg-white dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800">
+            <h4 className="font-bold text-gray-900 dark:text-white mb-2">Need Dispute Help?</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+              If an order has gone awry, please immediately notify our specialized support desk with your active Transaction ID.
+            </p>
+            <Link to="/contact" className="mt-4 text-xs font-bold text-primary hover:underline block">Contact Support desk →</Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+export const Cookies = () => (
+  <div className="bg-white dark:bg-neutral-950 transition-colors">
+    {/* Hero Section */}
+    <div className="relative py-24 overflow-hidden">
+      <div className="absolute inset-0 bg-primary/5 dark:bg-primary/10 -skew-y-3 origin-top-left transform scale-105"></div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative text-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="inline-flex items-center justify-center w-20 h-20 bg-primary/10 rounded-3xl text-primary mb-8"
+        >
+          <Eye className="w-10 h-10" />
+        </motion.div>
+        <h1 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
+          Cookie & <span className="text-primary">Tracking Notice</span> 🍪
+        </h1>
+        <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
+          How HudumaLink Kenya employs local storage and browser cookies to defend and host secure financial sessions.
+        </p>
+      </div>
+    </div>
+
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <div className="bg-gray-50 dark:bg-neutral-900 p-8 md:p-12 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 space-y-10">
+        
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+            <Shield className="w-5 h-5 text-primary" /> Strictly Necessary (Essential) Cookies
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+            In compliance with the <strong>Office of the Data Protection Commission (ODPC) of Kenya</strong>, HudumaLink guarantees a highly secure, non-predatory session architecture. 
+            We do <strong>not</strong> implement tracking beacons, cross-site promotional cookies, or third-party behavioral scrapers.
+          </p>
+          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+            We operate strictly necessary, functional cookies and local browser storage identifiers via <strong>Firebase Authentication and Firestore</strong> for the following explicit needs:
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+            <div className="p-6 bg-white dark:bg-neutral-950 rounded-2xl border border-gray-200 dark:border-neutral-800">
+              <span className="font-bold text-xs text-primary uppercase block mb-1">State Management</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                To securely persist credentials, enabling buyers and providers to browse, list products, or chat with contractors without repeatedly re-authenticating, protecting workflow continuity.
+              </p>
+            </div>
+            <div className="p-6 bg-white dark:bg-neutral-950 rounded-2xl border border-gray-200 dark:border-neutral-800">
+              <span className="font-bold text-xs text-primary uppercase block mb-1">CSRF & Security Defender</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                To protect local operations against Cross-Site Request Forgery (CSRF) and validation manipulation attacks, preventing bad-faith hijackers from injecting malicious payments into live sessions.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4 border-t border-gray-200 dark:border-neutral-800 pt-8">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+            <UserCheck className="w-5 h-5 text-primary" /> Explicit User Consent
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+            By utilizing the HudumaLink Kenya portal, you acknowledge, understand, and contractually consent to these highly secure, non-tracking functional technical configurations needed to host your financial transactions safely.
+          </p>
+          <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20 flex gap-3 items-center">
+            <Info className="w-5 h-5 text-primary flex-shrink-0" />
+            <p className="text-xs font-bold text-primary">
+              These files are critical for payment safety and cannot be opted out of if you wish to list or transact on HudumaLink.
+            </p>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+);

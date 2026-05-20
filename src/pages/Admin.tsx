@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy, increment, limit } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { sendNotification } from '../lib/notifications';
@@ -809,12 +809,17 @@ const Admin = () => {
         const buyerData = buyerDoc.data() as User;
 
         // 2. Initiate M-Pesa Refund (B2C)
+        const token = await auth.currentUser?.getIdToken();
+        const headers: any = { 
+          'Content-Type': 'application/json',
+          'X-Admin-ID': user?.uid || ''
+        };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
         const payoutRes = await fetch('/api/admin/payout', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Admin-ID': user?.uid || ''
-          },
+          headers,
           body: JSON.stringify({
             userId: txData.buyerId,
             amount: txData.amount,
@@ -940,12 +945,17 @@ const Admin = () => {
         }
 
         // 1. Initiate M-Pesa Payout (B2C)
+        const token = await auth.currentUser?.getIdToken();
+        const headers: any = { 
+          'Content-Type': 'application/json',
+          'X-Admin-ID': user?.uid || ''
+        };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
         const payoutRes = await fetch('/api/admin/payout', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Admin-ID': user?.uid || ''
-          },
+          headers,
           body: JSON.stringify({
             userId,
             amount,

@@ -74,16 +74,59 @@ async function startServer() {
     }
   };
 
-// Middleware to verify Admin
+// Middleware to verify user token (Identity Isolation)
+const verifyUser = async (req: any, res: any, next: any) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Rigid Safety Gate: STRICTLY reject all mock fallback logic inside a real production environment
+    if (process.env.NODE_ENV !== "production") {
+      const fallbackUid = req.headers["x-user-id"] || (req.body && req.body.userId);
+      if (fallbackUid) {
+        req.user = { uid: fallbackUid };
+        return next();
+      }
+    }
+    return res.status(401).json({ error: "Unauthorized. Missing cryptographic Authorization Bearer token." });
+  }
+
+  const token = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.user = decodedToken;
+    next();
+  } catch (error) {
+    console.error("Firebase Auth verifyIdToken failure:", error);
+    return res.status(401).json({ error: "Unauthorized. Invalid Token." });
+  }
+};
+
+// Middleware to verify Admin with optional cryptographic verification (admin compliance)
 const verifyAdmin = async (req: any, res: any, next: any) => {
-  const adminId = req.headers['x-admin-id'];
-  if (!adminId) return res.status(401).json({ error: "Missing Admin ID" });
+  const authHeader = req.headers.authorization;
+  let adminId = req.headers['x-admin-id'];
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split("Bearer ")[1];
+    try {
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      adminId = decodedToken.uid;
+    } catch (error) {
+      console.error("Firebase Admin verifyIdToken failure:", error);
+      return res.status(401).json({ error: "Unauthorized. Invalid Admin Token." });
+    }
+  }
+
+  if (!adminId) {
+    return res.status(401).json({ error: "Missing Admin ID" });
+  }
 
   try {
     const userDoc = await db.collection("users").doc(adminId).get();
     if (!userDoc.exists || userDoc.data()?.role !== 'admin') {
       return res.status(403).json({ error: "Unauthorized. Admin access required." });
     }
+    req.user = { uid: adminId, role: "admin" };
     next();
   } catch (error) {
     res.status(500).json({ error: "Internal server error" });
@@ -369,89 +412,97 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     res.json({ ResultCode: 0, ResultDesc: "Accepted" });
   });
 
-  // Transaction Settlement: Confirm Delivery & Release Funds
-  app.post("/api/transactions/release", async (req, res) => {
-    const { transactionId, userId } = req.body;
+  // Transaction Settlement: Confirm Delivery & Release Funds (Race-condition safe via runTransaction)
+  app.post("/api/transactions/release", verifyUser, async (req: any, res: any) => {
+    const { transactionId } = req.body;
+    const userId = req.user.uid; // Identity verified from the cryptographic auth token
 
-    if (!transactionId || !userId) {
-      return res.status(400).json({ error: "Missing transactionId or userId" });
+    if (!transactionId) {
+      return res.status(400).json({ error: "Missing transactionId" });
     }
 
     try {
       const txRef = db.collection("transactions").doc(transactionId);
-      const txDoc = await txRef.get();
 
-      if (!txDoc.exists) {
-        return res.status(404).json({ error: "Transaction not found" });
-      }
+      const result = await db.runTransaction(async (transaction) => {
+        const txDoc = await transaction.get(txRef);
 
-      const txData = txDoc.data();
-      if (!txData) return res.status(500).json({ error: "Data error" });
-
-      // Verify that the person releasing is the buyer
-      if (txData.buyerId !== userId) {
-        return res.status(403).json({ error: "Only the buyer can release funds" });
-      }
-
-      // Check status
-      if (txData.status !== "deposited" && txData.status !== "delivered") {
-        return res.status(400).json({ error: "Transaction in wrong state to release" });
-      }
-
-      const batch = db.batch();
-
-      // 1. Update Transaction
-      batch.update(txRef, {
-        status: "completed",
-        releasedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-
-      // 2. Pay the Seller
-      const sellerRef = db.collection("users").doc(txData.sellerId);
-      batch.update(sellerRef, {
-        escrowBalance: admin.firestore.FieldValue.increment(txData.amount)
-      });
-
-      // 3. Handle Referral Reward
-      if (txData.referralId) {
-        const referralSettingsDoc = await db.collection("settings").doc("referral").get();
-        const settings = referralSettingsDoc.data();
-        
-        if (settings?.isEnabled) {
-          const referrerRef = db.collection("users").doc(txData.referralId);
-          batch.update(referrerRef, {
-            referralEarnings: admin.firestore.FieldValue.increment(settings.rewardAmount || 100)
-          });
-
-          // Notify Referrer
-          batch.set(db.collection("notifications").doc(), {
-            userId: txData.referralId,
-            title: "Referral Reward!",
-            message: `You earned a reward of KES ${settings.rewardAmount || 100} because your referral completed a transaction.`,
-            type: "success",
-            read: false,
-            createdAt: new Date().toISOString()
-          });
+        if (!txDoc.exists) {
+          throw new Error("Transaction not found");
         }
-      }
 
-      // 4. Notify Seller
-      batch.set(db.collection("notifications").doc(), {
-        userId: txData.sellerId,
-        title: "Funds Released",
-        message: `KES ${txData.amount} has been added to your balance for order ${transactionId}.`,
-        type: "success",
-        read: false,
-        createdAt: new Date().toISOString()
+        const txData = txDoc.data();
+        if (!txData) throw new Error("Data error");
+
+        // Verify that the person initiating the release is indeed the buyer
+        if (txData.buyerId !== userId) {
+          throw new Error("Only the buyer can release funds");
+        }
+
+        // Check status - must be deposited or delivered
+        if (txData.status !== "deposited" && txData.status !== "delivered") {
+          throw new Error("Transaction in wrong state to release or already completed");
+        }
+
+        // 1. Update Transaction status atomically
+        transaction.update(txRef, {
+          status: "completed",
+          releasedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        // 2. Pay the Seller
+        const sellerRef = db.collection("users").doc(txData.sellerId);
+        transaction.update(sellerRef, {
+          escrowBalance: admin.firestore.FieldValue.increment(txData.amount)
+        });
+
+        // 3. Handle Referral Reward (Locking down with genuine-transaction checks)
+        if (txData.referralId) {
+          const referralSettingsRef = db.collection("settings").doc("referral");
+          const referralSettingsDoc = await transaction.get(referralSettingsRef);
+          const settings = referralSettingsDoc.data();
+          
+          // Referrals are eligible ONLY for genuine transactions above threshold (e.g. >= 1000 KES)
+          const isGenuineAmount = txData.amount >= 1000;
+          
+          if (settings?.isEnabled && isGenuineAmount) {
+            const referrerRef = db.collection("users").doc(txData.referralId);
+            transaction.update(referrerRef, {
+              referralEarnings: admin.firestore.FieldValue.increment(settings.rewardAmount || 100)
+            });
+
+            // Notify Referrer
+            const referrerNotificationRef = db.collection("notifications").doc();
+            transaction.set(referrerNotificationRef, {
+              userId: txData.referralId,
+              title: "Referral Reward Received!",
+              message: `You earned a reward of KES ${settings.rewardAmount || 100} because your referral completed a completed transaction.`,
+              type: "success",
+              read: false,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+
+        // 4. Notify Seller
+        const sellerNotificationRef = db.collection("notifications").doc();
+        transaction.set(sellerNotificationRef, {
+          userId: txData.sellerId,
+          title: "Funds Released",
+          message: `KES ${txData.amount} has been added to your balance for order ${transactionId}.`,
+          type: "success",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        return { success: true };
       });
 
-      await batch.commit();
-
-      res.json({ success: true });
-    } catch (error) {
+      res.json(result);
+    } catch (error: any) {
       console.error("Error releasing transaction funds:", error);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: error.message || "Internal server error" });
     }
   });
 
@@ -497,12 +548,17 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     }
   });
 
-  // Withdrawal Requests
-  app.post("/api/withdrawals/create", async (req, res) => {
-    const { userId, amount, method, details } = req.body;
+  // Withdrawal Requests (Race-condition safe and Identity-isolated)
+  app.post("/api/withdrawals/create", verifyUser, async (req: any, res: any) => {
+    const { amount, method, details } = req.body;
+    const userId = req.user.uid; // Read from cryptographically validated context, avoiding parameter tampering
 
-    if (!userId || !amount || !method || !details) {
+    if (!amount || !method || !details) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if (amount <= 0) {
+      return res.status(400).json({ error: "Withdrawal amount must be greater than zero" });
     }
 
     const fee = method === "mpesa" ? 15 : 50;
@@ -522,7 +578,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
           throw new Error(`Insufficient balance. Available: KES ${currentBalance}`);
         }
 
-        // 1. Deduct from balance
+        // 1. Deduct from balance atomically
         transaction.update(userRef, {
           escrowBalance: admin.firestore.FieldValue.increment(-totalToDeduct),
           updatedAt: new Date().toISOString()
@@ -551,6 +607,152 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // FIX 2: Memory and Scaling Safe 72-Hour Auto-Release Job
+  const runAutoReleaseJob = async (): Promise<{ processedCount: number; errorsCount: number }> => {
+    console.log("Running scheduled 72-hour escrow auto-release routine...");
+    const limitCount = 100;
+    let lastDoc: admin.firestore.QueryDocumentSnapshot | null = null;
+    let hasMore = true;
+    let processedCount = 0;
+    let errorsCount = 0;
+
+    const seventyTwoHoursAgo = new Date();
+    seventyTwoHoursAgo.setHours(seventyTwoHoursAgo.getHours() - 72);
+    const cutoffIso = seventyTwoHoursAgo.toISOString();
+
+    while (hasMore) {
+      try {
+        let query = db.collection("transactions")
+          .where("status", "==", "delivered")
+          .orderBy("updatedAt")
+          .limit(limitCount);
+
+        if (lastDoc) {
+          query = query.startAfter(lastDoc);
+        }
+
+        const snapshot = await query.get();
+        if (snapshot.empty) {
+          hasMore = false;
+          break;
+        }
+
+        for (const txDoc of snapshot.docs) {
+          const txData = txDoc.data();
+          const updatedAt = txData.updatedAt || txData.createdAt;
+
+          if (updatedAt && updatedAt <= cutoffIso) {
+            const txId = txDoc.id;
+            try {
+              await db.runTransaction(async (transaction) => {
+                const currentTxDoc = await transaction.get(txDoc.ref);
+                const currentTxData = currentTxDoc.data();
+                if (!currentTxData || currentTxData.status !== "delivered") {
+                  return; // already processed or status changed
+                }
+
+                // 1. Mark transaction as completed (auto-released)
+                transaction.update(txDoc.ref, {
+                  status: "completed",
+                  releasedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  autoReleased: true
+                });
+
+                // 2. Escrow payout directly to seller balance
+                const sellerRef = db.collection("users").doc(currentTxData.sellerId);
+                transaction.update(sellerRef, {
+                  escrowBalance: admin.firestore.FieldValue.increment(currentTxData.amount)
+                });
+
+                // 3. Optional referral bonus for high-quality transactions (>= 1,000 KES to prevent referral circle fraud)
+                if (currentTxData.referralId && currentTxData.amount >= 1000) {
+                  const referralSettingsRef = db.collection("settings").doc("referral");
+                  const referralSettingsDoc = await transaction.get(referralSettingsRef);
+                  const settings = referralSettingsDoc.data();
+                  
+                  if (settings?.isEnabled) {
+                    const referrerRef = db.collection("users").doc(currentTxData.referralId);
+                    transaction.update(referrerRef, {
+                      referralEarnings: admin.firestore.FieldValue.increment(settings.rewardAmount || 100)
+                    });
+
+                    // Notification record for the referrer
+                    const referrerNotificationRef = db.collection("notifications").doc();
+                    transaction.set(referrerNotificationRef, {
+                      userId: currentTxData.referralId,
+                      title: "Referral Reward (Auto-Release)",
+                      message: `You earned KES ${settings.rewardAmount || 100} because your referral completed a transaction.`,
+                      type: "success",
+                      read: false,
+                      createdAt: new Date().toISOString()
+                    });
+                  }
+                }
+
+                // 4. Notify merchant of manual status payout
+                const sellerNotificationRef = db.collection("notifications").doc();
+                transaction.set(sellerNotificationRef, {
+                  userId: currentTxData.sellerId,
+                  title: "Funds Auto-Released",
+                  message: `KES ${currentTxData.amount} has been auto-released into your dashboard balance for transaction ${txId}.`,
+                  type: "success",
+                  read: false,
+                  createdAt: new Date().toISOString()
+                });
+
+                // 5. Notify customer
+                const buyerNotificationRef = db.collection("notifications").doc();
+                transaction.set(buyerNotificationRef, {
+                  userId: currentTxData.buyerId,
+                  title: "Escrow Auto-Completed",
+                  message: `Your transaction ${txId} was auto-confirmed and completed as no dispute was raised within 72 hours.`,
+                  type: "info",
+                  read: false,
+                  createdAt: new Date().toISOString()
+                });
+              });
+              processedCount++;
+            } catch (txError) {
+              console.error(`Error auto-releasing transaction ID: ${txId}`, txError);
+              errorsCount++;
+            }
+          }
+        }
+
+        if (snapshot.docs.length < limitCount) {
+          hasMore = false;
+        } else {
+          lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        }
+      } catch (queryError) {
+        console.error("Auto-release batched query execution error:", queryError);
+        hasMore = false;
+      }
+    }
+
+    console.log(`Auto-release complete. Processed: ${processedCount}, Errors: ${errorsCount}`);
+    return { processedCount, errorsCount };
+  };
+
+  // Expose job execution admin-endpoint
+  app.post("/api/admin/jobs/auto-release", verifyAdmin, async (req: any, res: any) => {
+    try {
+      const metrics = await runAutoReleaseJob();
+      res.json({ success: true, ...metrics });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to trigger auto-release job manually." });
+    }
+  });
+
+  // Schedule the auto-release system to execute every 12 hours (43,200,000 milliseconds)
+  setInterval(() => {
+    runAutoReleaseJob().catch((err) => console.error("Periodic Auto-Release Failure:", err));
+  }, 12 * 60 * 60 * 1000);
+
+  // Run immediately on boot to ensure current system catch up
+  runAutoReleaseJob().catch((err) => console.error("Boot Time Auto-Release Failure:", err));
 
   // API routes
   app.get("/api/health", (req, res) => {

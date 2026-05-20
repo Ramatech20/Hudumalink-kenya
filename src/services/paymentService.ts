@@ -118,12 +118,15 @@ export const releaseEscrowFunds = async (transactionId: string) => {
       return false;
     }
 
+    const token = await authUser.getIdToken();
     const response = await fetch('/api/transactions/release', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify({
-        transactionId,
-        userId: authUser.uid
+        transactionId
       })
     });
 
