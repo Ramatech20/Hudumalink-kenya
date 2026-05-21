@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, User, LogOut, Menu, X, PlusCircle, MessageSquare, Heart, Moon, Sun, Shield, AlertCircle, Bell, Facebook, Instagram, Twitter, MessageCircle } from 'lucide-react';
 import { useAuth } from '../AuthContext';
@@ -7,7 +7,7 @@ import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { sendEmailVerification } from 'firebase/auth';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { Chatbot } from './Chatbot';
 
@@ -20,6 +20,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [resendingEmail, setResendingEmail] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const prevChatsRef = useRef<{ [chatId: string]: number }>({});
 
   useEffect(() => {
     if (!user || !user.uid) {
@@ -41,6 +43,78 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     return () => unsubscribe();
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !user.uid) {
+      setUnreadMessages(0);
+      return;
+    }
+
+    const chatsQuery = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(chatsQuery, (snapshot) => {
+      let totalUnread = 0;
+      let newAlertMessage: { text: string; senderId: string; chatId: string } | null = null;
+
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        const chatId = docSnap.id;
+        const unreadCountObj = data.unreadCount || {};
+        const count = unreadCountObj[user.uid] || 0;
+        totalUnread += count;
+
+        const prevCount = prevChatsRef.current[chatId] ?? 0;
+        if (count > prevCount && data.lastMessage) {
+          // Unread messages increased! Notify if we're not currently on the specific chat messages view
+          const queryParams = new URLSearchParams(location.search);
+          const activeChatId = queryParams.get('chatId');
+          const isViewingThisChat = location.pathname === '/messages' && activeChatId === chatId;
+
+          if (!isViewingThisChat) {
+            newAlertMessage = {
+              text: data.lastMessage,
+              senderId: data.participants.find((p: string) => p !== user.uid) || '',
+              chatId: chatId
+            };
+          }
+        }
+        prevChatsRef.current[chatId] = count;
+      });
+
+      setUnreadMessages(totalUnread);
+
+      if (newAlertMessage) {
+        const msgInfo = newAlertMessage;
+        const showToast = (senderName: string) => {
+          toast.info(`New message from ${senderName}`, {
+            description: msgInfo.text.length > 60 ? msgInfo.text.substring(0, 60) + '...' : msgInfo.text,
+            action: {
+              label: 'Reply',
+              onClick: () => navigate(`/messages?chatId=${msgInfo.chatId}`)
+            },
+            duration: 5000
+          });
+        };
+
+        getDoc(doc(db, 'users_public', msgInfo.senderId)).then((userDoc) => {
+          if (userDoc.exists()) {
+            showToast(userDoc.data().displayName || 'User');
+          } else {
+            showToast('User');
+          }
+        }).catch(() => {
+          showToast('User');
+        });
+      }
+    }, (error) => {
+      console.error("Error listening to chats for unread count:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user, location.pathname, location.search, navigate]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -198,6 +272,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   )}
                   <Link to="/messages" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors relative" title={t('nav.messages')}>
                     <MessageSquare className="w-5 h-5" />
+                    {unreadMessages > 0 && (
+                      <span className="absolute top-1 right-1 w-4 h-4 bg-secondary text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                        {unreadMessages > 9 ? '9+' : unreadMessages}
+                      </span>
+                    )}
                   </Link>
                   <Link to="/notifications" className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors relative" title={t('nav.notifications')}>
                     <Bell className="w-5 h-5" />
@@ -270,6 +349,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     )}
                     <Link to="/profile" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300">
                       {t('nav.profile')}
+                    </Link>
+                    <Link to="/messages" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300 relative">
+                      {t('nav.messages')}
+                      {unreadMessages > 0 && (
+                        <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-secondary rounded-full">
+                          {unreadMessages}
+                        </span>
+                      )}
                     </Link>
                     <Link to="/notifications" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300 relative">
                       {t('nav.notifications')}

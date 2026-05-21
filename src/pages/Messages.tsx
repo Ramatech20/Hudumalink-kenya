@@ -107,6 +107,10 @@ const Messages = () => {
                   participants: [user.uid, sellerId],
                   listingId,
                   lastMessage: '',
+                  unreadCount: {
+                    [user.uid]: 0,
+                    [sellerId]: 0
+                  },
                   updatedAt: new Date().toISOString(),
                   createdAt: new Date().toISOString()
                 };
@@ -185,6 +189,23 @@ const Messages = () => {
     return () => unsubscribe();
   }, [selectedChatId, chats, user]);
 
+  // Reset unread message count for the current user when opening/focusing a chat
+  useEffect(() => {
+    if (!user || !user.uid || !selectedChatId) return;
+
+    const resetUnreadCount = async () => {
+      try {
+        await updateDoc(doc(db, 'chats', selectedChatId), {
+          [`unreadCount.${user.uid}`]: 0
+        });
+      } catch (err) {
+        console.error("Error clearing user unread count:", err);
+      }
+    };
+
+    resetUnreadCount();
+  }, [selectedChatId, user]);
+
   // State to track if the current chat user triggered a bypass warning
   const [showBypassWarning, setShowBypassWarning] = useState(false);
 
@@ -212,11 +233,19 @@ const Messages = () => {
 
       await addDoc(collection(db, `chats/${selectedChatId}/messages`), messageData);
       
-      // Update chat's last message and timestamp
-      await updateDoc(doc(db, 'chats', selectedChatId), {
+      const currentChat = chats.find(c => c.id === selectedChatId);
+      const otherUserId = currentChat?.otherUser?.uid;
+
+      // Update chat's last message, timestamp and increment unread count for the other participant
+      const chatUpdateData: any = {
         lastMessage: scanResult.maskedText,
         updatedAt: new Date().toISOString()
-      });
+      };
+      if (otherUserId) {
+        chatUpdateData[`unreadCount.${otherUserId}`] = increment(1);
+      }
+
+      await updateDoc(doc(db, 'chats', selectedChatId), chatUpdateData);
 
       // Handle bypass triggers
       if (scanResult.isBlocked) {

@@ -217,6 +217,7 @@ export interface Chat {
   participants: string[];
   lastMessage?: string;
   listingId?: string;
+  unreadCount?: { [userId: string]: number };
   updatedAt: string;
 }
 
