@@ -103,6 +103,8 @@ export interface Listing {
   originalPrice?: number;
   offerText?: string;
   giftText?: string;
+  isOffer?: boolean;
+  offerExpiresAt?: string;
   createdAt: string;
 }
 

@@ -22,6 +22,7 @@ import SellerDashboard from './pages/SellerDashboard';
 import PromoteListing from './pages/PromoteListing';
 import TransactionDetail from './pages/TransactionDetail';
 import Careers from './pages/Careers';
+import Offers from './pages/Offers';
 import { About, Contact, Terms, Privacy, Safety, FAQ, EscrowPolicy, Cookies } from './pages/StaticPages';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -65,6 +66,7 @@ export default function App() {
                 <Route path="/safety" element={<Safety />} />
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="/careers" element={<Careers />} />
+                <Route path="/offers" element={<Offers />} />
               </Routes>
             </Layout>
             <Toaster position="top-center" richColors />

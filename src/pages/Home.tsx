@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, MapPin, Briefcase, ShoppingBag, ArrowRight, Star, ShieldCheck, Zap, CheckCircle2 } from 'lucide-react';
+import { Search, MapPin, Briefcase, ShoppingBag, ArrowRight, Star, ShieldCheck, Zap, CheckCircle2, Tag } from 'lucide-react';
 import { collection, query, where, limit, getDocs, orderBy } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
@@ -429,6 +429,12 @@ const Home = () => {
                   referrerPolicy="no-referrer"
                 />
                 <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                  {listing.isOffer && (
+                    <div className="bg-rose-600 text-white px-2 py-1 rounded-lg text-[9px] font-black tracking-widest flex items-center shadow-lg uppercase">
+                      <Tag className="w-2.5 h-2.5 mr-1" />
+                      SPECIAL DEAL
+                    </div>
+                  )}
                   {listing.isPromoted && (
                     <div className={cn(
                       "px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse",
@@ -460,10 +466,20 @@ const Home = () => {
                 <h3 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1 group-hover:text-primary transition-colors">
                   {listing.title}
                 </h3>
-                <div className="mt-4 flex justify-between items-center">
-                  <span className="text-lg font-extrabold text-primary">
-                    {listing.price ? formatPrice(listing.price) : t('listings.contact_price')}
-                  </span>
+                <div className="mt-4">
+                  {listing.originalPrice && listing.price && listing.originalPrice > listing.price && (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 mb-0.5 font-medium">
+                      <span className="line-through">{formatPrice(listing.originalPrice)}</span>
+                      <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[9px] px-1 rounded-md">
+                        -{Math.round(((listing.originalPrice - listing.price) / listing.originalPrice) * 100)}%
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-extrabold text-primary">
+                      {listing.price ? formatPrice(listing.price) : t('listings.contact_price')}
+                    </span>
+                  </div>
                 </div>
               </div>
             </Link>

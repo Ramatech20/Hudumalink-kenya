@@ -41,6 +41,8 @@ const CreateListing = () => {
     freeDeliveryPlaces: '',
     deliveryTimeFrame: '',
     tipEnabled: false,
+    isOffer: false,
+    offerDuration: '24',
   });
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -234,6 +236,8 @@ const CreateListing = () => {
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : null,
         offerText: formData.offerText || null,
         giftText: formData.giftText || null,
+        isOffer: formData.isOffer,
+        offerExpiresAt: formData.isOffer ? new Date(Date.now() + parseInt(formData.offerDuration, 10) * 3600 * 1000).toISOString() : null,
         type: formData.type,
         category: formData.category,
         images: imageUrls,
@@ -460,17 +464,69 @@ const CreateListing = () => {
                       onChange={(e) => setFormData({...formData, stock: e.target.value})}
                     />
                   </div>
-                )}
+                )}                <div className="col-span-1 md:col-span-2 p-6 bg-rose-500/5 border border-rose-500/10 rounded-3xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+                        Active Limited-Time Special Deal / Promo Offer
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Check this to publish this service or good instantly on our dedicated Offers Page.</p>
+                    </div>
+                    <button
+                      type="button"
+                      id="toggle-special-deal"
+                      onClick={() => setFormData({...formData, isOffer: !formData.isOffer})}
+                      className={cn(
+                        "w-12 h-6 rounded-full transition-all relative",
+                        formData.isOffer ? "bg-rose-500" : "bg-gray-300 dark:bg-neutral-700"
+                      )}
+                    >
+                      <div className={cn(
+                        "absolute top-1 w-4 h-4 rounded-full bg-white transition-all",
+                        formData.isOffer ? "left-7" : "left-1"
+                      )} />
+                    </button>
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Special Offer / Promo (Optional)</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. SAVE20 or Buy 2 Get 1 Free"
-                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
-                    value={formData.offerText}
-                    onChange={(e) => setFormData({...formData, offerText: e.target.value})}
-                  />
+                  {formData.isOffer && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 animate-in fade-in duration-300">
+                      <div>
+                        <label className="block text-xs font-black text-gray-400 dark:text-gray-300 mb-2 uppercase tracking-widest">For how long is this offer valid? <span className="text-red-500">*</span></label>
+                        <select
+                          required={formData.isOffer}
+                          className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all shadow-sm font-bold text-sm"
+                          value={formData.offerDuration}
+                          onChange={(e) => setFormData({...formData, offerDuration: e.target.value})}
+                        >
+                          <option value="1">1 Hour</option>
+                          <option value="6">6 Hours</option>
+                          <option value="12">12 Hours</option>
+                          <option value="24">24 Hours (1 Day)</option>
+                          <option value="48">48 Hours (2 Days)</option>
+                          <option value="72">3 Days</option>
+                          <option value="120">5 Days</option>
+                          <option value="168">7 Days (1 Week)</option>
+                          <option value="336">14 Days (2 Weeks)</option>
+                          <option value="720">30 Days (1 Month)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-black text-gray-400 dark:text-gray-300 mb-2 uppercase tracking-widest">Offer Promo Text / Tagline</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. SAVE20 or Flash Sale Friday"
+                          className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all shadow-sm text-sm"
+                          value={formData.offerText}
+                          onChange={(e) => setFormData({...formData, offerText: e.target.value})}
+                        />
+                      </div>
+                      {/* Notice about price requirement */}
+                      <p className="col-span-full text-xs text-rose-500 font-bold">
+                        * Note: Ensure you set an "Original Price (Was)" above that is higher than the discounted selling price to show the exact discount percentage!
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="col-span-1 md:col-span-2">

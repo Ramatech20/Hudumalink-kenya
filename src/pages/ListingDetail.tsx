@@ -51,6 +51,33 @@ const ListingDetail = () => {
   const [showTipModal, setShowTipModal] = useState(false);
   const navigate = useNavigate();
 
+  const [isFavorited, setIsFavorited] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    const key = user ? `hudumalink_favorites_${user.uid}` : 'hudumalink_favorites_guest';
+    const favorites = JSON.parse(localStorage.getItem(key) || '[]');
+    setIsFavorited(favorites.includes(id));
+  }, [id, user]);
+
+  const toggleFavorite = () => {
+    if (!id) return;
+    const key = user ? `hudumalink_favorites_${user.uid}` : 'hudumalink_favorites_guest';
+    const favorites = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    let updatedFavorites: string[] = [];
+    if (favorites.includes(id)) {
+      updatedFavorites = favorites.filter((favId: string) => favId !== id);
+      setIsFavorited(false);
+      toast.success('Removed from favorites');
+    } else {
+      updatedFavorites = [...favorites, id];
+      setIsFavorited(true);
+      toast.success('Saved to your favorites!');
+    }
+    localStorage.setItem(key, JSON.stringify(updatedFavorites));
+  };
+
   // Management Modal states
   const [showManageModal, setShowManageModal] = useState(false);
   const [manageTitle, setManageTitle] = useState('');
@@ -63,6 +90,8 @@ const ListingDetail = () => {
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [manageStock, setManageStock] = useState('');
   const [manageStatus, setManageStatus] = useState<'active' | 'pending' | 'sold' | 'removed'>('active');
+  const [manageIsOffer, setManageIsOffer] = useState(false);
+  const [manageOfferDuration, setManageOfferDuration] = useState('24');
   const [updatingManage, setUpdatingManage] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -242,6 +271,8 @@ const ListingDetail = () => {
         setNewImageFiles([]);
         setManageStock(listingData.stock !== undefined && listingData.stock !== null ? listingData.stock.toString() : '0');
         setManageStatus(listingData.status || 'active');
+        setManageIsOffer(listingData.isOffer || false);
+        setManageOfferDuration('24');
         
         const authorDoc = await getDoc(doc(db, 'users_public', listingData.authorId));
         if (authorDoc.exists()) {
@@ -339,7 +370,7 @@ const ListingDetail = () => {
 
       const updatedPrice = managePrice ? parseFloat(managePrice) : undefined;
       const updatedOriginalPrice = manageOriginalPrice ? parseFloat(manageOriginalPrice) : undefined;
-      const updatedStock = manageStock ? parseInt(manageStock, 10) : undefined;
+      const updatedStock = listing?.type === 'product' && manageStock ? parseInt(manageStock, 10) : undefined;
 
       const updateData: any = {
         title: manageTitle,
@@ -348,6 +379,8 @@ const ListingDetail = () => {
         originalPrice: updatedOriginalPrice !== undefined ? updatedOriginalPrice : null,
         offerText: manageOfferText || null,
         giftText: manageGiftText || null,
+        isOffer: manageIsOffer,
+        offerExpiresAt: manageIsOffer ? new Date(Date.now() + parseInt(manageOfferDuration, 10) * 3600 * 1000).toISOString() : null,
         images: finalImages,
         stock: updatedStock !== undefined ? updatedStock : null,
         status: manageStatus,
@@ -366,6 +399,8 @@ const ListingDetail = () => {
           originalPrice: updatedOriginalPrice,
           offerText: manageOfferText,
           giftText: manageGiftText,
+          isOffer: manageIsOffer,
+          offerExpiresAt: manageIsOffer ? new Date(Date.now() + parseInt(manageOfferDuration, 10) * 3600 * 1000).toISOString() : undefined,
           images: finalImages,
           stock: updatedStock,
           status: manageStatus
@@ -704,8 +739,12 @@ const ListingDetail = () => {
                 referrerPolicy="no-referrer"
               />
               <div className="absolute top-4 right-4 flex space-x-2">
-                <button className="p-2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur rounded-full shadow-lg hover:text-secondary transition-colors text-gray-900 dark:text-gray-100">
-                  <Heart className="w-5 h-5" />
+                <button 
+                  onClick={toggleFavorite}
+                  className="p-2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur rounded-full shadow-lg transition-all active:scale-95 text-gray-900 dark:text-gray-100 border border-transparent hover:border-red-200 dark:hover:border-red-900/40"
+                  title={isFavorited ? "Remove from Favorites" : "Add to Favorites"}
+                >
+                  <Heart className={cn("w-5 h-5 transition-transform duration-200 hover:scale-110", isFavorited ? "fill-red-500 text-red-500" : "text-gray-700 dark:text-gray-300 hover:text-red-500")} />
                 </button>
                 <button 
                   onClick={handleShare}
@@ -862,7 +901,7 @@ const ListingDetail = () => {
             )}
 
             {/* Product Specifics */}
-            {(listing.stock !== undefined || (listing.sizes && listing.sizes.length > 0) || (listing.specifications && Object.keys(listing.specifications).length > 0)) && (
+            {listing.type === 'product' && (listing.stock !== undefined || (listing.sizes && listing.sizes.length > 0) || (listing.specifications && Object.keys(listing.specifications).length > 0)) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
                 {listing.stock !== undefined && (
                   <div className="flex items-center space-x-3 p-4 bg-gray-50 dark:bg-neutral-800/50 rounded-2xl border border-gray-100 dark:border-neutral-800">
@@ -1414,32 +1453,75 @@ const ListingDetail = () => {
                       ) : (
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center">
-                            <Layers className="w-4 h-4 mr-1 text-gray-400" /> Stock Status
+                            <Layers className="w-4 h-4 mr-1 text-gray-400" /> Booking Availability
                           </label>
                           <select
                             value={manageStatus === 'sold' ? 'sold' : 'active'}
                             onChange={(e) => setManageStatus(e.target.value as any)}
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                           >
-                            <option value="active">Available (Active)</option>
-                            <option value="sold">Fully Booked / Sold Out</option>
+                            <option value="active">Active (Available for Hire)</option>
+                            <option value="sold">Fully Booked / Unavailable</option>
                           </select>
                           <span className="text-[10px] text-gray-500 mt-1 block">Toggle service booking status</span>
                         </div>
                       )}
 
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center">
-                          <Tag className="w-4 h-4 mr-1 text-gray-400" /> Special Offer / Deal
-                        </label>
-                        <input
-                          type="text"
-                          value={manageOfferText}
-                          onChange={(e) => setManageOfferText(e.target.value)}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
-                          placeholder="e.g. SAVE20, Promo, or Buy 2 Get 1 Free"
-                        />
-                        <span className="text-[10px] text-gray-500 mt-1 block">Add deal guidelines or coupon code</span>
+                      <div className="col-span-full p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                              Active Limited-Time Special Offer/Deal
+                            </p>
+                            <p className="text-[10px] text-gray-500">Enable this to feature this listing immediately on the dedicated Offers page.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setManageIsOffer(!manageIsOffer)}
+                            className={cn(
+                              "w-10 h-5 rounded-full transition-all relative flex items-center",
+                              manageIsOffer ? "bg-rose-500" : "bg-gray-300 dark:bg-neutral-700"
+                            )}
+                          >
+                            <div className={cn(
+                              "w-3.5 h-3.5 rounded-full bg-white transition-all absolute",
+                              manageIsOffer ? "left-5.5" : "left-1"
+                            )} />
+                          </button>
+                        </div>
+
+                        {manageIsOffer && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 animate-in fade-in duration-300">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Offer Valid For:</label>
+                              <select
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none text-xs font-bold"
+                                value={manageOfferDuration}
+                                onChange={(e) => setManageOfferDuration(e.target.value)}
+                              >
+                                <option value="1">1 Hour</option>
+                                <option value="6">6 Hours</option>
+                                <option value="12">12 Hours</option>
+                                <option value="24">24 Hours (1 Day)</option>
+                                <option value="48">48 Hours (2 Days)</option>
+                                <option value="72">3 Days</option>
+                                <option value="120">5 Days</option>
+                                <option value="168">7 Days (1 Week)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Offer Title / Code:</label>
+                              <input
+                                type="text"
+                                value={manageOfferText}
+                                onChange={(e) => setManageOfferText(e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none text-xs"
+                                placeholder="e.g. SAVE20 or Flash Sale"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 

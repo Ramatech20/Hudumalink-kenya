@@ -89,13 +89,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (newAlertMessage) {
         const msgInfo = newAlertMessage;
         const showToast = (senderName: string) => {
-          toast.info(`New message from ${senderName}`, {
-            description: msgInfo.text.length > 60 ? msgInfo.text.substring(0, 60) + '...' : msgInfo.text,
+          toast.info(`New Msg: You have ${totalUnread} unread messages!`, {
+            description: `you have a new messages from ${senderName}, check the mesages`,
             action: {
-              label: 'Reply',
+              label: 'Check Messages',
               onClick: () => navigate(`/messages?chatId=${msgInfo.chatId}`)
             },
-            duration: 5000
+            duration: 8000
           });
         };
 
@@ -160,6 +160,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: t('nav.home'), path: '/' },
     { name: t('nav.marketplace'), path: '/listings?type=product' },
     { name: t('nav.services'), path: '/listings?type=service' },
+    { name: t('nav.offers'), path: '/offers' },
     { name: t('nav.contact'), path: '/contact' },
     { name: t('nav.about'), path: '/about' },
     { name: t('nav.faq'), path: '/faq' },

@@ -27,7 +27,7 @@ service cloud.firestore {
     // Entity Schema Validators
     // ===============================================================
 
-    function isValidUser(data) {
+     function isValidUser(data) {
       return data.get('uid', request.auth.uid) == request.auth.uid &&
              (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
              (!('role' in data) || (data.role in ['customer', 'provider', 'seller', 'admin'])) &&
@@ -50,6 +50,7 @@ service cloud.firestore {
              (!('occupation' in data) || (data.occupation is string)) &&
              (!('isOnline' in data) || data.isOnline is bool) &&
              (!('lastSeen' in data) || (data.lastSeen is string)) &&
+             (!('deviceFingerprint' in data) || (data.deviceFingerprint is string && data.deviceFingerprint.size() <= 256)) &&
              (!('escrowBalance' in data) || data.escrowBalance is number) &&
              (!('referralEarnings' in data) || data.referralEarnings is number) &&
              (!('completedPaymentsCount' in data) || data.completedPaymentsCount is number) &&
@@ -64,6 +65,8 @@ service cloud.firestore {
              (!('originalPrice' in data) || data.originalPrice == null || (data.originalPrice is number && data.originalPrice >= 0)) &&
              (!('offerText' in data) || data.offerText == null || data.offerText is string) &&
              (!('giftText' in data) || data.giftText == null || data.giftText is string) &&
+             (!('isOffer' in data) || data.isOffer is bool) &&
+             (!('offerExpiresAt' in data) || data.offerExpiresAt == null || data.offerExpiresAt is string) &&
              data.type in ['product', 'service'] &&
              data.category is string &&
              data.status in ['active', 'pending', 'sold', 'removed', 'flagged'] &&
@@ -116,14 +119,14 @@ service cloud.firestore {
              'residence', 'area', 'gender', 'occupation', 'role', 
              'completedPaymentsCount', 'emailVerified', 'referralCode', 
              'referredBy', 'createdAt', 'updatedAt', 'isVerified', 
-             'kycStatus', 'isOnline', 'lastSeen'
+             'kycStatus', 'isOnline', 'lastSeen', 'deviceFingerprint'
            ]) &&
            // Protect critical fields from self-update
            (!('escrowBalance' in incoming()) || incoming().escrowBalance == existing().get('escrowBalance', 0)) &&
            (!('referralEarnings' in incoming()) || incoming().referralEarnings == existing().get('referralEarnings', 0)) &&
            (existing().get('role', 'customer') == 'admin' || !('role' in incoming()) || incoming().role == existing().get('role', 'customer') || (existing().get('role', 'customer') == 'customer' && incoming().role in ['provider', 'seller']) || (existing().get('role', 'customer') != 'customer' && incoming().role == 'customer')) &&
            (existing().get('isVerified', false) == true || !('isVerified' in incoming()) || incoming().isVerified == existing().get('isVerified', false)) &&
-           (existing().get('kycStatus', 'none') == 'verified' || !('kycStatus' in incoming()) || incoming().kycStatus == existing().get('kycStatus', 'none') || (incoming().get('kycStatus', 'none') == 'pending' && existing().get('kycStatus', 'none') == 'none'))
+           (existing().get('kycStatus', 'none') == 'verified' || !('kycStatus' in incoming()) || incoming().kycStatus == existing().get('kycStatus', 'none') || (incoming().kycStatus == 'pending' && existing().get('kycStatus', 'none') in ['none', 'pending', 'rejected']))
           )
         )) || 
         // Action: Balance Increment (ONLY Admin/Server)
@@ -153,7 +156,7 @@ service cloud.firestore {
                          // Update details (not status)
                          (incoming().status == existing().status && 
                           incoming().diff(existing()).affectedKeys().hasOnly([
-                            'title', 'description', 'price', 'originalPrice', 'offerText', 'giftText', 'category', 'images', 
+                            'title', 'description', 'price', 'originalPrice', 'offerText', 'giftText', 'isOffer', 'offerExpiresAt', 'category', 'images', 
                             'location', 'contact', 'deliveryInfo', 'tipEnabled', 
                             'stock', 'sizes', 'specifications', 'aiModerationResult', 
                             'createdAt'
@@ -182,7 +185,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
       allow create: if isValidId(chatId) && isSignedIn() && request.auth.uid in incoming().participants;
       allow update: if isValidId(chatId) && isSignedIn() && request.auth.uid in existing().participants && 
-                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt', 'unreadCount']);
 
       match /messages/{messageId} {
         allow get, list: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());

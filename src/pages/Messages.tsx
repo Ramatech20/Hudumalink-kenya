@@ -14,12 +14,13 @@ import {
   serverTimestamp,
   increment
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, OperationType, auth } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { sendNotification } from '../lib/notifications';
 import { useAuth } from '../AuthContext';
 import { Message, Chat, User, Listing } from '../types';
 import { formatDistanceToNow } from 'date-fns';
+import { cn } from '../lib/utils';
 import { Send, User as UserIcon, Search, ArrowLeft, MoreVertical, MessageSquare, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { scanForBypassFraud } from '../lib/bypassScanner';
@@ -160,33 +161,26 @@ const Messages = () => {
       handleFirestoreError(error, OperationType.LIST, `chats/${selectedChatId}/messages`);
     });
 
-    // Get other user info for header
+    // Subscribe to other user's public info (isOnline & lastSeen) in real-time
+    let unsubscribeUser: (() => void) | null = null;
     const chat = chats.find(c => c.id === selectedChatId);
-    if (chat?.otherUser) {
-      setSelectedChatUser(chat.otherUser);
-    } else if (selectedChatId) {
-      // Fallback if chat list hasn't loaded yet
-      const fetchOtherUser = async () => {
-        try {
-          const chatDoc = await getDoc(doc(db, 'chats', selectedChatId));
-          if (chatDoc.exists()) {
-            const data = chatDoc.data() as Chat;
-            const otherUserId = data.participants.find(p => p !== user?.uid);
-            if (otherUserId) {
-              const userDoc = await getDoc(doc(db, 'users', otherUserId));
-              if (userDoc.exists()) {
-                setSelectedChatUser(userDoc.data() as User);
-              }
-            }
+    if (chat) {
+      const otherUserId = chat.participants.find(p => p !== user?.uid);
+      if (otherUserId) {
+        unsubscribeUser = onSnapshot(doc(db, 'users_public', otherUserId), (snapshot) => {
+          if (snapshot.exists()) {
+            setSelectedChatUser({ uid: snapshot.id, ...snapshot.data() } as User);
           }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `chats/${selectedChatId}`);
-        }
-      };
-      fetchOtherUser();
+        }, (error) => {
+          console.error("Error watching user presence in real-time:", error);
+        });
+      }
     }
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeUser) unsubscribeUser();
+    };
   }, [selectedChatId, chats, user]);
 
   // Reset unread message count for the current user when opening/focusing a chat
@@ -262,7 +256,6 @@ const Messages = () => {
       }
 
       // Notify recipient
-      const currentChat = chats.find(c => c.id === selectedChatId);
       if (currentChat?.otherUser?.uid) {
         await sendNotification(
           currentChat.otherUser.uid,
@@ -271,6 +264,35 @@ const Messages = () => {
           'info',
           `/messages?chatId=${selectedChatId}`
         );
+
+        // Email and SMS alert if recipient is offline
+        if (selectedChatUser && !selectedChatUser.isOnline) {
+          try {
+            const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+            fetch("/api/notifications/notify-offline", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${idToken}`,
+                "x-user-id": user.uid
+              },
+              body: JSON.stringify({
+                recipientId: selectedChatUser.uid,
+                senderName: user.displayName || "Someone",
+                messageText: scanResult.maskedText
+              })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success && data.notified) {
+                console.log("[Offline Dispatcher] SMS/Email dispatched correctly to offline recipient", data.channels);
+              }
+            })
+            .catch(err => console.error("Offline dispatch failure:", err));
+          } catch (tokError) {
+            console.error("Token generation failure during offline alert:", tokError);
+          }
+        }
       }
     } catch (error: any) {
       handleFirestoreError(error, OperationType.WRITE, `chats/${selectedChatId}/messages`);
@@ -329,8 +351,11 @@ const Messages = () => {
                         <UserIcon className="w-6 h-6" />
                       </div>
                     )}
-                    {/* Online Status Placeholder */}
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-neutral-900 rounded-full"></div>
+                    {/* Online Status Marker */}
+                    <div className={cn(
+                      "absolute bottom-0 right-0 w-3 h-3 border-2 border-white dark:border-neutral-900 rounded-full",
+                      chat.otherUser?.isOnline ? "bg-green-500" : "bg-gray-400"
+                    )}></div>
                   </div>
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex justify-between items-baseline">
@@ -341,7 +366,10 @@ const Messages = () => {
                         {chat.updatedAt ? formatDistanceToNow(new Date(chat.updatedAt), { addSuffix: false }) : ''}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate flex items-center gap-1.5">
+                      {chat.otherUser?.isOnline && (
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full flex-shrink-0 animate-pulse"></span>
+                      )}
                       {chat.lastMessage || 'No messages yet'}
                     </p>
                   </div>
@@ -377,7 +405,16 @@ const Messages = () => {
                     )}
                     <div>
                       <h3 className="font-bold text-gray-900 dark:text-white">{selectedChatUser?.displayName || 'Chat'}</h3>
-                      <p className="text-xs text-green-500 font-medium">Online</p>
+                      {selectedChatUser?.isOnline ? (
+                        <p className="text-xs text-green-500 font-extrabold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></span>
+                          Online
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500 font-medium">
+                          {selectedChatUser?.lastSeen ? `Last seen: ${formatDistanceToNow(new Date(selectedChatUser.lastSeen), { addSuffix: true })}` : 'Offline'}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
