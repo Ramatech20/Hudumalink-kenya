@@ -17,6 +17,7 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [role, setRole] = useState<'customer' | 'provider' | 'seller'>('customer');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
@@ -112,6 +113,22 @@ const Auth = () => {
       return;
     }
 
+    if (!isLogin) {
+      const hasLength = password.length >= 8;
+      const hasUpper = /[A-Z]/.test(password);
+      const hasLower = /[a-z]/.test(password);
+      const hasDigit = /[0-9]/.test(password);
+      const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/.test(password);
+
+      if (!hasLength || !hasUpper || !hasLower || !hasDigit || !hasSpecial) {
+        handleValidationError(
+          'Password must be at least 8 characters long and contain both uppercase and lowercase letters, a number, and a symbol (e.g., @, _, #, $, %, !, &).'
+        );
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       if (isLogin) {
         try {
@@ -123,6 +140,39 @@ const Auth = () => {
           return;
         }
       } else {
+        // Validate M-Pesa Phone Number
+        if (!phoneNumber) {
+          handleValidationError('M-Pesa phone number is required');
+          setLoading(false);
+          return;
+        }
+
+        let formattedPhone = phoneNumber.trim().replace(/\s+/g, '').replace(/\+/g, '');
+        if (formattedPhone.startsWith('0')) {
+          formattedPhone = '254' + formattedPhone.substring(1);
+        }
+
+        if (!/^254[17]\d{8}$/.test(formattedPhone)) {
+          handleValidationError('Please enter a valid Kenyan M-Pesa phone number (e.g., 07XXXXXXXX, 01XXXXXXXX or 254XXXXXXXX).');
+          setLoading(false);
+          return;
+        }
+
+        // Check if phone number is already registered in firestore 'users' collection
+        try {
+          const qPhone = query(collection(db, 'users'), where('phoneNumber', '==', formattedPhone));
+          const snapPhone = await getDocs(qPhone);
+          if (!snapPhone.empty) {
+            handleValidationError('This M-Pesa phone number is already registered to another account.');
+            setLoading(false);
+            return;
+          }
+        } catch (error: any) {
+          handleFirestoreError(error, OperationType.GET, 'users');
+          setLoading(false);
+          return;
+        }
+
         // Check if referral code is valid if provided
         let referredBy = null;
         if (referralCode) {
@@ -159,6 +209,7 @@ const Auth = () => {
             uid: result.user.uid,
             displayName: displayName || 'Anonymous User',
             email,
+            phoneNumber: formattedPhone,
             photoURL: '',
             role: isAdminEmail ? 'admin' : role,
             isVerified: isAdminEmail,
@@ -257,6 +308,17 @@ const Auth = () => {
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-colors"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">M-Pesa Phone Number</label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="e.g. 07XXXXXXXX or 254XXXXXXXX"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-colors"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
                 />
               </div>
               <div>

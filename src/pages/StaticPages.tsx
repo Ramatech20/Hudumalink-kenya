@@ -311,13 +311,13 @@ export const Terms = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">1</div>
-              Account & Eligibility
+              Account, Eligibility & Role Rules
             </h2>
             <div className="bg-gray-50 dark:bg-neutral-900 p-10 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800">
               <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-8">
-                To use HudumaLink, you must be at least 18 years old and possess a valid Kenyan National ID. By creating an account, you agree that:
+                To use HudumaLink, you must be at least 18 years old and possess a valid Kenyan National ID. Accounts are classified under strictly governed roles to maintain platform integrity, safety, and transparency:
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
                 {[
                   "Accurate registration info",
                   "Account security responsibility",
@@ -329,6 +329,21 @@ export const Terms = () => (
                     <span>{item}</span>
                   </div>
                 ))}
+              </div>
+              
+              <div className="border-t border-gray-200 dark:border-neutral-800 pt-6 space-y-4">
+                <h3 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-xs">Role-Based Posting Restraints</h3>
+                <div className="space-y-3 text-sm text-gray-500 dark:text-gray-400">
+                  <p>
+                    <strong>Sellers (Goods Only):</strong> Users signed up under the "Seller" role are strictly permitted to post physical goods/products. Listing professional services, digital hours, or manual construction labor under a Seller account is strictly prohibited.
+                  </p>
+                  <p>
+                    <strong>Service Providers (Goods & Services):</strong> Licensed manual workers, specialists, and freelancers signed up under the "Service Provider" role possess dual-tier authority to list both services (consultancy, installations, manual labour) and relevant physical products/consumables.
+                  </p>
+                  <p>
+                    <strong>Customers/Buyers (No Posting Allowed):</strong> Users registered as Customers/Buyers do not have permission to publish listings of any standard on our platform. They enjoy complete access to search, escrow booking, messaging, and transaction flows.
+                  </p>
+                </div>
               </div>
             </div>
           </section>

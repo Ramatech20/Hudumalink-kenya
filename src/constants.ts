@@ -33,13 +33,13 @@ export const CATEGORIES = {
 };
 
 export const TOWNS: Record<string, string[]> = {
-  "Nairobi": ["Nairobi CBD", "Westlands", "Kilimani", "Karen", "Lang'ata", "Kasarani", "Embakasi", "Roysambu", "Dagoretti"],
-  "Mombasa": ["Mombasa Island", "Nyali", "Bamburi", "Likoni", "Changamwe", "Kisauni"],
-  "Kisumu": ["Kisumu CBD", "Milimani", "Kondele", "Manyatta", "Nyalenda"],
-  "Nakuru": ["Nakuru CBD", "Lanet", "Njoro", "Gilgil", "Naivasha"],
-  "Uasin Gishu": ["Eldoret CBD", "Langas", "Huruma", "Kimumu"],
-  "Kakamega": ["Kakamega CBD", "Mumias", "Butere"],
-  "Kiambu": ["Thika", "Kiambu Town", "Ruiru", "Kikuyu", "Limuru", "Githunguri"]
+  "Nairobi": ["Nairobi CBD", "Westlands", "Kilimani", "Karen", "Lang'ata", "Kasarani", "Embakasi", "Roysambu", "Dagoretti", "Githurai", "Kahawa West", "South C", "South B"],
+  "Mombasa": ["Mombasa Island", "Nyali", "Bamburi", "Likoni", "Changamwe", "Kisauni", "Mtwapa", "Shanzu"],
+  "Kisumu": ["Kisumu CBD", "Milimani", "Kondele", "Manyatta", "Nyalenda", "Kibos", "Maseno"],
+  "Nakuru": ["Nakuru CBD", "Lanet", "Njoro", "Gilgil", "Naivasha", "Molo", "Bahati"],
+  "Uasin Gishu": ["Eldoret CBD", "Langas", "Huruma", "Kimumu", "Burnt Forest", "Turbo", "Munyaka", "Kapkugerwet", "Moiben"],
+  "Kakamega": ["Kakamega CBD", "Mumias", "Butere", "Malava", "Lugari"],
+  "Kiambu": ["Thika", "Kiambu Town", "Ruiru", "Kikuyu", "Limuru", "Githunguri", "Juja", "Karuri"]
 };
 
 export const PROMOTION_TIERS = [

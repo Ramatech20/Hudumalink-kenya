@@ -1464,7 +1464,7 @@ const Admin = () => {
                   <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-500 dark:text-gray-400">
                     <span className="bg-gray-100 dark:bg-neutral-800 px-2 py-1 rounded uppercase font-bold text-xs">{listing.type}</span>
                     <span>{listing.category}</span>
-                    <span>{listing.location.town}, {listing.location.county}</span>
+                    <span>{listing.location.estate ? `${listing.location.estate}, ` : ''}{listing.location.town}, {listing.location.county}</span>
                     <span className={cn(
                       "px-2 py-1 rounded text-xs font-bold uppercase",
                       listing.status === 'active' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :

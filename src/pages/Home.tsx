@@ -285,7 +285,7 @@ const Home = () => {
                 <div className="p-4">
                   <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-2">
                     <MapPin className="w-3 h-3 mr-1" />
-                    {listing.location.town}, {listing.location.county}
+                    {listing.location.estate ? `${listing.location.estate}, ` : ''}{listing.location.town}, {listing.location.county}
                   </div>
                   <h3 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1 group-hover:text-primary transition-colors">
                     {listing.title}
@@ -461,7 +461,7 @@ const Home = () => {
               <div className="p-4">
                 <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-2">
                   <MapPin className="w-3 h-3 mr-1" />
-                  {listing.location.town}, {listing.location.county}
+                  {listing.location.estate ? `${listing.location.estate}, ` : ''}{listing.location.town}, {listing.location.county}
                 </div>
                 <h3 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1 group-hover:text-primary transition-colors">
                   {listing.title}

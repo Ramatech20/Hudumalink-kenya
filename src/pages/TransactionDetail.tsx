@@ -46,13 +46,29 @@ const TransactionDetail = () => {
           setTransaction(txData);
 
           // Fetch listing
-          try {
-            const listingDoc = await getDoc(doc(db, 'listings', txData.listingId));
-            if (listingDoc.exists()) {
-              setListing({ id: listingDoc.id, ...listingDoc.data() } as Listing);
+          if (txData.listingId === 'multi_order_cart') {
+            const txItems = (txData as any).items || [];
+            const isService = (txData as any).type === 'service';
+            setListing({
+              id: 'multi_order_cart',
+              title: (txData as any).listingTitle || `${txItems.length} items from seller`,
+              price: txData.amount,
+              images: [txItems[0]?.image || 'https://images.unsplash.com/photo-1542496658-e33a6d0d50f6?auto=format&fit=crop&q=80&w=300'],
+              status: 'active',
+              type: isService ? 'service' : 'product',
+              authorId: txData.sellerId,
+              authorName: (txData as any).sellerName || 'Vendor',
+              location: { county: 'Nairobi', subcounty: 'CBD' }
+            } as any);
+          } else {
+            try {
+              const listingDoc = await getDoc(doc(db, 'listings', txData.listingId));
+              if (listingDoc.exists()) {
+                setListing({ id: listingDoc.id, ...listingDoc.data() } as Listing);
+              }
+            } catch (error: any) {
+              handleFirestoreError(error, OperationType.GET, `listings/${txData.listingId}`);
             }
-          } catch (error: any) {
-            handleFirestoreError(error, OperationType.GET, `listings/${txData.listingId}`);
           }
 
           // Fetch other user info
@@ -159,6 +175,32 @@ const TransactionDetail = () => {
                 <p className="text-xs text-gray-500 mt-1">Purchased on {formatDate(transaction.createdAt)}</p>
               </div>
             </div>
+
+            {transaction.listingId === 'multi_order_cart' && (transaction as any).items && (
+              <div className="mb-8 overflow-hidden rounded-2xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+                <div className="bg-gray-50 dark:bg-neutral-800 px-5 py-3 border-b border-gray-100 dark:border-neutral-800">
+                  <span className="text-xs font-extrabold uppercase tracking-widest text-gray-500 dark:text-gray-400">Cart Items Breakdown ({((transaction as any).items || []).length})</span>
+                </div>
+                <div className="divide-y divide-gray-100 dark:divide-neutral-800 max-h-[300px] overflow-y-auto">
+                  {((transaction as any).items || []).map((item: any) => (
+                    <div key={item.id} className="p-4 flex items-center justify-between bg-white dark:bg-neutral-900 hover:bg-gray-50/50 dark:hover:bg-neutral-800/20 transition-all">
+                      <div className="flex items-center space-x-3">
+                        {item.image && (
+                          <img src={item.image} alt={item.title} className="w-12 h-12 object-cover rounded-xl border border-gray-100 dark:border-neutral-800" referrerPolicy="no-referrer" />
+                        )}
+                        <div>
+                          <p className="font-bold text-sm text-gray-900 dark:text-white line-clamp-1">{item.title}</p>
+                          <p className="text-xs text-gray-400">Qty: {item.quantity || 1} × {formatPrice(item.price || 0)}</p>
+                        </div>
+                      </div>
+                      <span className="font-semibold text-sm text-gray-950 dark:text-gray-50">
+                        {formatPrice((item.price || 0) * (item.quantity || 1))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-6">
               <h2 className="font-bold text-lg text-gray-900 dark:text-white">Status Timeline</h2>

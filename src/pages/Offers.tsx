@@ -4,11 +4,13 @@ import { collection, query, where, getDocs, limit, orderBy } from 'firebase/fire
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Listing } from '../types';
 import { useLanguage } from '../LanguageContext';
+import { useAuth } from '../AuthContext';
 import { MapPin, Clock, Tag, Percent, ArrowRight, Filter, Search, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function Offers() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<'all' | 'product' | 'service'>('all');
@@ -221,7 +223,7 @@ export default function Offers() {
                     {/* Location strip */}
                     <div className="flex items-center text-xs text-gray-400 dark:text-gray-500 mb-3 font-semibold">
                       <MapPin className="w-3.5 h-3.5 mr-1 text-rose-500" />
-                      {listing.location.town}, {listing.location.county}
+                      {listing.location.estate ? `${listing.location.estate}, ` : ''}{listing.location.town}, {listing.location.county}
                     </div>
 
                     <h3 className="font-extrabold text-gray-900 dark:text-white text-md tracking-tight group-hover:text-rose-500 transition-colors line-clamp-1 mb-2">
@@ -273,14 +275,16 @@ export default function Offers() {
           <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-sm mx-auto text-sm leading-relaxed">
             All active listings are currently regular-priced. If you are a seller, list your product or service as a special discount to be featured here first!
           </p>
-          <div className="mt-8">
-            <Link
-              to="/create-listing"
-              className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl text-xs transition-all shadow-md shadow-rose-500/20 inline-flex items-center"
-            >
-              Post a Special Offer
-            </Link>
-          </div>
+          {user?.role !== 'customer' && (
+            <div className="mt-8">
+              <Link
+                to="/create-listing"
+                className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl text-xs transition-all shadow-md shadow-rose-500/20 inline-flex items-center"
+              >
+                Post a Special Offer
+              </Link>
+            </div>
+          )}
         </motion.div>
       )}
 

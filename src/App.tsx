@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './AuthContext';
 import { LanguageProvider } from './LanguageContext';
+import { CartProvider } from './CartContext';
 import { Layout } from './components/Layout';
 import ScrollToTop from './components/ScrollToTop';
 
@@ -23,6 +24,7 @@ import PromoteListing from './pages/PromoteListing';
 import TransactionDetail from './pages/TransactionDetail';
 import Careers from './pages/Careers';
 import Offers from './pages/Offers';
+import Referrals from './pages/Referrals';
 import { About, Contact, Terms, Privacy, Safety, FAQ, EscrowPolicy, Cookies } from './pages/StaticPages';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -40,37 +42,40 @@ export default function App() {
       <ErrorBoundary>
         <LanguageProvider>
           <AuthProvider>
-            <Router>
-            <ScrollToTop />
-            <Layout>
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/listings" element={<Listings />} />
-                <Route path="/listing/:id" element={<ListingDetail />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-                <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
-                <Route path="/create-listing" element={<PrivateRoute><CreateListing /></PrivateRoute>} />
-                <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
-                <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
-                <Route path="/kyc" element={<PrivateRoute><KYC /></PrivateRoute>} />
-                <Route path="/seller-dashboard" element={<PrivateRoute><SellerDashboard /></PrivateRoute>} />
-                <Route path="/promote/:id" element={<PrivateRoute><PromoteListing /></PrivateRoute>} />
-                <Route path="/transactions/:id" element={<PrivateRoute><TransactionDetail /></PrivateRoute>} />
-                <Route path="/about" element={<About />} />
-                <Route path="/contact" element={<Contact />} />
-                <Route path="/terms" element={<Terms />} />
-                <Route path="/privacy" element={<Privacy />} />
-                <Route path="/escrow-policy" element={<EscrowPolicy />} />
-                <Route path="/cookies" element={<Cookies />} />
-                <Route path="/safety" element={<Safety />} />
-                <Route path="/faq" element={<FAQ />} />
-                <Route path="/careers" element={<Careers />} />
-                <Route path="/offers" element={<Offers />} />
-              </Routes>
-            </Layout>
-            <Toaster position="top-center" richColors />
-          </Router>
+            <CartProvider>
+              <Router>
+              <ScrollToTop />
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/listings" element={<Listings />} />
+                  <Route path="/listing/:id" element={<ListingDetail />} />
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+                  <Route path="/referrals" element={<PrivateRoute><Referrals /></PrivateRoute>} />
+                  <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
+                  <Route path="/create-listing" element={<PrivateRoute><CreateListing /></PrivateRoute>} />
+                  <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
+                  <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
+                  <Route path="/kyc" element={<PrivateRoute><KYC /></PrivateRoute>} />
+                  <Route path="/seller-dashboard" element={<PrivateRoute><SellerDashboard /></PrivateRoute>} />
+                  <Route path="/promote/:id" element={<PrivateRoute><PromoteListing /></PrivateRoute>} />
+                  <Route path="/transactions/:id" element={<PrivateRoute><TransactionDetail /></PrivateRoute>} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/escrow-policy" element={<EscrowPolicy />} />
+                  <Route path="/cookies" element={<Cookies />} />
+                  <Route path="/safety" element={<Safety />} />
+                  <Route path="/faq" element={<FAQ />} />
+                  <Route path="/careers" element={<Careers />} />
+                  <Route path="/offers" element={<Offers />} />
+                </Routes>
+              </Layout>
+              <Toaster position="top-center" richColors />
+            </Router>
+          </CartProvider>
         </AuthProvider>
         </LanguageProvider>
       </ErrorBoundary>

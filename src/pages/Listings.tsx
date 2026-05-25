@@ -6,15 +6,17 @@ import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
 import { formatPrice, cn, getDistance } from '../lib/utils';
 import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap, Tag, DollarSign, ShoppingBag } from 'lucide-react';
-import { KENYAN_COUNTIES, CATEGORIES } from '../constants';
+import { KENYAN_COUNTIES, CATEGORIES, TOWNS } from '../constants';
 import { motion } from 'motion/react';
 import { ListingSkeleton } from '../components/Skeleton';
 import { useLanguage } from '../LanguageContext';
+import { useAuth } from '../AuthContext';
 
 const LISTINGS_PER_PAGE = 12;
 
 const Listings = () => {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +30,7 @@ const Listings = () => {
 
   const qParam = searchParams.get('q') || '';
   const countyParam = searchParams.get('county') || '';
+  const townParam = searchParams.get('town') || '';
   const categoryParam = searchParams.get('category') || '';
   const typeParam = searchParams.get('type') || '';
   const minPriceParam = searchParams.get('minPrice') || '';
@@ -35,7 +38,7 @@ const Listings = () => {
 
   useEffect(() => {
     fetchListings(true);
-  }, [qParam, countyParam, categoryParam, typeParam, sortBy, minPriceParam, maxPriceParam, userLocation]);
+  }, [qParam, countyParam, townParam, categoryParam, typeParam, sortBy, minPriceParam, maxPriceParam, userLocation]);
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) return;
@@ -74,6 +77,9 @@ const Listings = () => {
       }
       if (countyParam) {
         q = query(q, where('location.county', '==', countyParam));
+      }
+      if (townParam) {
+        q = query(q, where('location.town', '==', townParam));
       }
 
       if (minPriceParam) {
@@ -159,6 +165,9 @@ const Listings = () => {
     } else {
       newParams.delete(key);
     }
+    if (key === 'county') {
+      newParams.delete('town');
+    }
     setSearchParams(newParams);
   };
 
@@ -189,6 +198,37 @@ const Listings = () => {
             <option value="" className="dark:bg-neutral-900">{t('listings.all_counties')}</option>
             {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
           </select>
+
+          {countyParam && (
+            <div className="space-y-2 pt-2 animate-in fade-in duration-300">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Town / Estate</label>
+                {townParam && (
+                  <button onClick={() => updateFilter('town', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">{t('listings.clear')}</button>
+                )}
+              </div>
+              {TOWNS[countyParam] ? (
+                <select
+                  className="w-full p-3 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
+                  value={townParam}
+                  onChange={(e) => updateFilter('town', e.target.value)}
+                >
+                  <option value="" className="dark:bg-neutral-900">All Towns / Estates</option>
+                  {TOWNS[countyParam].map(t => (
+                    <option key={t} value={t} className="dark:bg-neutral-900">{t}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Enter Town/Estate..."
+                  className="w-full p-3 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
+                  value={townParam}
+                  onChange={(e) => updateFilter('town', e.target.value)}
+                />
+              )}
+            </div>
+          )}
 
           <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
             <div className="flex items-center justify-between">
@@ -388,7 +428,7 @@ const Listings = () => {
                     <div className="p-4">
                       <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-2">
                         <MapPin className="w-3 h-3 mr-1" />
-                        {listing.location.town}, {listing.location.county}
+                        {listing.location.estate ? `${listing.location.estate}, ` : ''}{listing.location.town}, {listing.location.county}
                       </div>
                       <h3 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1 group-hover:text-primary transition-colors">
                         {listing.title}
@@ -453,12 +493,14 @@ const Listings = () => {
                     >
                       {t('listings.reset_filters')}
                     </button>
-                    <Link 
-                      to="/create-listing"
-                      className="w-full sm:w-auto px-10 py-4 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
-                    >
-                      {t('listings.post_listing')}
-                    </Link>
+                    {user?.role !== 'customer' && (
+                      <Link 
+                        to="/create-listing"
+                        className="w-full sm:w-auto px-10 py-4 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
+                      >
+                        {t('listings.post_listing')}
+                      </Link>
+                    )}
                   </div>
 
                   <div className="mt-16 pt-16 border-t border-gray-100 dark:border-neutral-800">

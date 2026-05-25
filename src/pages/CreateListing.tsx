@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc, query, where, getCountFromServer } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { uploadWithFallback } from '../lib/upload-helper';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
@@ -31,6 +31,7 @@ const CreateListing = () => {
     category: '',
     county: '',
     town: '',
+    estate: '',
     phone: '',
     whatsapp: '',
     stock: '',
@@ -72,6 +73,13 @@ const CreateListing = () => {
     if (user && user.role === 'customer') {
       toast.error('Customers cannot post listings. Please become a provider or seller first.');
       navigate('/profile');
+      return;
+    }
+
+    if (user && !user.emailVerified && !auth.currentUser?.emailVerified) {
+      toast.error('Please verify your email address to post listings. A verification link has been sent to your inbox.');
+      navigate('/profile');
+      return;
     }
   }, [user, navigate]);
 
@@ -244,6 +252,7 @@ const CreateListing = () => {
         location: {
           county: formData.county,
           town: formData.town,
+          estate: formData.estate || null,
           lat: formData.lat ?? null,
           lng: formData.lng ?? null
         },
@@ -344,9 +353,7 @@ const CreateListing = () => {
                     onChange={(e) => setFormData({...formData, title: e.target.value})}
                   />
                   <p className="text-[10px] text-gray-400 mt-2 font-medium">Use clear, descriptive titles to help buyers find your listing.</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                </div>                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Type <span className="text-red-500">*</span></label>
                     <div className="grid grid-cols-2 gap-2">
@@ -359,13 +366,21 @@ const CreateListing = () => {
                         )}
                       >
                         <ShoppingBag className="w-5 h-5" />
-                        Product
+                        Goods / Product
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFormData({...formData, type: 'service', category: ''})}
+                        disabled={user?.role === 'seller'}
+                        onClick={() => {
+                          if (user?.role === 'seller') {
+                            toast.error('Sellers are restricted to listing goods/products only.');
+                            return;
+                          }
+                          setFormData({...formData, type: 'service', category: ''});
+                        }}
                         className={cn(
                           "py-4 rounded-2xl border font-bold text-sm transition-all flex flex-col items-center gap-2",
+                          user?.role === 'seller' ? "opacity-40 cursor-not-allowed bg-gray-50 dark:bg-neutral-900 border-gray-100 dark:border-neutral-900 text-gray-450" :
                           formData.type === 'service' ? "bg-primary/10 border-primary text-primary shadow-sm" : "bg-white dark:bg-neutral-800 border-gray-100 dark:border-neutral-700 text-gray-500"
                         )}
                       >
@@ -373,6 +388,11 @@ const CreateListing = () => {
                         Service
                       </button>
                     </div>
+                    {user?.role === 'seller' && (
+                      <p className="text-[10px] text-amber-500 font-bold mt-2">
+                        Sellers are restricted to listing goods only. Service providers can list both services and goods.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Category <span className="text-red-500">*</span></label>
@@ -700,7 +720,7 @@ const CreateListing = () => {
                     required
                     className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
                     value={formData.county}
-                    onChange={(e) => setFormData({...formData, county: e.target.value, town: ''})}
+                    onChange={(e) => setFormData({...formData, county: e.target.value, town: '', estate: ''})}
                   >
                     <option value="">Select County</option>
                     {KENYAN_COUNTIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -713,13 +733,26 @@ const CreateListing = () => {
                     disabled={!formData.county}
                     className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 transition-all shadow-sm"
                     value={formData.town}
-                    onChange={(e) => setFormData({...formData, town: e.target.value})}
+                    onChange={(e) => setFormData({...formData, town: e.target.value, estate: ''})}
                   >
                     <option value="">Select Town</option>
                     {formData.county && TOWNS[formData.county]?.map(t => <option key={t} value={t}>{t}</option>)}
                     {!TOWNS[formData.county] && <option value="Other">Other</option>}
                   </select>
                 </div>
+                {formData.town && (
+                  <div className="col-span-full animate-in fade-in duration-300">
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-widest">Estate / Neighborhood / Landmark / Village (e.g., Burnt Forest, Turbo, Munyaka)</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Near Burnt Forest Station, Turbo center, Munyaka Estate, etc."
+                      className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                      value={formData.estate}
+                      onChange={(e) => setFormData({...formData, estate: e.target.value})}
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Providing your neighborhood or estate makes it easier for nearby buyers to find your listing.</p>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-6">
@@ -789,7 +822,7 @@ const CreateListing = () => {
                 </div>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <MapPin className="w-3 h-3" />
-                  <span>{formData.town}, {formData.county}</span>
+                  <span>{formData.estate ? `${formData.estate}, ` : ''}{formData.town}, {formData.county}</span>
                 </div>
               </div>
 

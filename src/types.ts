@@ -6,6 +6,7 @@ export type KYCStatus = 'none' | 'pending' | 'verified' | 'rejected';
 export interface Location {
   county: string;
   town: string;
+  estate?: string;
   lat?: number;
   lng?: number;
 }
@@ -48,9 +49,20 @@ export interface User {
   };
   successfulReferrals?: number;
   hasTriggeredReferral?: boolean;
+  maxSingleSpend?: number;
+  totalSpend?: number;
   deviceFingerprint?: string;
   lastActiveIp?: string;
+  metadata?: UserMetadata;
   createdAt: string;
+}
+
+export interface UserMetadata {
+  healthScore: number;       // 0-100
+  responseLatency: number;   // response latency in minutes
+  responseRate?: number;     // response rate percentage
+  orderCompletionRate?: number; // order completion rate percentage
+  disputeRate?: number;      // dispute rate percentage
 }
 
 export interface UserKYC {
@@ -131,6 +143,19 @@ export interface Milestone {
   description?: string;
 }
 
+export interface EscrowMilestone {
+  phaseId: number;
+  percentage: number;
+  amount: number;
+  status: 'held' | 'released' | 'disputed';
+}
+
+export enum DisputeTemplate {
+  PARTIAL_REFUND_INCOMPLETE = 'PARTIAL_REFUND_INCOMPLETE',
+  FULL_RELEASE_EVIDENCE_INSUFFICIENT = 'FULL_RELEASE_EVIDENCE_INSUFFICIENT',
+  FULL_REFUND_NO_CONTACT = 'FULL_REFUND_NO_CONTACT'
+}
+
 export interface Transaction {
   id: string;
   listingId: string;
@@ -141,6 +166,9 @@ export interface Transaction {
   cancellationReason?: string;
   cancelledBy?: string;
   milestones?: Milestone[];
+  escrowMilestones?: EscrowMilestone[];
+  expectedDeliveryDate?: string;
+  providerETA?: string;
   delivery?: {
     provider: string;
     price: number;

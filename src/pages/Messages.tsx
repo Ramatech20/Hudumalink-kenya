@@ -248,6 +248,16 @@ const Messages = () => {
           duration: 6000
         });
 
+        // Write anonymous metadata build logs to dedicated collection for Admin Audit pattern analysis
+        const anonymizeHandle = (id: string) => id ? `usr_${id.substring(0, 6)}_hash` : "anon";
+        addDoc(collection(db, "audit_logs", "fraud", "leaked_patterns"), {
+          maskedSnippet: scanResult.maskedText,
+          timestamp: new Date().toISOString(),
+          senderAnonymized: anonymizeHandle(user.uid),
+          receiverAnonymized: anonymizeHandle(otherUserId || ""),
+          reason: scanResult.foundPattern || "Payment coordination pattern leak"
+        }).catch(err => console.error("Error creating bypass audit log:", err));
+
         // Increment user's fraud suspicion score in Firestore
         await updateDoc(doc(db, 'users', user.uid), {
           fraudSuspicionScore: increment(1),

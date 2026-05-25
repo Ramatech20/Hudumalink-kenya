@@ -212,11 +212,41 @@ const Profile = () => {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    if (!user.emailVerified && !auth.currentUser?.emailVerified) {
+      toast.error('Please verify your email address to update your profile.');
+      return;
+    }
+
+    let formattedPhone = (editData.phoneNumber || '').trim().replace(/\s+/g, '').replace(/\+/g, '');
+    if (formattedPhone) {
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '254' + formattedPhone.substring(1);
+      }
+      if (!/^254[17]\d{8}$/.test(formattedPhone)) {
+        toast.error('Please enter a valid Kenyan M-Pesa phone number (e.g., 07XXXXXXXX, 01XXXXXXXX or 254XXXXXXXX).');
+        return;
+      }
+      
+      try {
+        const qPhone = query(collection(db, 'users'), where('phoneNumber', '==', formattedPhone));
+        const snapPhone = await getDocs(qPhone);
+        const duplicateUsers = snapPhone.docs.filter(docSnap => docSnap.id !== user.uid);
+        if (duplicateUsers.length > 0) {
+          toast.error('This M-Pesa phone number is already registered to another account.');
+          return;
+        }
+      } catch (error: any) {
+        handleFirestoreError(error, OperationType.GET, 'users');
+        return;
+      }
+    }
+
     try {
       // Construction of update data to avoid undefined values which Firestore updateDoc rejects
       const updateData: any = {
         displayName: editData.displayName || '',
-        phoneNumber: editData.phoneNumber || '',
+        phoneNumber: formattedPhone,
         location: {
           county: editData.county || '',
           town: editData.town || '',
@@ -244,6 +274,11 @@ const Profile = () => {
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !withdrawAmount) return;
+
+    if (!user.emailVerified && !auth.currentUser?.emailVerified) {
+      toast.error('Please verify your email address to make a withdrawal.');
+      return;
+    }
 
     const amount = parseFloat(withdrawAmount);
     const fee = withdrawMethod === 'mpesa' ? 15 : 50;
@@ -465,9 +500,18 @@ const Profile = () => {
                 <div className="flex items-center text-secondary text-xs mb-1 font-bold">
                   <Gift className="w-3 h-3 mr-1" /> {t('profile.referral_earnings')}
                 </div>
-                <span className="text-xl font-bold text-gray-900 dark:text-white">
-                  {formatPrice((user as any).referralEarnings || 0)}
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xl font-bold text-gray-900 dark:text-white">
+                    {formatPrice((user as any).referralEarnings || 0)}
+                  </span>
+                  <Link 
+                    to="/referrals"
+                    className="flex items-center text-xs font-bold text-secondary hover:underline"
+                  >
+                    <span>View Dashboard</span>
+                    <ChevronRight className="w-4 h-4 ml-0.5" />
+                  </Link>
+                </div>
               </div>
               <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-2xl">
                 <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">

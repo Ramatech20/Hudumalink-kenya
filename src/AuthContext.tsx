@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, query, collection, where } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { User } from './types';
 import { getDeviceFingerprint } from './lib/fingerprint';
@@ -89,10 +89,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               rating: userData.rating || 0,
               reviewCount: userData.reviewCount || 0,
               kycStatus: userData.kycStatus || 'none',
+              referredBy: userData.referredBy || null,
+              maxSingleSpend: userData.maxSingleSpend || 0,
+              totalSpend: userData.totalSpend || 0,
               createdAt: userData.createdAt || new Date().toISOString()
             };
             const publicPath = `users_public/${firebaseUser.uid}`;
             setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, publicPath));
+
+            // Self-healing: Check and ensure current user's referral code is registered publicly
+            const refCode = userData.referralCode || firebaseUser.uid.substring(0, 6).toUpperCase();
+            if (refCode) {
+              const refDocRef = doc(db, 'referral_codes', refCode);
+              getDoc(refDocRef).then((snap) => {
+                if (!snap.exists()) {
+                  setDoc(refDocRef, {
+                    userId: firebaseUser.uid,
+                    createdAt: new Date().toISOString()
+                  }).catch(e => console.warn("Referral code backfill skipped:", e));
+                }
+              }).catch(e => console.warn("Referral doc read skipped:", e));
+            }
 
             // One-time upgrade for bootstrap admin
             if (firebaseUser.email === 'ramadhanwambia83@gmail.com' && userData.role !== 'admin') {
@@ -123,9 +140,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               isOnline: true,
               lastSeen: new Date().toISOString(),
               referralCode: firebaseUser.uid.substring(0, 6).toUpperCase(),
+              referredBy: '',
               referralEarnings: 0,
               escrowBalance: 0,
               emailVerified: firebaseUser.emailVerified,
+              maxSingleSpend: 0,
+              totalSpend: 0,
               createdAt: new Date().toISOString(),
               deviceFingerprint: fingerprint,
             };
@@ -144,9 +164,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 rating: 0,
                 reviewCount: 0,
                 kycStatus: 'none',
+                referredBy: '',
+                maxSingleSpend: 0,
+                totalSpend: 0,
                 createdAt: newUser.createdAt
               };
               await setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true });
+              
+              // Create public referral code mapping matching registration flows
+              if (newUser.referralCode) {
+                await setDoc(doc(db, 'referral_codes', newUser.referralCode), {
+                  userId: firebaseUser.uid,
+                  createdAt: new Date().toISOString()
+                }, { merge: true }).catch(err => {
+                  console.warn("New user referral mapping skipped:", err);
+                });
+              }
               
               setUser(newUser);
             } catch (error) {
@@ -196,6 +229,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    // Real-time listener for buyer spending metrics calculation
+    const txQuery = query(
+      collection(db, 'transactions'),
+      where('buyerId', '==', user.uid)
+    );
+
+    const unsubscribeTxs = onSnapshot(txQuery, async (snapshot) => {
+      let maxSingle = 0;
+      let total = 0;
+
+      snapshot.docs.forEach((snap) => {
+        const data = snap.data();
+        if (['deposited', 'completed', 'released', 'disputed'].includes(data.status)) {
+          const amt = data.amount || 0;
+          if (amt > maxSingle) maxSingle = amt;
+          total += amt;
+        }
+      });
+
+      const currentMax = user.maxSingleSpend || 0;
+      const currentTotal = user.totalSpend || 0;
+
+      if (maxSingle !== currentMax || total !== currentTotal) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          maxSingleSpend: maxSingle,
+          totalSpend: total
+        }).catch(err => {
+          console.warn("Spend stats sync skipped:", err);
+        });
+      }
+    }, (error) => {
+      console.warn("Transactions read skipped (expected during auth shift):", error);
+    });
+
+    return () => unsubscribeTxs();
+  }, [user?.uid, user?.maxSingleSpend, user?.totalSpend]);
 
   return (
     <AuthContext.Provider value={{ user, loading, isAuthReady, refreshUser }}>

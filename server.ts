@@ -768,6 +768,426 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     }
   });
 
+  // Escrow milestone release system router
+  app.post("/api/transactions/release-milestone", verifyUser, async (req: any, res: any) => {
+    const { transactionId, phaseId, deviceFingerprint } = req.body;
+    const userId = req.user.uid;
+
+    if (!transactionId || phaseId === undefined) {
+      return res.status(400).json({ error: "Missing transactionId or phaseId" });
+    }
+
+    try {
+      const txRef = db.collection("transactions").doc(transactionId);
+      const txSnap = await txRef.get();
+      if (!txSnap.exists) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+
+      const txData = txSnap.data();
+      if (!txData) {
+        return res.status(500).json({ error: "Data empty or invalid" });
+      }
+
+      if (txData.buyerId !== userId) {
+        return res.status(403).json({ error: "Only the buyer can release escrow milestones" });
+      }
+
+      // Check transaction status - must be deposited or delivered
+      if (txData.status !== "deposited" && txData.status !== "delivered") {
+        return res.status(400).json({ error: "Transaction is not in a releasable state" });
+      }
+
+      // Proportional milestone initialization for legacy transactions if missing
+      let milestones = txData.escrowMilestones || [];
+      if (milestones.length === 0) {
+        // Build fallback 2-part milestone list
+        const part1 = Math.round(txData.amount * 0.5);
+        const part2 = txData.amount - part1;
+        milestones = [
+          { phaseId: 1, percentage: 50, amount: part1, status: "held" },
+          { phaseId: 2, percentage: 50, amount: part2, status: "held" }
+        ];
+      }
+
+      const milestoneIndex = milestones.findIndex((m: any) => m.phaseId === Number(phaseId));
+      if (milestoneIndex === -1) {
+        return res.status(404).json({ error: `Milestone phase ${phaseId} not found in this transaction` });
+      }
+
+      const milestone = milestones[milestoneIndex];
+      if (milestone.status !== "held") {
+        return res.status(400).json({ error: `Milestone phase ${phaseId} is already ${milestone.status}` });
+      }
+
+      // Perform atomic release inside transaction block
+      const buyerIp = getClientIp(req);
+      const result = await db.runTransaction(async (transaction) => {
+        const txDoc = await transaction.get(txRef);
+        const latestTxData = txDoc.data();
+        if (!latestTxData) throw new Error("Transaction state loading failed");
+
+        let currentMilestones = latestTxData.escrowMilestones || milestones;
+        const currentMilestone = currentMilestones.find((m: any) => m.phaseId === Number(phaseId));
+        if (!currentMilestone || currentMilestone.status !== "held") {
+          throw new Error("Milestone already modified or invalid");
+        }
+
+        // Mark milestone phase as released
+        currentMilestone.status = "released";
+
+        // Determine listing type for dynamic commission calculation
+        let listingType: 'service' | 'goods' = 'service';
+        if (latestTxData.listingId) {
+          const listingDoc = await transaction.get(db.collection("listings").doc(latestTxData.listingId));
+          if (listingDoc.exists) {
+            const lData = listingDoc.data();
+            if (lData && (lData.type === 'product' || lData.type === 'goods')) {
+              listingType = 'goods';
+            }
+          }
+        }
+
+        // Proportionate commission deduction matching of milestones
+        const milestoneCommission = calculateCommission(listingType, currentMilestone.amount);
+        const milestoneNetEarnings = Math.max(0, Math.round(currentMilestone.amount - milestoneCommission));
+
+        const sellerId = latestTxData.sellerId;
+        const buyerId = latestTxData.buyerId;
+
+        const sellerRef = db.collection("users").doc(sellerId);
+        const buyerRef = db.collection("users").doc(buyerId);
+
+        const [sellerDoc, buyerDoc] = await Promise.all([
+          transaction.get(sellerRef),
+          transaction.get(buyerRef)
+        ]);
+
+        const sellerData = sellerDoc.data() || {};
+        const buyerData = buyerDoc.data() || {};
+
+        // Determine if ALL escrow milestones are completed/released
+        const allReleased = currentMilestones.every((m: any) => m.status === "released");
+
+        // Update single transaction document with the updated milestone status
+        const txUpdates: any = {
+          escrowMilestones: currentMilestones,
+          updatedAt: new Date().toISOString()
+        };
+        if (allReleased) {
+          txUpdates.status = "completed";
+          txUpdates.completedAt = new Date().toISOString();
+        }
+
+        transaction.update(txRef, txUpdates);
+
+        // Protect Platform holding locks for mature period
+        const holdPeriodHours = currentMilestone.amount >= 5000 ? 48 : 24;
+        const releaseTime = new Date();
+        releaseTime.setHours(releaseTime.getHours() + holdPeriodHours);
+
+        transaction.update(sellerRef, {
+          escrowBalance: admin.firestore.FieldValue.increment(milestoneNetEarnings),
+          completedPaymentsCount: admin.firestore.FieldValue.increment(allReleased ? 1 : 0),
+          updatedAt: new Date().toISOString()
+        });
+
+        const holdLedgerRef = db.collection("hold_ledgers").doc();
+        transaction.set(holdLedgerRef, {
+          userId: sellerId,
+          transactionId: transactionId,
+          phaseId: Number(phaseId),
+          amount: milestoneNetEarnings,
+          releaseTime: releaseTime.toISOString(),
+          status: "locked",
+          createdAt: new Date().toISOString()
+        });
+
+        // Write vendor dashboard credit logs
+        const dashboardLogRef = db.collection("dashboard_transaction_logs").doc();
+        transaction.set(dashboardLogRef, {
+          userId: sellerId,
+          transactionId: transactionId,
+          phaseId: Number(phaseId),
+          grossAmount: currentMilestone.amount,
+          commissionDeducted: milestoneCommission,
+          netEarningsAdded: milestoneNetEarnings,
+          type: "credit",
+          description: `Milestone Phase ${phaseId} Released & Commission Cleared`,
+          createdAt: new Date().toISOString()
+        });
+
+        // Notifications
+        const sellerNotificationRef = db.collection("notifications").doc();
+        transaction.set(sellerNotificationRef, {
+          userId: sellerId,
+          title: `Milestone Released (Phase ${phaseId})`,
+          message: `KES ${milestoneNetEarnings} (after KES ${milestoneCommission} commission) released into pending balances. Matures in ${holdPeriodHours} hours.`,
+          type: "info",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        const buyerNotificationRef = db.collection("notifications").doc();
+        transaction.set(buyerNotificationRef, {
+          userId: buyerId,
+          title: `Milestone Phase Confirmed`,
+          message: `You have successfully released Milestone Phase ${phaseId} (KES ${currentMilestone.amount}) for order ${transactionId}.`,
+          type: "success",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        return { success: true, allMilestonesCompleted: allReleased, releasedAmount: milestoneNetEarnings, holdHours: holdPeriodHours };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Escrow milestone release error:", error);
+      res.status(500).json({ error: error.message || "Failed to process milestone escrow release" });
+    }
+  });
+
+  // Admin Dispute Resolution Template settlement
+  app.post("/api/admin/disputes/resolve-template", verifyAdmin, async (req: any, res: any) => {
+    const { disputeId, template, customNotes } = req.body;
+
+    if (!disputeId || !template) {
+      return res.status(400).json({ error: "Missing disputeId or resolution template text" });
+    }
+
+    const validTemplates = ["PARTIAL_REFUND_INCOMPLETE", "FULL_RELEASE_EVIDENCE_INSUFFICIENT", "FULL_REFUND_NO_CONTACT"];
+    if (!validTemplates.includes(template)) {
+      return res.status(400).json({ error: `Invalid template. Must be one of ${validTemplates.join(", ")}` });
+    }
+
+    try {
+      const disputeRef = db.collection("disputes").doc(disputeId);
+      const disputeSnap = await disputeRef.get();
+      if (!disputeSnap.exists) {
+        return res.status(404).json({ error: "Dispute document not found" });
+      }
+
+      const disputeData = disputeSnap.data();
+      if (!disputeData || disputeData.status === "resolved" || disputeData.status === "refunded") {
+        return res.status(400).json({ error: "Dispute already marked resolved or completed" });
+      }
+
+      const transactionId = disputeData.transactionId;
+      const txRef = db.collection("transactions").doc(transactionId);
+      const txSnap = await txRef.get();
+      if (!txSnap.exists) {
+        return res.status(404).json({ error: "Associated transaction not found" });
+      }
+
+      const txData = txSnap.data();
+      if (!txData) {
+        return res.status(500).json({ error: "Transaction data corrupt" });
+      }
+
+      const entireEscrowAmount = txData.amount || 0;
+      const buyerId = txData.buyerId;
+      const sellerId = txData.sellerId;
+
+      const buyerRef = db.collection("users").doc(buyerId);
+      const sellerRef = db.collection("users").doc(sellerId);
+
+      // Perform administrative settlement atomically inside database transaction
+      const result = await db.runTransaction(async (transaction) => {
+        // Evaluate dynamic commission parameters
+        let listingType: 'service' | 'goods' = 'service';
+        if (txData.listingId) {
+          const listingDoc = await transaction.get(db.collection("listings").doc(txData.listingId));
+          if (listingDoc.exists) {
+            const lData = listingDoc.data();
+            if (lData && (lData.type === 'product' || lData.type === 'goods')) {
+              listingType = 'goods';
+            }
+          }
+        }
+
+        let buyerRefund = 0;
+        let sellerEarnings = 0;
+        let commissionCollected = 0;
+
+        if (template === "PARTIAL_REFUND_INCOMPLETE") {
+          // 50-50 Refund/Release Split
+          const splitAmount = Math.round(entireEscrowAmount / 2);
+          buyerRefund = splitAmount;
+          commissionCollected = calculateCommission(listingType, entireEscrowAmount - splitAmount);
+          sellerEarnings = Math.max(0, (entireEscrowAmount - splitAmount) - commissionCollected);
+
+          // Credit buyer and seller proportional fractions
+          transaction.update(buyerRef, {
+            escrowBalance: admin.firestore.FieldValue.increment(buyerRefund),
+            updatedAt: new Date().toISOString()
+          });
+          transaction.update(sellerRef, {
+            escrowBalance: admin.firestore.FieldValue.increment(sellerEarnings),
+            updatedAt: new Date().toISOString()
+          });
+        } else if (template === "FULL_RELEASE_EVIDENCE_INSUFFICIENT") {
+          // 100% Release to Seller
+          commissionCollected = calculateCommission(listingType, entireEscrowAmount);
+          sellerEarnings = Math.max(0, entireEscrowAmount - commissionCollected);
+
+          transaction.update(sellerRef, {
+            escrowBalance: admin.firestore.FieldValue.increment(sellerEarnings),
+            updatedAt: new Date().toISOString()
+          });
+        } else if (template === "FULL_REFUND_NO_CONTACT") {
+          // 100% Refund to Buyer
+          buyerRefund = entireEscrowAmount;
+          transaction.update(buyerRef, {
+            escrowBalance: admin.firestore.FieldValue.increment(buyerRefund),
+            updatedAt: new Date().toISOString()
+          });
+        }
+
+        // Lock dispute status
+        transaction.update(disputeRef, {
+          status: "resolved",
+          resolution: `Admin Resolution with Standardized Template ID: ${template}. Notes: ${customNotes || "none"}. Refunded KES ${buyerRefund} to buyer, credited KES ${sellerEarnings} to provider.`,
+          resolvedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        // Complete the parent transaction
+        transaction.update(txRef, {
+          status: buyerRefund === entireEscrowAmount ? "cancelled" : "completed",
+          disputeResolvedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        // Notify Buyer
+        const bNotificationRef = db.collection("notifications").doc();
+        transaction.set(bNotificationRef, {
+          userId: buyerId,
+          title: "Escrow Dispute Resolved",
+          message: `Your dispute on order ${transactionId} is resolved. Resolution: ${template}. Amount refunded/settled: KES ${buyerRefund}.`,
+          type: "success",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        // Notify Seller
+        const sNotificationRef = db.collection("notifications").doc();
+        transaction.set(sNotificationRef, {
+          userId: sellerId,
+          title: "Escrow Dispute Resolved",
+          message: `The dispute on order ${transactionId} is resolved. Resolution: ${template}. Amount credited to your balance: KES ${sellerEarnings}.`,
+          type: "warning",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        return {
+          success: true,
+          buyerRefund,
+          sellerEarnings,
+          commission: commissionCollected
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Dispute standardized template resolution error:", error);
+      res.status(500).json({ error: error.message || "Failed to settle dispute using standardized template" });
+    }
+  });
+
+  // Standalone automated Financial Advisor and Monthly report aggregation module
+  async function generateMonthlyFinancialReport(monthYearString: string) {
+    // Parsing date query bounds, e.g. "2026-05"
+    const startIso = `${monthYearString}-01T00:00:00.000Z`;
+    
+    // Calculate end of the month gracefully
+    const [year, month] = monthYearString.split("-").map(Number);
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextMonthYear = month === 12 ? year + 1 : year;
+    const endIso = `${nextMonthYear}-${String(nextMonth).padStart(2, "0")}-01T00:00:00.000Z`;
+
+    // 1. Fetch Transactions in the given month index range
+    const txQuery = await db.collection("transactions")
+      .where("createdAt", ">=", startIso)
+      .where("createdAt", "<", endIso)
+      .get();
+
+    let grossPlatformVolume = 0;
+    let netMarketplaceRevenue = 0;
+    let totalReferralOutflow = 0;
+
+    txQuery.docs.forEach((docSnap) => {
+      const tx = docSnap.data();
+      if (!tx) return;
+
+      // Gross Escrow Volume
+      grossPlatformVolume += tx.amount || 0;
+
+      // Commission Collected
+      if (tx.status === "completed" || tx.status === "released") {
+        netMarketplaceRevenue += tx.commissionDeducted || 0;
+
+        // Handle custom referred users outflow (KSh 70 to referrer + KSh 40 to referred)
+        if (tx.referralId) {
+          totalReferralOutflow += 110; // Unified referral network bleed loop allocation
+        }
+      }
+    });
+
+    // 2. Query Withdrawals to calculate withdrawal float margin
+    const wQuery = await db.collection("withdrawals")
+      .where("createdAt", ">=", startIso)
+      .where("createdAt", "<", endIso)
+      .where("status", "==", "completed")
+      .get();
+
+    // Float margin: KSh 15 collected fee - KSh 5 Safaricom cost = KSh 10 profit
+    const totalCompletedWithdrawalsCount = wQuery.docs.length;
+    const withdrawalFloatProfit = totalCompletedWithdrawalsCount * 10;
+
+    // Compute absolute Net profit
+    const netProfit = netMarketplaceRevenue + withdrawalFloatProfit - totalReferralOutflow;
+
+    // Structural allocation budgeting rules:
+    // Operational Runway (reinvestment): 50%
+    // Growth & Marketing: 30%
+    // Net Retained Profit: 20%
+    const reinvestmentFund = Math.max(0, Math.round(netProfit * 0.50));
+    const marketingWallet = Math.max(0, Math.round(netProfit * 0.30));
+    const retainedProfit = Math.max(0, Math.round(netProfit - (reinvestmentFund + marketingWallet)));
+
+    return {
+      monthYear: monthYearString,
+      grossPlatformVolume,
+      netMarketplaceRevenue,
+      totalReferralOutflow,
+      withdrawalFloatProfit,
+      netProfit,
+      budgetAllocations: {
+        reinvestmentFund,
+        marketingWallet,
+        retainedProfit
+      }
+    };
+  }
+
+  // Monthly Financial Report endpoint
+  app.get("/api/admin/financial-report", verifyAdmin, async (req: any, res: any) => {
+    const { monthYear } = req.query; // e.g. "2026-05"
+    if (!monthYear) {
+      return res.status(400).json({ error: "Missing monthYear parameter in query string" });
+    }
+
+    try {
+      const report = await generateMonthlyFinancialReport(monthYear as string);
+      res.json(report);
+    } catch (error: any) {
+      console.error("Advisory Report Error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate monthly advisory report" });
+    }
+  });
+
   // Admin Actions: B2C Payouts (Withdrawals & Refunds)
   app.post("/api/admin/payout", verifyAdmin, async (req, res) => {
     const { userId, amount, phoneNumber, reason, type } = req.body;
@@ -811,7 +1231,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
   });
 
   // Withdrawal Requests (Race-condition safe and Identity-isolated)
-  app.post("/api/withdrawals/create", verifyUser, async (req: any, res: any) => {
+  const handleWithdrawalRequest = async (req: any, res: any) => {
     const { amount, method, details } = req.body;
     const userId = req.user.uid; // Read from cryptographically validated context, avoiding parameter tampering
 
@@ -822,6 +1242,13 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     const withdrawalAmount = Number(amount);
     if (isNaN(withdrawalAmount) || withdrawalAmount <= 0) {
       return res.status(400).json({ error: "Withdrawal amount must be greater than zero" });
+    }
+
+    // Strict minimum payout threshold guard: 500 KSh
+    if (withdrawalAmount < 500) {
+      return res.status(400).json({ 
+        error: "Payout Minimum Limit Violated: To protect platform reserves and comply with Safaricom M-Pesa B2C Bounded Settlement fees, withdrawals must be at least KES 500." 
+      });
     }
 
     const fee = method === "mpesa" ? 15 : 50;
@@ -918,7 +1345,10 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
       console.error("Withdrawal error:", error);
       res.status(500).json({ error: error.message || "Internal server error" });
     }
-  });
+  };
+
+  app.post("/api/withdrawals/create", verifyUser, handleWithdrawalRequest);
+  app.post("/api/withdrawals/request", verifyUser, handleWithdrawalRequest);
 
   // FIX 2: Memory and Scaling Safe 72-Hour Auto-Release Job
   const runAutoReleaseJob = async (): Promise<{ processedCount: number; errorsCount: number }> => {

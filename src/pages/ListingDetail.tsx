@@ -15,6 +15,7 @@ import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
+import { useCart } from '../CartContext';
 
 const ListingDetail = () => {
   const { t } = useLanguage();
@@ -49,6 +50,7 @@ const ListingDetail = () => {
   const [useMilestones, setUseMilestones] = useState(false);
   const [tipAmount, setTipAmount] = useState(0);
   const [showTipModal, setShowTipModal] = useState(false);
+  const { addToCart } = useCart();
   const navigate = useNavigate();
 
   const [isFavorited, setIsFavorited] = useState(false);
@@ -457,6 +459,11 @@ const ListingDetail = () => {
     fetchQuotes();
   }, [listing, user]);
 
+  const handleAddToCart = () => {
+    if (!listing) return;
+    addToCart(listing, 1);
+  };
+
   const handleEscrowPayment = async () => {
     if (!user || !listing) {
       toast.error('Please login to continue');
@@ -798,7 +805,7 @@ const ListingDetail = () => {
                 <div className="flex flex-col mt-2">
                   <div className="flex items-center text-gray-500 dark:text-gray-400">
                     <MapPin className="w-4 h-4 mr-1" />
-                    {listing.location.town}, {listing.location.county}
+                    {listing.location.estate ? `${listing.location.estate}, ` : ''}{listing.location.town}, {listing.location.county}
                     <span className="mx-2 text-gray-300 dark:text-neutral-700">|</span>
                     <span>{t('listing.posted')} {formatDate(listing.createdAt)}</span>
                   </div>
@@ -1178,20 +1185,33 @@ const ListingDetail = () => {
                   )}
 
                   {!transaction && (
-                    <button 
-                      onClick={handleEscrowPayment}
-                      disabled={processingPayment || listing.status !== 'active'}
-                      className="w-full flex items-center justify-center space-x-2 bg-primary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
-                    >
-                      {processingPayment ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : listing.type === 'product' ? (
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      {/* Add to Cart button */}
+                      <button 
+                        onClick={handleAddToCart}
+                        disabled={listing.status !== 'active'}
+                        className="flex-1 flex items-center justify-center space-x-2 bg-secondary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-secondary/20 disabled:opacity-50"
+                      >
                         <ShoppingCart className="w-5 h-5" />
-                      ) : (
-                        <Briefcase className="w-5 h-5" />
-                      )}
-                      <span>{listing.type === 'product' ? t('listing.buy_escrow') : t('listing.hire_escrow')}</span>
-                    </button>
+                        <span>Add to Cart</span>
+                      </button>
+
+                      {/* Buy/Hire instantly button */}
+                      <button 
+                        onClick={handleEscrowPayment}
+                        disabled={processingPayment || listing.status !== 'active'}
+                        className="flex-1 flex items-center justify-center space-x-2 bg-primary text-white py-4 rounded-2xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                      >
+                        {processingPayment ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : listing.type === 'product' ? (
+                          <Zap className="w-5 h-5" />
+                        ) : (
+                          <Briefcase className="w-5 h-5" />
+                        )}
+                        <span>{listing.type === 'product' ? 'Buy Now' : 'Hire Now'}</span>
+                      </button>
+                    </div>
                   )}
                   
                   {!transaction && (
