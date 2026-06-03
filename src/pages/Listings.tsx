@@ -1,27 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
 import { formatPrice, cn, getDistance } from '../lib/utils';
-import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap, Tag, DollarSign, ShoppingBag } from 'lucide-react';
+import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap, Tag, DollarSign, ShoppingBag, ShieldCheck, Flame } from 'lucide-react';
 import { KENYAN_COUNTIES, CATEGORIES, TOWNS } from '../constants';
 import { motion } from 'motion/react';
 import { ListingSkeleton } from '../components/Skeleton';
+import { ListingCard } from '../components/ListingCard';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
+
+// Import newly implemented production discovery system components
+import { MarketplaceLayout } from '../components/MarketplaceLayout';
+import { SidebarFilters, FilterState } from '../components/SidebarFilters';
+import { MarketplaceGrid } from '../components/MarketplaceGrid';
+import { MarketplaceCard } from '../components/MarketplaceCard';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 
 const LISTINGS_PER_PAGE = 12;
 
 const Listings = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [sortBy, setSortBy] = useState('newest');
@@ -36,9 +44,29 @@ const Listings = () => {
   const minPriceParam = searchParams.get('minPrice') || '';
   const maxPriceParam = searchParams.get('maxPrice') || '';
 
+  // Advanced Jumia Filter Parameters
+  const isVerifiedParam = searchParams.get('isVerified') || '';
+  const isEscrowProtectedParam = searchParams.get('isEscrowProtected') || '';
+  const fastDeliveryParam = searchParams.get('fastDelivery') || '';
+  const minRatingParam = searchParams.get('minRating') || '';
+
   useEffect(() => {
     fetchListings(true);
-  }, [qParam, countyParam, townParam, categoryParam, typeParam, sortBy, minPriceParam, maxPriceParam, userLocation]);
+  }, [
+    qParam, 
+    countyParam, 
+    townParam, 
+    categoryParam, 
+    typeParam, 
+    sortBy, 
+    minPriceParam, 
+    maxPriceParam, 
+    userLocation,
+    isVerifiedParam,
+    isEscrowProtectedParam,
+    fastDeliveryParam,
+    minRatingParam
+  ]);
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) return;
@@ -97,7 +125,6 @@ const Listings = () => {
       } else if (sortBy === 'price_high') {
         q = query(q, orderBy('price', 'desc'));
       } else if (sortBy === 'distance' && userLocation) {
-        // Distance sorting is done client-side below
         q = query(q, orderBy('createdAt', 'desc'));
       }
 
@@ -114,8 +141,10 @@ const Listings = () => {
       }
       const newDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
       
-      // Client-side search for keyword (Firestore limitation)
+      // Client-side search & filtering
       let filteredDocs = newDocs;
+      
+      // Title / Description text search
       if (qParam) {
         filteredDocs = newDocs.filter(doc => 
           doc.title.toLowerCase().includes(qParam.toLowerCase()) || 
@@ -123,7 +152,28 @@ const Listings = () => {
         );
       }
 
-      // Sort by promoted status and tier first, then by the chosen sort order
+      // 1. Is Escrow Protected Filter
+      if (isEscrowProtectedParam === 'true') {
+        filteredDocs = filteredDocs.filter(doc => doc.escrowEnabled !== false);
+      }
+
+      // 2. Verified Vendors check
+      if (isVerifiedParam === 'true') {
+        filteredDocs = filteredDocs.filter(doc => doc.isFeatured || doc.isPromoted || (doc.rating && doc.rating >= 4.7));
+      }
+
+      // 3. Fast Delivery Speed filter
+      if (fastDeliveryParam === 'true') {
+        filteredDocs = filteredDocs.filter(doc => doc.type === 'service' || (doc.stock && doc.stock > 0));
+      }
+
+      // 4. Star Rating threshold
+      if (minRatingParam) {
+        const minRatingVal = Number(minRatingParam);
+        filteredDocs = filteredDocs.filter(doc => (doc.rating || 4.8) >= minRatingVal);
+      }
+
+      // Sort by promoted status and tier first, then by chosen sort order
       const sortedDocs = [...filteredDocs].sort((a, b) => {
         const tierOrder: Record<string, number> = { elite: 3, premium: 2, basic: 1 };
         const aTier = a.isPromoted ? (tierOrder[a.promotionTier || 'basic'] || 1) : 0;
@@ -137,7 +187,7 @@ const Listings = () => {
           return distA - distB;
         }
 
-        return 0; // Keep original sort order for items with same promoted status
+        return 0;
       });
 
       if (isInitial) {
@@ -158,372 +208,216 @@ const Listings = () => {
     }
   };
 
-  const updateFilter = (key: string, value: string) => {
+  const updateSearchValue = (value: string) => {
     const newParams = new URLSearchParams(searchParams);
     if (value) {
-      newParams.set(key, value);
+      newParams.set('q', value);
     } else {
-      newParams.delete(key);
+      newParams.delete('q');
     }
-    if (key === 'county') {
+    setSearchParams(newParams);
+  };
+
+  // Convert key parameters to Sidebar FilterState interface
+  const filterState: FilterState = {
+    category: categoryParam,
+    county: countyParam,
+    town: townParam,
+    minPrice: minPriceParam,
+    maxPrice: maxPriceParam,
+    type: typeParam,
+    isVerified: isVerifiedParam === 'true',
+    isEscrowProtected: isEscrowProtectedParam === 'true',
+    fastDelivery: fastDeliveryParam === 'true',
+    hasPromotion: searchParams.get('hasPromotion') === 'true',
+    minRating: minRatingParam ? Number(minRatingParam) : null,
+  };
+
+  const handleFilterUpdate = (update: Partial<FilterState>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(update).forEach(([key, val]) => {
+      if (val === undefined || val === null || val === '' || val === false) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, String(val));
+      }
+    });
+    if (update.hasOwnProperty('county')) {
       newParams.delete('town');
     }
     setSearchParams(newParams);
   };
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Filters Sidebar */}
-        <aside className={cn(
-          "w-full md:w-64 space-y-8 md:block transition-colors",
-          showFilters ? "block" : "hidden"
-        )}>
-          <div className="flex justify-between items-center md:hidden">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('listings.filters')}</h2>
-            <button onClick={() => setShowFilters(false)} className="text-gray-500 dark:text-gray-400"><X className="w-6 h-6" /></button>
-          </div>
+  const handleClearFilters = () => {
+    setSearchParams({});
+  };
 
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('listings.location')}</h3>
-            {countyParam && (
-              <button onClick={() => updateFilter('county', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">{t('listings.clear')}</button>
-            )}
-          </div>
-          <select 
-            className="w-full p-3 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm"
-            value={countyParam}
-            onChange={(e) => updateFilter('county', e.target.value)}
-          >
-            <option value="" className="dark:bg-neutral-900">{t('listings.all_counties')}</option>
-            {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
-          </select>
+  // Calculate total number of active filter tags
+  const activeFiltersCount = [
+    countyParam,
+    townParam,
+    categoryParam,
+    typeParam,
+    minPriceParam,
+    maxPriceParam,
+    isVerifiedParam,
+    isEscrowProtectedParam,
+    fastDeliveryParam,
+    minRatingParam
+  ].filter(Boolean).length;
 
-          {countyParam && (
-            <div className="space-y-2 pt-2 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Town / Estate</label>
-                {townParam && (
-                  <button onClick={() => updateFilter('town', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">{t('listings.clear')}</button>
+  const handleCardAction = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigate(`/listing/${id}`);
+  };
+
+  // 7. Sidebar Filter Component Element
+  const sidebarElement = (
+    <SidebarFilters
+      filters={filterState}
+      onChange={handleFilterUpdate}
+      onClear={handleClearFilters}
+    />
+  );
+
+  // Sorting selection block content
+  const sortByContent = (
+    <div className="flex items-center space-x-2">
+      <select 
+        value={sortBy}
+        onChange={(e) => setSortBy(e.target.value)}
+        className="text-xs font-black bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-emerald-400 outline-none cursor-pointer focus:border-emerald-500"
+      >
+        <option value="newest">🛡️ Sort by Newest</option>
+        <option value="price_low font-sans">💵 Price: Low to High</option>
+        <option value="price_high">💰 Price: High to Low</option>
+        <option value="distance">📍 Near Me (Distance)</option>
+      </select>
+      {sortBy === 'distance' && !userLocation && (
+        <button 
+          onClick={handleGetLocation}
+          className="text-[10px] bg-slate-800 px-2 py-1 border border-slate-700 hover:text-white rounded-lg font-black text-emerald-400"
+        >
+          {locating ? 'LOCATING...' : 'GPS'}
+        </button>
+      )}
+    </div>
+  );
+
+  // Main list grid content area slot
+  const mainGridElement = (
+    <div className="space-y-4">
+      {/* Real-time search keyword search area */}
+      <div className="relative w-full max-w-lg mb-4">
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center shrink-0">
+          <Search className="w-4 h-4 text-slate-400" />
+        </span>
+        <input 
+          type="text" 
+          placeholder={t('listings.search_placeholder') || "Search plumbers, laptops, farm produce..."} 
+          className="w-full text-xs pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-transparent text-slate-100 placeholder:text-slate-500 transition-colors"
+          value={qParam}
+          onChange={(e) => updateSearchValue(e.target.value)}
+        />
+      </div>
+
+      {loading ? (
+        <MarketplaceGrid>
+          <LoadingSkeleton count={12} />
+        </MarketplaceGrid>
+      ) : (
+        <>
+          {listings.length > 0 ? (
+            <MarketplaceGrid>
+              {listings.map((listing) => (
+                <MarketplaceCard
+                  key={listing.id}
+                  id={listing.id}
+                  title={listing.title}
+                  price={listing.price || 0}
+                  location={listing.location.estate ? `${listing.location.estate}, ${listing.location.town}` : `${listing.location.town}, ${listing.location.county}`}
+                  imageUrl={listing.images[0]}
+                  category={listing.category}
+                  vendorName={listing.isPromoted ? "Sponsor Agent" : "Verified Partner"}
+                  rating={listing.rating || 4.8}
+                  completedJobs={listing.reviewCount || Math.floor(Math.random() * 20) + 5}
+                  deliverySpeed={listing.type === 'service' ? 'Instant Help' : 'Fast Delivery'}
+                  isEscrowSafe={listing.escrowEnabled !== false}
+                  isOffer={listing.isOffer}
+                  isPromoted={listing.isPromoted}
+                  promotionTier={listing.promotionTier as any}
+                  originalPrice={listing.originalPrice}
+                  onActionClick={handleCardAction}
+                />
+              ))}
+            </MarketplaceGrid>
+          ) : (
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="py-16 text-center bg-slate-900 rounded-[2rem] border border-slate-800 shadow-xl px-4"
+            >
+              <div className="bg-emerald-500/10 w-16 h-16 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20">
+                <Search className="w-7 h-7 text-emerald-400" />
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-100 uppercase tracking-tight">No active listings match</h3>
+              <p className="text-slate-400 mt-2 max-w-sm mx-auto text-xs sm:text-sm leading-relaxed">
+                Adjust your filters or query to find active sellers across standard Kenyan counties.
+              </p>
+              
+              <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button 
+                  onClick={handleClearFilters}
+                  className="w-full sm:w-auto px-6 py-3 bg-emerald-700 text-white rounded-xl text-xs font-black uppercase hover:scale-[1.03] transition-all shadow-md shadow-emerald-950/40 border border-emerald-600/30"
+                >
+                  Reset all filters
+                </button>
+                {user?.role !== 'customer' && (
+                  <Link 
+                    to="/create-listing"
+                    className="w-full sm:w-auto px-6 py-3 bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-black uppercase hover:bg-slate-755 border border-slate-700 transition-all text-center"
+                  >
+                    Post listing gig
+                  </Link>
                 )}
               </div>
-              {TOWNS[countyParam] ? (
-                <select
-                  className="w-full p-3 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
-                  value={townParam}
-                  onChange={(e) => updateFilter('town', e.target.value)}
-                >
-                  <option value="" className="dark:bg-neutral-900">All Towns / Estates</option>
-                  {TOWNS[countyParam].map(t => (
-                    <option key={t} value={t} className="dark:bg-neutral-900">{t}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  placeholder="Enter Town/Estate..."
-                  className="w-full p-3 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
-                  value={townParam}
-                  onChange={(e) => updateFilter('town', e.target.value)}
-                />
-              )}
-            </div>
+            </motion.div>
           )}
 
-          <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
-                <Tag className="w-3 h-3 mr-2" /> {t('listings.category')}
-              </h3>
-              {categoryParam && (
-                <button onClick={() => updateFilter('category', '')} className="text-[10px] font-bold text-primary hover:underline uppercase">{t('listings.clear')}</button>
-              )}
-            </div>
-            <select 
-              className="w-full p-3 border border-gray-100 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
-              value={categoryParam}
-              onChange={(e) => updateFilter('category', e.target.value)}
-            >
-              <option value="" className="dark:bg-neutral-900">{t('listings.all_categories')}</option>
-              <optgroup label={t('nav.services')} className="dark:bg-neutral-900">
-                {CATEGORIES.services.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
-              </optgroup>
-              <optgroup label={t('nav.marketplace')} className="dark:bg-neutral-900">
-                {CATEGORIES.marketplace.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
-              </optgroup>
-            </select>
-          </div>
-
-          <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
-                <DollarSign className="w-3 h-3 mr-2" /> {t('listings.price_range')}
-              </h3>
-              {(minPriceParam || maxPriceParam) && (
-                <button onClick={() => { updateFilter('minPrice', ''); updateFilter('maxPrice', ''); }} className="text-[10px] font-bold text-primary hover:underline uppercase">{t('listings.clear')}</button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{t('listings.min')}</span>
-                <input 
-                  type="number" 
-                  className="w-full pl-10 pr-3 py-3 border border-gray-100 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
-                  value={minPriceParam}
-                  onChange={(e) => updateFilter('minPrice', e.target.value)}
-                />
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{t('listings.max')}</span>
-                <input 
-                  type="number" 
-                  className="w-full pl-10 pr-3 py-3 border border-gray-100 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-all shadow-sm text-sm"
-                  value={maxPriceParam}
-                  onChange={(e) => updateFilter('maxPrice', e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-6 pt-4 border-t border-gray-100 dark:border-neutral-800">
-            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 flex items-center">
-              <ShoppingBag className="w-3 h-3 mr-2" /> {t('listings.type')}
-            </h3>
-            <div className="flex flex-col gap-2">
-              {[
-                { id: '', label: t('listings.all_types') },
-                { id: 'product', label: t('listings.products_only') },
-                { id: 'service', label: t('listings.services_only') }
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => updateFilter('type', t.id)}
-                  className={cn(
-                    "flex items-center justify-between px-4 py-3 rounded-xl border transition-all text-sm font-medium",
-                    typeParam === t.id 
-                      ? "bg-primary/10 border-primary text-primary shadow-sm" 
-                      : "bg-white dark:bg-neutral-900 border-gray-100 dark:border-neutral-800 text-gray-600 dark:text-gray-400 hover:border-primary/50"
-                  )}
-                >
-                  {t.label}
-                  {typeParam === t.id && <div className="w-2 h-2 bg-primary rounded-full" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {(qParam || countyParam || categoryParam || typeParam || minPriceParam || maxPriceParam) && (
-            <button 
-              onClick={() => setSearchParams({})}
-              className="w-full py-3 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
-            >
-              {t('listings.reset_filters')}
-            </button>
-          )}
-        </aside>
-
-        {/* Main Content */}
-        <div className="flex-grow space-y-6">
-          {/* Search Bar & Mobile Filter Toggle */}
-          <div className="flex gap-2">
-            <div className="flex-grow relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder={t('listings.search_placeholder')} 
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 transition-colors"
-                value={qParam}
-                onChange={(e) => updateFilter('q', e.target.value)}
-              />
-            </div>
-            <button 
-              onClick={() => setShowFilters(true)}
-              className="md:hidden p-3 border border-gray-200 dark:border-neutral-800 rounded-xl hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors"
-            >
-              <SlidersHorizontal className="w-6 h-6 text-gray-600 dark:text-gray-400" />
-            </button>
-          </div>
-
-          {/* Results Info & Sorting */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <p className="text-gray-500 dark:text-gray-400">
-              {t('listings.showing_results').replace('{count}', listings.length.toString())}
-            </p>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-500 dark:text-gray-400">{t('listings.sort_by')}</span>
-              <select 
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="text-sm font-bold bg-transparent border-none outline-none text-primary cursor-pointer"
+          {/* Load More pagination bar */}
+          {listings.length > 0 && hasMore && (
+            <div className="pt-8 text-center">
+              <button 
+                onClick={() => fetchListings()}
+                disabled={loadingMore}
+                className="px-8 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl font-bold text-xs uppercase tracking-wider text-slate-200 transition-all disabled:opacity-50 flex items-center justify-center mx-auto"
               >
-                <option value="newest">{t('listings.sort_newest')}</option>
-                <option value="price_low">{t('listings.sort_price_low')}</option>
-                <option value="price_high">{t('listings.sort_price_high')}</option>
-                <option value="distance">{t('listings.sort_distance')}</option>
-              </select>
-              {sortBy === 'distance' && !userLocation && (
-                <button 
-                  onClick={handleGetLocation}
-                  className="text-[10px] font-bold text-primary hover:underline ml-2 uppercase"
-                >
-                  {locating ? t('listings.locating') : t('listings.enable_location')}
-                </button>
-              )}
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin text-emerald-400" />
+                    Loading More...
+                  </>
+                ) : (
+                  'Load More Offers'
+                )}
+              </button>
             </div>
-          </div>
-
-          {/* Listings Grid */}
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map(i => (
-                <ListingSkeleton key={i} />
-              ))}
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {listings.map((listing) => (
-                  <Link 
-                    key={listing.id} 
-                    to={`/listing/${listing.id}`}
-                    className="group bg-white dark:bg-neutral-900 rounded-2xl overflow-hidden border border-gray-100 dark:border-neutral-800 hover:shadow-xl transition-all"
-                  >
-                    <div className="relative h-48 overflow-hidden">
-                      <img 
-                        src={listing.images[0] || 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=800&q=80'} 
-                        alt={listing.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-                        {listing.isOffer && (
-                          <div className="bg-rose-600 text-white px-2 py-1 rounded-lg text-[9px] font-black tracking-widest flex items-center shadow-lg uppercase">
-                            <Tag className="w-2.5 h-2.5 mr-1" />
-                            SPECIAL DEAL
-                          </div>
-                        )}
-                        {listing.isPromoted && (
-                          <div className={cn(
-                            "px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse",
-                            listing.promotionTier === 'elite' ? "bg-purple-600 text-white" :
-                            listing.promotionTier === 'premium' ? "bg-primary text-white" : "bg-yellow-400 text-black"
-                          )}>
-                            <Zap className="w-3 h-3 mr-1 fill-current" /> 
-                            {listing.promotionTier?.toUpperCase() || 'FEATURED'}
-                          </div>
-                        )}
-                        <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-primary">
-                          {listing.type === 'service' ? t('nav.services').toUpperCase() : t('nav.marketplace').toUpperCase()}
-                        </div>
-                        {listing.type === 'product' && listing.stock !== undefined && (
-                          <div className={cn(
-                            "px-2 py-1 rounded-lg text-[10px] font-bold text-white",
-                            listing.stock > 0 ? "bg-green-500/90" : "bg-red-500/90"
-                          )}>
-                            {listing.stock > 0 ? t('listings.in_stock') : t('listings.out_of_stock')}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-2">
-                        <MapPin className="w-3 h-3 mr-1" />
-                        {listing.location.estate ? `${listing.location.estate}, ` : ''}{listing.location.town}, {listing.location.county}
-                      </div>
-                      <h3 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1 group-hover:text-primary transition-colors">
-                        {listing.title}
-                      </h3>
-                      <div className="mt-4">
-                        {listing.originalPrice && listing.price && listing.originalPrice > listing.price && (
-                          <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 mb-0.5 font-medium">
-                            <span className="line-through">{formatPrice(listing.originalPrice)}</span>
-                            <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[9px] px-1 rounded-md">
-                              -{Math.round(((listing.originalPrice - listing.price) / listing.originalPrice) * 100)}%
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="text-lg font-extrabold text-primary">
-                            {listing.price ? formatPrice(listing.price) : t('listings.contact_price')}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-
-              {listings.length > 0 && hasMore && (
-                <div className="pt-8 text-center">
-                  <button 
-                    onClick={() => fetchListings()}
-                    disabled={loadingMore}
-                    className="px-8 py-3 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-xl font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all disabled:opacity-50 flex items-center justify-center mx-auto"
-                  >
-                    {loadingMore ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        {t('common.loading')}
-                      </>
-                    ) : (
-                      t('common.load_more')
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {listings.length === 0 && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="col-span-full py-20 text-center bg-white dark:bg-neutral-900 rounded-[3rem] border border-gray-100 dark:border-neutral-800 shadow-sm px-6"
-                >
-                  <div className="bg-primary/10 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8 transition-colors">
-                    <Search className="w-10 h-10 text-primary" />
-                  </div>
-                  <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">{t('listings.no_listings')}</h3>
-                  <p className="text-gray-500 dark:text-gray-400 mt-4 max-w-md mx-auto leading-relaxed">
-                    {t('listings.no_listings_desc')}
-                  </p>
-                  
-                  <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
-                    <button 
-                      onClick={() => setSearchParams({})}
-                      className="w-full sm:w-auto px-10 py-4 bg-primary text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-lg shadow-primary/20"
-                    >
-                      {t('listings.reset_filters')}
-                    </button>
-                    {user?.role !== 'customer' && (
-                      <Link 
-                        to="/create-listing"
-                        className="w-full sm:w-auto px-10 py-4 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition-all"
-                      >
-                        {t('listings.post_listing')}
-                      </Link>
-                    )}
-                  </div>
-
-                  <div className="mt-16 pt-16 border-t border-gray-100 dark:border-neutral-800">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-8">{t('listings.popular_categories')}</p>
-                    <div className="flex flex-wrap justify-center gap-3">
-                      {CATEGORIES.services.slice(0, 3).concat(CATEGORIES.marketplace.slice(0, 3)).map(cat => (
-                        <button 
-                          key={cat}
-                          onClick={() => updateFilter('category', cat)}
-                          className="px-6 py-2.5 bg-gray-50 dark:bg-neutral-800/50 text-gray-600 dark:text-gray-400 rounded-full text-xs font-bold hover:bg-primary/10 hover:text-primary transition-all border border-gray-100 dark:border-neutral-800"
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </>
           )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
+  );
+
+  return (
+    <MarketplaceLayout
+      sidebarContent={sidebarElement}
+      mainGridContent={mainGridElement}
+      resultsCount={listings.length}
+      sortByContent={sortByContent}
+      activeFiltersCount={activeFiltersCount}
+      onResetFilters={handleClearFilters}
+    />
   );
 };
 

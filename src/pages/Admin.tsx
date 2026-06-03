@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy, increment, limit, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, getDoc, addDoc, getCountFromServer, orderBy, increment, limit, deleteDoc, runTransaction } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { useAuth } from '../AuthContext';
 import { sendNotification } from '../lib/notifications';
 import { Listing, User, Report, UserKYC, Dispute, WithdrawalRequest, Appeal, Transaction, UserRole } from '../types';
 import { toast } from 'sonner';
-import { CheckCircle, XCircle, Shield, User as UserIcon, Package, AlertTriangle, ExternalLink, Flag, Trash2, Eye, Wallet, Gavel, Clock, ArrowUpRight, Scale, TrendingUp, Zap } from 'lucide-react';
+import { CheckCircle, XCircle, Shield, User as UserIcon, Package, AlertTriangle, ExternalLink, Flag, Trash2, Eye, Wallet, Gavel, Clock, ArrowUpRight, Scale, TrendingUp, Zap, Phone, MessageCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatPrice, formatDate, cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -22,6 +22,7 @@ const Admin = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [kycRequests, setKycRequests] = useState<User[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [adminExplanation, setAdminExplanation] = useState<Record<string, string>>({});
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [promotions, setPromotions] = useState<any[]>([]);
@@ -120,7 +121,7 @@ const Admin = () => {
           getCountFromServer(collection(db, 'users')),
           getCountFromServer(collection(db, 'listings')),
           getCountFromServer(collection(db, 'transactions')),
-          getCountFromServer(query(collection(db, 'disputes'), where('status', '==', 'open'))),
+          getCountFromServer(query(collection(db, 'disputes'), where('status', 'in', ['open', 'seller_say_pending', 'seller_responded']))),
           getCountFromServer(query(collection(db, 'users'), where('kycStatus', '==', 'pending')))
         ]);
       } catch (error: any) {
@@ -256,7 +257,7 @@ const Admin = () => {
           setKycDataMap(dataMap);
           break;
         case 'disputes':
-          const disputesQuery = query(collection(db, 'disputes'), where('status', '==', 'open'));
+          const disputesQuery = query(collection(db, 'disputes'), where('status', 'in', ['open', 'seller_say_pending', 'seller_responded']));
           let disputesSnapshot;
           try {
             disputesSnapshot = await getDocs(disputesQuery);
@@ -811,6 +812,184 @@ const Admin = () => {
       if (!error.operationType) {
         handleFirestoreError(error, OperationType.UPDATE, `reports/${reportId}`);
       }
+    }
+  };
+
+  const confirmDispute = async (disputeId: string) => {
+    try {
+      const disputeRef = doc(db, 'disputes', disputeId);
+      const disputeSnap = await getDoc(disputeRef);
+      if (!disputeSnap.exists()) {
+        throw new Error('Dispute not found');
+      }
+
+      const disputeData = disputeSnap.data();
+      if (disputeData?.status !== 'open') {
+        throw new Error("Dispute must be 'open' to confirm.");
+      }
+
+      const transactionId = disputeData.transactionId;
+      const txRef = doc(db, 'transactions', transactionId);
+      const txSnap = await getDoc(txRef);
+      if (!txSnap.exists()) {
+        throw new Error('Associated transaction not found');
+      }
+
+      const txData = txSnap.data();
+      const sellerId = txData?.sellerId;
+      const buyerId = txData?.buyerId;
+
+      await runTransaction(db, async (transaction) => {
+        // Change dispute status to 'seller_say_pending'
+        transaction.update(disputeRef, {
+          status: 'seller_say_pending',
+          updatedAt: new Date().toISOString()
+        });
+
+        // Notify Seller to respond
+        const sellerNotifRef = doc(collection(db, 'notifications'));
+        transaction.set(sellerNotifRef, {
+          userId: sellerId,
+          title: '⚖️ Urgent: Dispute Raised – Your say requested',
+          message: `The buyer of transaction #${transactionId} has raised a dispute. The Admin has confirmed the dispute, and you have 48 hours to provide your statement and supporting evidence.`,
+          type: 'warning',
+          link: `/profile`,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        // Notify Buyer of Admin Confirmation
+        const buyerNotifRef = doc(collection(db, 'notifications'));
+        transaction.set(buyerNotifRef, {
+          userId: buyerId,
+          title: '⚖️ Dispute Confirmed for Review',
+          message: `Your dispute on order #${transactionId} has been confirmed by a platform administrator. The provider has been requested to submit their statement within 48 hours before a verdict is determined.`,
+          type: 'info',
+          link: `/profile`,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      });
+
+      toast.success('Dispute confirmed and seller requested for statement.');
+      setDisputes(prev => prev.map(d => d.id === disputeId ? { ...d, status: 'seller_say_pending' } : d));
+    } catch (err: any) {
+      toast.error(err.message || 'Error confirming dispute');
+    }
+  };
+
+  const resolveDisputeCustomVerdict = async (disputeId: string, action: 'refund' | 'release', verdictExplanation: string) => {
+    try {
+      const disputeRef = doc(db, 'disputes', disputeId);
+      const disputeDoc = await getDoc(disputeRef);
+      if (!disputeDoc.exists()) {
+        throw new Error('Dispute not found');
+      }
+
+      const disputeData = disputeDoc.data();
+      const transactionId = disputeData.transactionId;
+      const txRef = doc(db, 'transactions', transactionId);
+      const txDoc = await getDoc(txRef);
+      if (!txDoc.exists()) {
+        throw new Error('Associated transaction not found');
+      }
+
+      const txData = txDoc.data();
+      const amount = txData.amount || 0;
+      const buyerId = txData.buyerId;
+      const sellerId = txData.sellerId;
+
+      const buyerRef = doc(db, 'users', buyerId);
+      const sellerRef = doc(db, 'users', sellerId);
+
+      await runTransaction(db, async (transaction) => {
+        let buyerRefund = 0;
+        let sellerEarnings = 0;
+
+        if (action === 'refund') {
+          buyerRefund = amount;
+          transaction.update(buyerRef, {
+            escrowBalance: increment(buyerRefund),
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          // Calculate commission
+          let listingType: 'service' | 'goods' = 'service';
+          if (txData.listingId) {
+            const listingDoc = await transaction.get(doc(db, 'listings', txData.listingId));
+            if (listingDoc.exists) {
+              const lData = listingDoc.data();
+              if (lData && (lData.type === 'product' || lData.type === 'goods')) {
+                listingType = 'goods';
+              }
+            }
+          }
+          let commission = 0;
+          if (listingType === 'service') {
+            commission = Math.round(amount * 0.10);
+          } else {
+            if (amount >= 5000) {
+              commission = Math.round(amount * 0.05);
+            } else if (amount >= 2500) {
+              commission = Math.round(amount * 0.07);
+            } else if (amount >= 800) {
+              commission = Math.round(amount * 0.08);
+            } else {
+              commission = Math.round(amount * 0.10);
+            }
+          }
+          sellerEarnings = Math.max(0, amount - commission);
+
+          transaction.update(sellerRef, {
+            escrowBalance: increment(sellerEarnings),
+            updatedAt: new Date().toISOString()
+          });
+        }
+
+        // Update dispute document
+        transaction.update(disputeRef, {
+          status: action === 'refund' ? 'refunded' : 'resolved',
+          resolution: action === 'refund' ? 'Full Refund to Buyer' : 'Full Release to Seller',
+          adminVerdictNotes: verdictExplanation,
+          resolvedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        // Update transaction
+        transaction.update(txRef, {
+          status: action === 'refund' ? 'cancelled' : 'completed',
+          disputeResolvedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        // 1. Notify Buyer
+        const buyerNotifRef = doc(collection(db, 'notifications'));
+        transaction.set(buyerNotifRef, {
+          userId: buyerId,
+          title: `⚖️ Dispute Resolved: ${action === 'refund' ? 'Escrow Refunded' : 'Escrow Released'}`,
+          message: `The admin has resolved the dispute on transaction #${transactionId}.\nVerdict illustration:\n${verdictExplanation}`,
+          type: action === 'refund' ? 'success' : 'info',
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        // 2. Notify Seller
+        const sellerNotifRef = doc(collection(db, 'notifications'));
+        transaction.set(sellerNotifRef, {
+          userId: sellerId,
+          title: `⚖️ Dispute Resolved: ${action === 'refund' ? 'Escrow Refunded' : 'Escrow Released'}`,
+          message: `The admin has resolved the dispute on transaction #${transactionId}.\nVerdict illustration:\n${verdictExplanation}`,
+          type: action === 'refund' ? 'warning' : 'success',
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      });
+
+      toast.success(`Dispute resolved successfully with action: ${action}`);
+      setDisputes(prev => prev.filter(d => d.id !== disputeId));
+    } catch (err: any) {
+      console.error('Error submitting dispute verdict client-side:', err);
+      toast.error(err.message || 'Error submitting dispute verdict');
     }
   };
 
@@ -1793,7 +1972,7 @@ const Admin = () => {
           )}
         </div>
       ) : activeTab === 'disputes' ? (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {disputes.length === 0 ? (
             <div className="bg-white dark:bg-neutral-900 rounded-2xl p-12 text-center border border-gray-100 dark:border-neutral-800">
               <Gavel className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
@@ -1802,60 +1981,207 @@ const Admin = () => {
             </div>
           ) : (
             disputes.map((dispute) => (
-              <div key={dispute.id} className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-gray-100 dark:border-neutral-800">
-                <div className="flex flex-col md:flex-row justify-between gap-6">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                        {dispute.reason.replace('_', ' ')}
+              <div key={dispute.id} className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-red-150/30 dark:border-neutral-800 shadow-sm space-y-6">
+                
+                {/* Header Information panel */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-gray-100 dark:border-neutral-800 gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-400 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border border-red-100">
+                        {dispute.reason.replace(/_/g, ' ')}
                       </span>
-                      <span className="text-xs text-gray-400">{formatDate(dispute.createdAt)}</span>
+                      <span className="text-xs text-gray-400 font-mono flex items-center">
+                        <Clock className="w-3 h-3 mr-1" /> {formatDate(dispute.createdAt)}
+                      </span>
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                      <span className="font-bold text-gray-900 dark:text-gray-100">Details:</span> {dispute.details}
-                    </p>
-                    <div className="flex items-center space-x-4 mb-4">
-                      <span className="text-xs text-gray-400">Transaction: {dispute.transactionId}</span>
-                      <span className="text-xs text-gray-400">Raised By: {dispute.raisedById}</span>
-                    </div>
-                    {dispute.evidenceUrls && dispute.evidenceUrls.length > 0 && (
-                      <div className="mt-4">
-                        <p className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Evidence Uploaded:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {dispute.evidenceUrls.map((url, idx) => (
-                            <a 
-                              key={idx} 
-                              href={url} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-neutral-700 hover:opacity-80 transition-opacity"
-                            >
-                              {url.includes('.mp4') || url.includes('.mov') ? (
-                                <div className="w-full h-full bg-neutral-800 flex items-center justify-center text-white text-[10px]">VIDEO</div>
-                              ) : (
-                                <img src={url} alt="Evidence" className="w-full h-full object-cover" />
-                              )}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <p className="text-sm text-gray-500 mt-2">Dispute ID: <span className="font-mono font-bold text-gray-700 dark:text-gray-300">{dispute.id}</span> | Transaction: <span className="font-mono font-bold text-gray-750 dark:text-gray-250">{dispute.transactionId}</span></p>
                   </div>
-                  <div className="flex flex-col gap-2 w-full md:w-48">
-                    <button 
-                      onClick={() => resolveDispute(dispute.id, dispute.transactionId, 'refund')}
-                      className="w-full py-2 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition-colors"
-                    >
-                      Refund Buyer
-                    </button>
-                    <button 
-                      onClick={() => resolveDispute(dispute.id, dispute.transactionId, 'release')}
-                      className="w-full py-2 bg-green-500 text-white rounded-xl text-sm font-bold hover:bg-green-600 transition-colors"
-                    >
-                      Release to Seller
-                    </button>
+
+                  <div>
+                    <span className={`text-xs font-bold uppercase px-3 py-1.5 rounded-full tracking-wider border ${
+                      dispute.status === 'open' 
+                        ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30' 
+                        : dispute.status === 'seller_say_pending'
+                        ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30'
+                        : 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30'
+                    }`}>
+                      Status: {dispute.status.replace(/_/g, ' ')}
+                    </span>
                   </div>
                 </div>
+
+                {/* Dispute arguments panel workflow */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  
+                  {/* Left Side: Argument Statements */}
+                  <div className="space-y-6">
+                    {/* Buyer Side claim */}
+                    <div className="space-y-2">
+                      <h4 className="font-extrabold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-[10px] text-red-600 font-black">1</span>
+                        Buyer Argument ({dispute.raisedById})
+                      </h4>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-neutral-850 p-4 rounded-2xl leading-relaxed whitespace-pre-wrap">
+                        "{dispute.details}"
+                      </p>
+                      
+                      {dispute.evidenceUrls && dispute.evidenceUrls.length > 0 && (
+                        <div className="pt-2">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1.5">Submitted Evidence Attachments</p>
+                          <div className="flex flex-wrap gap-2">
+                            {dispute.evidenceUrls.map((url, idx) => (
+                              <a 
+                                key={idx} 
+                                href={url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="w-16 h-16 rounded-xl overflow-hidden border border-gray-100 dark:border-neutral-800 hover:opacity-85 transition-opacity"
+                              >
+                                {url.includes('.mp4') || url.includes('.mov') ? (
+                                  <div className="w-full h-full bg-neutral-850 flex items-center justify-center text-white text-[10px] font-bold">VIDEO</div>
+                                ) : (
+                                  <img src={url} alt="Buyer Evidence" className="w-full h-full object-cover" />
+                                )}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Seller Side Rebuttal */}
+                    <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-neutral-800">
+                      <h4 className="font-extrabold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[10px] text-blue-600 font-black">2</span>
+                        Seller Defense / Response Statement
+                      </h4>
+                      {dispute.sellerResponse ? (
+                        <div className="space-y-3">
+                          <p className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-neutral-850 p-4 rounded-2xl leading-relaxed whitespace-pre-wrap">
+                            "{dispute.sellerResponse}"
+                          </p>
+                          {dispute.sellerRespondedAt && (
+                            <p className="text-[10px] text-gray-400">Statement entered on: {formatDate(dispute.sellerRespondedAt)}</p>
+                          )}
+                          {dispute.sellerEvidenceUrls && dispute.sellerEvidenceUrls.length > 0 && (
+                            <div>
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1.5">Supporting Evidence Submitted</p>
+                              <div className="flex flex-wrap gap-2">
+                                {dispute.sellerEvidenceUrls.map((url, idx) => (
+                                  <a 
+                                    key={idx} 
+                                    href={url} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="w-16 h-16 rounded-xl overflow-hidden border border-gray-100 dark:border-neutral-800 hover:opacity-85 transition-opacity"
+                                  >
+                                    <img src={url} alt="Seller Evidence" className="w-full h-full object-cover" />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-amber-500/5 dark:bg-amber-500/10 rounded-2xl border border-amber-500/10 text-xs text-amber-700 dark:text-amber-400 leading-relaxed font-semibold">
+                          {dispute.status === 'open' 
+                            ? '⌛ Waiting for administrator to confirm the dispute. Action first step in administrative panel below.' 
+                            : '⌛ Action issued: Notice sent to seller. Awaiting seller rebuttal submission. The client has 48 hr window.'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Side: Admin Intervention Tools & Direct Verdict */}
+                  <div className="bg-gray-50 dark:bg-neutral-850 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 space-y-6">
+                    <h4 className="font-extrabold text-sm text-gray-900 dark:text-white uppercase tracking-wider">Administrative Intervention Panel</h4>
+                    
+                    {/* Step-by-Step interactive progression flow */}
+                    {dispute.status === 'open' && (
+                      <div className="space-y-3 bg-white dark:bg-neutral-900 p-4 rounded-2xl border border-amber-200">
+                        <p className="text-xs font-bold text-amber-800 dark:text-amber-300">Progression Step Required: Confirm Dispute</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                          Confirming the dispute flags the transaction, freezes the escrow programmatically, and automatically drafts an interactive statement solicitation request to the provider.
+                        </p>
+                        <button
+                          onClick={() => confirmDispute(dispute.id)}
+                          className="w-full py-3 bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-700 text-neutral-950 dark:text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center space-x-2 shadow-sm"
+                        >
+                          <Gavel className="w-4 h-4" />
+                          <span>Confirm Dispute & Solicit Seller Statement</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Step 2: Direct Contact Channels */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-gray-400 uppercase tracking-widest font-black">Resolution Helpdesk Communication:</p>
+                      <p className="text-xs text-gray-500 leading-normal">
+                        HudumaLink bylaws dictate administrators should reach out to verify physical/workspace circumstances (e.g. Call, SMS, or WhatsApp) before rendering final judgment.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <a href={`tel:+254700000000`} className="p-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors">
+                          <Phone className="w-3.5 h-3.5 text-primary" /> Call Representative
+                        </a>
+                        <a href={`https://wa.me/254700000000`} target="_blank" rel="noreferrer" className="p-2 bg-green-500 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 hover:bg-green-600 transition-colors">
+                          <MessageCircle className="w-3.5 h-3.5" /> WhatsApp Mediation
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Step 3: Verdict Form */}
+                    <div className="space-y-3 border-t border-gray-200 dark:border-neutral-800 pt-4">
+                      <p className="text-xs font-extrabold text-gray-900 dark:text-white uppercase tracking-wider">⚖️ Render Binding Verdict</p>
+                      
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] text-gray-400 uppercase tracking-widest font-bold">Verdict Explanation Notes (Illustrations for both parties)</label>
+                        <textarea
+                          required
+                          value={adminExplanation[dispute.id] || ''}
+                          onChange={(e) => setAdminExplanation(prev => ({ ...prev, [dispute.id]: e.target.value }))}
+                          placeholder="Provide clear reasons and evidence illustrations for why this verdict is rendered (e.g., 'Work not performed as outlined in the contract' or 'Seller provided valid receipt and completion signatures'). This will be appended to notifications and email transcripts for transparency."
+                          className="w-full p-4 text-xs bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-xl outline-none focus:border-red-500 text-gray-950 dark:text-gray-50"
+                          rows={4}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <button 
+                          onClick={() => {
+                            const notes = adminExplanation[dispute.id];
+                            if (!notes) {
+                              toast.info('Please enter verdict explanation notes first so that both clients understand why the decision was delivered.');
+                              return;
+                            }
+                            resolveDisputeCustomVerdict(dispute.id, 'refund', notes);
+                          }}
+                          className="py-3 bg-red-600 text-white rounded-xl text-xs font-extrabold hover:bg-red-700 transition-colors flex items-center justify-center space-x-1.5"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          <span>Refund Escrow to Buyer</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => {
+                            const notes = adminExplanation[dispute.id];
+                            if (!notes) {
+                              toast.info('Please enter verdict explanation notes first so that both clients understand why the decision was delivered.');
+                              return;
+                            }
+                            resolveDisputeCustomVerdict(dispute.id, 'release', notes);
+                          }}
+                          className="py-3 bg-green-600 text-white rounded-xl text-xs font-extrabold hover:bg-green-700 transition-colors flex items-center justify-center space-x-1.5"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Release Escrow to Seller</span>
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
               </div>
             ))
           )}

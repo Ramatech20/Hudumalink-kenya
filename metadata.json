@@ -1,5 +1,6 @@
 {
   "name": "HudumaLink Kenya",
   "description": "A digital marketplace platform connecting service providers and sellers with customers in Kenya.",
-  "requestFramePermissions": ["geolocation"]
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

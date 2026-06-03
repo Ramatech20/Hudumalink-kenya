@@ -67,9 +67,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastSeen: new Date().toISOString(),
           deviceFingerprint: fingerprint
         }).catch(error => {
-          // If doc doesn't exist, it's a new user, ignore status update error
-          if (error instanceof Error && error.message.includes('NOT_FOUND')) return;
-          handleFirestoreError(error, OperationType.UPDATE, userPath);
+          // Silent catch since the profile is auto-created or healed below if it doesn't exist yet
+          console.warn("Initial online status sync deferred:", error);
         });
 
         // Set up real-time listener for user profile
@@ -92,6 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               referredBy: userData.referredBy || null,
               maxSingleSpend: userData.maxSingleSpend || 0,
               totalSpend: userData.totalSpend || 0,
+              completedPaymentsCount: userData.completedPaymentsCount || 0,
               createdAt: userData.createdAt || new Date().toISOString()
             };
             const publicPath = `users_public/${firebaseUser.uid}`;
@@ -109,6 +109,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   }).catch(e => console.warn("Referral code backfill skipped:", e));
                 }
               }).catch(e => console.warn("Referral doc read skipped:", e));
+            }
+
+            // Self-healing: Ensure current user's phone number is registered in phone_registry
+            if (userData.phoneNumber) {
+              const formattedPhone = userData.phoneNumber.trim().replace(/\s+/g, '').replace(/\+/g, '');
+              const phoneDocRef = doc(db, 'phone_registry', formattedPhone);
+              getDoc(phoneDocRef).then((snap) => {
+                if (!snap.exists()) {
+                  setDoc(phoneDocRef, {
+                    userId: firebaseUser.uid,
+                    createdAt: new Date().toISOString()
+                  }).catch(e => console.warn("Phone registry backfill skipped:", e));
+                }
+              }).catch(e => console.warn("Phone registry read skipped:", e));
             }
 
             // One-time upgrade for bootstrap admin
@@ -130,7 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Create a default profile if it doesn't exist
             const isAdminEmail = firebaseUser.email === 'ramadhanwambia83@gmail.com';
             const fingerprint = getDeviceFingerprint();
-            const newUser: User = {
+             const newUser: User = {
               uid: firebaseUser.uid,
               displayName: firebaseUser.displayName || 'Anonymous User',
               email: firebaseUser.email || '',
@@ -146,6 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               emailVerified: firebaseUser.emailVerified,
               maxSingleSpend: 0,
               totalSpend: 0,
+              completedPaymentsCount: 0,
               createdAt: new Date().toISOString(),
               deviceFingerprint: fingerprint,
             };
@@ -167,6 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 referredBy: '',
                 maxSingleSpend: 0,
                 totalSpend: 0,
+                completedPaymentsCount: 0,
                 createdAt: newUser.createdAt
               };
               await setDoc(doc(db, 'users_public', firebaseUser.uid), publicUser, { merge: true });

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, User, LogOut, Menu, X, PlusCircle, MessageSquare, Heart, Moon, Sun, Shield, AlertCircle, Bell, Facebook, Instagram, Twitter, MessageCircle, ShoppingCart, Plus, Minus, Trash2, Loader2, Gift } from 'lucide-react';
+import { Search, User, LogOut, Menu, X, PlusCircle, MessageSquare, Heart, Moon, Sun, Shield, AlertCircle, Bell, Facebook, Instagram, MessageCircle, ShoppingCart, Plus, Minus, Trash2, Loader2, Gift } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import { useCart } from '../CartContext';
@@ -165,6 +165,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       toast.error('Please sign in to complete your purchase');
       setIsCartOpen(false);
       navigate('/auth');
+      return;
+    }
+
+    if (!user.emailVerified && !auth.currentUser?.emailVerified) {
+      toast.error('Please verify your email address to checkout.');
+      setIsCartOpen(false);
       return;
     }
 
@@ -619,8 +625,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 ) : (
                   <div className="space-y-4">
                     {/* single-seller compliance banner */}
-                    <div className="p-3 bg-blue-50 dark:bg-blue-900/15 border border-blue-100 dark:border-blue-900/20 rounded-xl">
-                      <p className="text-[10px] text-blue-700 dark:text-blue-300 leading-normal font-medium">
+                    <div className="p-3 bg-emerald-500/5 dark:bg-emerald-550/10 border border-emerald-500/10 rounded-xl">
+                      <p className="text-[10px] text-emerald-800 dark:text-emerald-400 leading-normal font-medium">
                         🛡️ <strong>Single-Seller Mode compliant:</strong> You are checking out with {cartItems.length} items from {sellerName}. All transactions are fully bonded under HudumaLink Escrow.
                       </p>
                     </div>
@@ -747,11 +753,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.17-2.89-.6-4.13-1.47V18.77a6.738 6.738 0 01-6.74 6.74c-1.4-.01-2.82-.44-3.99-1.25a6.744 6.744 0 01-2.75-5.49c-.01-1.4.44-2.82 1.25-3.99a6.744 6.744 0 015.49-2.75c.01 0 .01 0 .02 0v4.03c-1.49.06-2.71 1.28-2.77 2.77-.06 1.49 1.28 2.71 2.77 2.77 1.49.06 2.71-1.28 2.77-2.77V.02z" />
                   </svg>
                 </a>
-                <a href="https://x.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-neutral-800 transition-colors">
-                  <Twitter className="w-5 h-5" />
+                <a href="https://x.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-neutral-800 transition-colors" title="Follow us on X">
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                  </svg>
                 </a>
-                <a href="https://wa.me/254112389628" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-green-500 transition-colors">
-                  <MessageCircle className="w-5 h-5" />
+                <a href="https://wa.me/254112389628?text=Hello%20HudumaLink%20Support,%20I'm%20contacting%20you%20from%20the%20platform%20for%20assistance." target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-green-500 transition-colors" title="Contact us on WhatsApp">
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M12.004 0C5.372 0 0 5.372 0 12.004c0 2.116.549 4.11 1.612 5.855L.05 24l6.302-1.654a11.97 11.97 0 005.652 1.41h.005c6.629 0 12.001-5.372 12.001-12.004C24.01 5.372 18.636 0 12.004 0zm6.986 16.92c-.287.808-1.42 1.492-2.193 1.583-.726.084-1.658.127-2.68-.198-1.023-.325-2.028-.868-2.914-1.496a15.828 15.828 0 01-3.69-3.692C6.91 12.222 6.38 11.196 6.07 10.155c-.31-.1-.314-.085-.314-.085-.357-1.157.34-1.928.895-2.484l.654-.654c.154-.154.346-.226.544-.226.2 0 .393.072.544.226l1.35 1.35c.154.154.226.346.226.544 0 .2-.072.392-.226.544l-.454.454c-.112.112-.132.278-.052.41a6.602 6.602 0 001.378 1.83 6.577 6.577 0 001.83 1.378c.133.08.3.06.411-.052l.455-.455c.153-.153.345-.226.544-.226s.39.073.543.226l1.35 1.35c.154.154.226.346.226.544 0 .198-.073.39-.227.544l-.35.35c-.092.1-.219.145-.347.118z"/>
+                  </svg>
                 </a>
               </div>
             </div>

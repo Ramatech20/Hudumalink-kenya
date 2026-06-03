@@ -158,17 +158,16 @@ const Auth = () => {
           return;
         }
 
-        // Check if phone number is already registered in firestore 'users' collection
+        // Check if phone number is already registered in firestore 'phone_registry' collection using a secure document-level get
         try {
-          const qPhone = query(collection(db, 'users'), where('phoneNumber', '==', formattedPhone));
-          const snapPhone = await getDocs(qPhone);
-          if (!snapPhone.empty) {
+          const phoneDoc = await getDoc(doc(db, 'phone_registry', formattedPhone));
+          if (phoneDoc.exists()) {
             handleValidationError('This M-Pesa phone number is already registered to another account.');
             setLoading(false);
             return;
           }
         } catch (error: any) {
-          handleFirestoreError(error, OperationType.GET, 'users');
+          handleFirestoreError(error, OperationType.GET, `phone_registry/${formattedPhone}`);
           setLoading(false);
           return;
         }
@@ -220,6 +219,12 @@ const Auth = () => {
             emailVerified: false,
             createdAt: new Date().toISOString(),
           }, { merge: true });
+
+          // Register in secure phone number mapping to prevent any future duplicate signup
+          await setDoc(doc(db, 'phone_registry', formattedPhone), {
+            userId: result.user.uid,
+            createdAt: new Date().toISOString()
+          });
 
           // Create public referral code mapping
           await setDoc(doc(db, 'referral_codes', newReferralCode), {
@@ -305,10 +310,14 @@ const Auth = () => {
                 <input 
                   type="text" 
                   required 
+                  placeholder="e.g. John Kamau"
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-colors"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                 />
+                <p className="text-xs text-gray-500 dark:text-gray-450 mt-1">
+                  Please use your exact legal name as it appears on your official documents (ID, passport, or driver's license) for account verification.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">M-Pesa Phone Number</label>

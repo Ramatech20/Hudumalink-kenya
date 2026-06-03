@@ -1,4 +1,4 @@
-import { collection, addDoc, updateDoc, doc, increment, getDoc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, increment, getDoc, runTransaction } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Transaction, Listing, User } from '../types';
 import { toast } from 'sonner';
@@ -36,6 +36,13 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
       paymentMethod: 'mpesa',
       phoneNumber: request.phoneNumber,
     };
+
+    // Clean undefined fields to avoid Firestore serialize errors
+    Object.keys(transactionData).forEach(key => {
+      if (transactionData[key] === undefined) {
+        delete transactionData[key];
+      }
+    });
 
     if (request.deliveryQuote) {
       transactionData.delivery = {
@@ -118,29 +125,88 @@ export const releaseEscrowFunds = async (transactionId: string) => {
       return false;
     }
 
-    const token = await authUser.getIdToken();
-    const response = await fetch('/api/transactions/release', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        transactionId
-      })
+    const txRef = doc(db, 'transactions', transactionId);
+    
+    const result = await runTransaction(db, async (transaction) => {
+      const txDoc = await transaction.get(txRef);
+      if (!txDoc.exists()) {
+        throw new Error('Transaction not found');
+      }
+
+      const txData = txDoc.data();
+      if (!txData) {
+        throw new Error('Data empty or invalid');
+      }
+
+      if (txData.status === 'completed' || txData.status === 'released') {
+        throw new Error('Transaction is already completed');
+      }
+
+      // 1. Convert Transaction status to completed/released
+      transaction.update(txRef, {
+        status: 'released',
+        releasedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      // 2. Increment seller's escrowBalance directly!
+      const sellerRef = doc(db, 'users', txData.sellerId);
+      transaction.update(sellerRef, {
+        escrowBalance: increment(txData.amount),
+        completedPaymentsCount: increment(1),
+        updatedAt: new Date().toISOString()
+      });
+
+      // Merge on public profile
+      const publicRef = doc(db, 'users_public', txData.sellerId);
+      transaction.set(publicRef, {
+        completedPaymentsCount: increment(1),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      // Create hold ledger or other records
+      const holdLedgerRef = doc(collection(db, 'hold_ledgers'));
+      transaction.set(holdLedgerRef, {
+        userId: txData.sellerId,
+        transactionId: transactionId,
+        amount: txData.amount,
+        releaseTime: new Date().toISOString(),
+        status: 'completed',
+        createdAt: new Date().toISOString()
+      });
+
+      // Create notifications for buyer and seller
+      const sellerNotifRef = doc(collection(db, 'notifications'));
+      transaction.set(sellerNotifRef, {
+        userId: txData.sellerId,
+        title: 'Funds Released!',
+        message: `The buyer has confirmed delivery. KES ${txData.amount} has been added to your escrow balance.`,
+        type: 'success',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+
+      const buyerNotifRef = doc(collection(db, 'notifications'));
+      transaction.set(buyerNotifRef, {
+        userId: txData.buyerId,
+        title: 'Transaction Confirmed',
+        message: `You have successfully released KES ${txData.amount} to the service provider.`,
+        type: 'success',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+
+      return true;
     });
 
-    const data = await response.json();
-    if (response.ok && data.success) {
+    if (result) {
       toast.success('Funds released successfully!');
       return true;
-    } else {
-      toast.error(data.error || 'Failed to release funds');
-      return false;
     }
+    return false;
   } catch (error: any) {
-    console.error('Error in releaseEscrowFunds:', error);
-    toast.error('Failed to release funds. Please try again.');
+    console.error('Error in releaseEscrowFunds client-side:', error);
+    toast.error('Failed to release funds: ' + error.message);
     return false;
   }
 };

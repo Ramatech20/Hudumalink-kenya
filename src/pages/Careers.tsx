@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Briefcase, MapPin, Clock, ChevronDown, ChevronUp, Send, CheckCircle2, Building, Globe, Mail } from 'lucide-react';
+import { Briefcase, MapPin, Clock, ChevronDown, ChevronUp, Send, CheckCircle2, Building, Globe, Mail, Coins, Sparkles } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import { cn } from '../lib/utils';
 
@@ -13,6 +13,7 @@ interface Job {
   description: string;
   requirements: string[];
   instructions: string;
+  salary: string;
 }
 
 const jobs: Job[] = [
@@ -24,13 +25,14 @@ const jobs: Job[] = [
     mode: 'Remote',
     description: 'We are looking for a Senior Full Stack Developer to lead our core product development. You will be responsible for scaling HudumaLink to handle millions of transactions across Kenya.',
     requirements: [
-      '5+ years experience with React, Node.js, and TypeScript',
+      '3+ years experience with React, Node.js, and TypeScript',
       'Strong knowledge of Firebase and cloud infrastructure',
       'Experience with payment gateway integrations (especially M-Pesa)',
       'Proven track record of building scalable web applications',
       'BSc in Computer Science or related field'
     ],
-    instructions: 'Send your CV and portfolio to careers@hudumalink.co.ke with the subject "Senior Full Stack Dev Application".'
+    instructions: 'Send your CV and portfolio to careers@hudumalink.co.ke with the subject "Senior Full Stack Dev Application".',
+    salary: 'KES 150,000 - 220,000 / month'
   },
   {
     id: '2',
@@ -40,13 +42,14 @@ const jobs: Job[] = [
     mode: 'Hybrid',
     description: 'As our Customer Experience Lead, you will define how HudumaLink interacts with its users. You will manage a growing team of support agents and drive customer satisfaction.',
     requirements: [
-      '3+ years in customer support leadership',
+      '1+ years in customer support leadership',
       'Excellent communication skills in English and Swahili',
       'Data-driven approach to improving customer satisfaction (CSAT)',
       'Experience with CRM tools like Zendesk or Intercom',
       'Deep understanding of the Kenyan marketplace landscape'
     ],
-    instructions: 'Email your resume and a short cover letter explaining your approach to customer success to careers@hudumalink.co.ke.'
+    instructions: 'Email your resume and a short cover letter explaining your approach to customer success to careers@hudumalink.co.ke.',
+    salary: 'KES 60,000 - 85,000 / month'
   },
   {
     id: '3',
@@ -56,13 +59,14 @@ const jobs: Job[] = [
     mode: 'Remote',
     description: 'Drive user acquisition and retention through creative marketing strategies. You will be in charge of our social media presence, SEO, and paid advertising campaigns.',
     requirements: [
-      'Proven experience in growth marketing for tech startups',
+      '1+ years experience in growth marketing for tech startups',
       'Expertise in Facebook Ads, Google Ads, and TikTok marketing',
       'Strong analytical skills (Google Analytics, Mixpanel)',
       'Creative mindset with the ability to produce engaging content',
       'Experience with the Kenyan consumer market'
     ],
-    instructions: 'Submit your growth portfolio and CV to careers@hudumalink.co.ke.'
+    instructions: 'Submit your growth portfolio and CV to careers@hudumalink.co.ke.',
+    salary: 'KES 70,000 - 100,000 / month'
   },
   {
     id: '4',
@@ -72,13 +76,14 @@ const jobs: Job[] = [
     mode: 'Hybrid',
     description: 'Ensure the smooth day-to-day operation of the marketplace. You will handle logistics partnerships, seller onboarding, and dispute mediation oversight.',
     requirements: [
-      '2+ years experience in operations or logistics',
+      '1+ years experience in operations or logistics',
       'Strong problem-solving and organizational skills',
       'Ability to work in a fast-paced environment',
       'Degree in Business Administration or related field',
       'Knowledge of Kenyan trade and e-commerce regulations'
     ],
-    instructions: 'Send your application to careers@hudumalink.co.ke with the subject "Operations Coordinator Application".'
+    instructions: 'Send your application to careers@hudumalink.co.ke with the subject "Operations Coordinator Application".',
+    salary: 'KES 55,000 - 80,000 / month'
   },
   {
     id: '5',
@@ -88,13 +93,14 @@ const jobs: Job[] = [
     mode: 'Remote',
     description: 'Design beautiful, intuitive interfaces that make HudumaLink accessible to everyone. You will conduct user research and translate insights into high-fidelity designs.',
     requirements: [
-      'Strong portfolio showcasing mobile and web product designs',
+      '1+ years portfolio experience showcasing mobile and web product designs',
       'Expertise in Figma and design systems',
       'Understanding of user-centered design principles',
       'Experience designing for emerging markets',
       'Basic knowledge of HTML/CSS is a plus'
     ],
-    instructions: 'Share your Figma portfolio link and CV at careers@hudumalink.co.ke.'
+    instructions: 'Share your Figma portfolio link and CV at careers@hudumalink.co.ke.',
+    salary: 'KES 80,000 - 120,000 / month'
   },
   {
     id: '6',
@@ -104,13 +110,14 @@ const jobs: Job[] = [
     mode: 'Hybrid',
     description: 'Build and nurture our seller and buyer communities. You will organize events, manage forums, and act as the voice of our users within the company.',
     requirements: [
-      'Passionate about community building',
+      '1+ years experience passionate about community building',
       'Strong public speaking and moderation skills',
       'Experience managing online communities (Facebook Groups, Telegram)',
       'Creative event planning experience',
       'Fluency in English and Sheng/Swahili'
     ],
-    instructions: 'Send a link to a community you have managed and your CV to careers@hudumalink.co.ke.'
+    instructions: 'Send a link to a community you have managed and your CV to careers@hudumalink.co.ke.',
+    salary: 'KES 45,000 - 65,000 / month'
   },
   {
     id: '7',
@@ -120,13 +127,14 @@ const jobs: Job[] = [
     mode: 'Remote',
     description: 'Join our mobile team to build the HudumaLink Android and iOS apps using Flutter. You will ensure a high-performance, seamless experience for mobile users.',
     requirements: [
-      '2+ years experience with Flutter and Dart',
+      '1+ years experience with Flutter and Dart',
       'Knowledge of Hive, Provider/Riverpod, and Firebase integration',
       'Experience with mobile UI/UX best practices',
       'Published apps in Play Store or App Store',
       'Ability to write clean, maintainable code'
     ],
-    instructions: 'Email your GitHub profile and CV to careers@hudumalink.co.ke.'
+    instructions: 'Email your GitHub profile and CV to careers@hudumalink.co.ke.',
+    salary: 'KES 100,000 - 150,000 / month'
   },
   {
     id: '8',
@@ -136,13 +144,14 @@ const jobs: Job[] = [
     mode: 'Remote',
     description: 'Use data to drive product decisions and prevent fraud. You will build recommendation engines and risk scoring models for our escrow system.',
     requirements: [
-      'Strong background in Python, R, and SQL',
+      '3+ years experience with PySpark, Python, R, and SQL',
       'Experience with machine learning frameworks (Scikit-learn, TensorFlow)',
       'Ability to visualize complex data sets',
       'Degree in Math, Statistics, or Computer Science',
       'Experience with fraud detection is highly desirable'
     ],
-    instructions: 'Send your CV and a brief description of a data project you are proud of to careers@hudumalink.co.ke.'
+    instructions: 'Send your CV and a brief description of a data project you are proud of to careers@hudumalink.co.ke.',
+    salary: 'KES 140,000 - 200,000 / month'
   },
   {
     id: '9',
@@ -152,13 +161,14 @@ const jobs: Job[] = [
     mode: 'Hybrid',
     description: 'Onboard high-quality sellers and establish partnerships with logistics and finance providers. You will be the face of HudumaLink in the field.',
     requirements: [
-      '3+ years in B2B sales or business development',
+      '1+ years in B2B sales or business development',
       'Strong networking and negotiation skills',
       'Willingness to travel within Nairobi and surrounding counties',
       'Competitive spirit with a focus on hitting targets',
       'Valid driving license is a plus'
     ],
-    instructions: 'Send your CV and sales track record to careers@hudumalink.co.ke.'
+    instructions: 'Send your CV and sales track record to careers@hudumalink.co.ke.',
+    salary: 'KES 40,005 - 60,000 / month + commission'
   },
   {
     id: '10',
@@ -168,18 +178,33 @@ const jobs: Job[] = [
     mode: 'Hybrid',
     description: 'Ensure HudumaLink complies with Kenyan laws, including the Data Protection Act and consumer protection regulations. You will draft contracts and manage legal disputes.',
     requirements: [
-      'Law degree and admission to the High Court of Kenya',
+      '1+ years experience post-admission to the High Court of Kenya',
       'Knowledge of e-commerce and fintech law',
       'Experience in drafting and reviewing commercial contracts',
       'Detail-oriented with strong analytical skills',
       'Understanding of dispute resolution in marketplaces'
     ],
-    instructions: 'Send your professional profile and relevant experience to careers@hudumalink.co.ke.'
+    instructions: 'Send your professional profile and relevant experience to careers@hudumalink.co.ke.',
+    salary: 'KES 50,000 - 75,000 / month'
   }
 ];
 
 const Careers = () => {
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [announcementIndex, setAnnouncementIndex] = useState(0);
+
+  const announcements = [
+    "🚀 recruiting early startup cohort: 1+ and 3+ year streams open!",
+    "✨ remote & hybrid roles spanning all 47 counties of kenya!",
+    "🤝 empower local jua kali trades & safe escrow commerce!"
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAnnouncementIndex((prev) => (prev + 1) % announcements.length);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, []);
 
   const toggleJob = (id: string) => {
     setExpandedJob(expandedJob === id ? null : id);
@@ -192,17 +217,50 @@ const Careers = () => {
         <meta name="description" content="Join the most trusted digital marketplace team in Kenya. Explore remote and hybrid job opportunities at HudumaLink." />
       </Helmet>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 px-4 sm:px-6 lg:px-8 bg-accent">
-        <div className="absolute top-0 left-0 w-full h-full opacity-5">
+      {/* Hero Section with Soft Glowing Back-filters and Ticker */}
+      <section className="relative overflow-hidden py-24 px-4 sm:px-6 lg:px-8 bg-accent col-span-full border-b border-white/[0.05]">
+        
+        {/* Soft Glowing Aura Backgrounds */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[320px] rounded-full bg-emerald-500/20 dark:bg-emerald-500/15 blur-3xl shadow-[0_0_120px_45px_rgba(16,185,129,0.3)] pointer-events-none animate-pulse" />
+        <div className="absolute top-[20%] left-[20%] w-[200px] h-[200px] rounded-full bg-green-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-[10%] right-[10%] w-[255px] h-[255px] rounded-full bg-emerald-600/10 blur-3xl pointer-events-none animate-pulse" />
+
+        {/* Abstract grid */}
+        <div className="absolute top-0 left-0 w-full h-full opacity-[0.05] pointer-events-none">
            <div className="grid grid-cols-6 gap-4 transform -rotate-12 translate-y-[-20%]">
              {[...Array(24)].map((_, i) => (
-               <div key={i} className="aspect-square bg-white rounded-2xl" />
+                <div key={i} className="aspect-square bg-white rounded-2xl" />
              ))}
            </div>
         </div>
         
         <div className="max-w-4xl mx-auto text-center relative z-10">
+          
+          {/* Animated Announcement Bar */}
+          <div className="inline-flex items-center justify-center w-full mb-8">
+            <div className="relative overflow-hidden h-9 px-4 rounded-full bg-white/10 dark:bg-neutral-800/60 backdrop-blur-md border border-white/10 dark:border-neutral-700/50 flex items-center justify-between gap-3 text-white max-w-lg shadow-[0_2px_20px_rgba(0,0,0,0.15)]">
+              <span className="flex h-2 w-2 relative flex-shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+              </span>
+              <div className="relative h-full flex items-center w-full min-w-[280px] md:min-w-[340px] overflow-hidden text-left">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={announcementIndex}
+                    initial={{ y: 15, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -15, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 120, damping: 15 }}
+                    className="absolute text-xs font-semibold tracking-wide text-white flex items-center gap-1.5 whitespace-nowrap uppercase font-mono"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-350 animate-pulse flex-shrink-0" />
+                    <span className="truncate">{announcements[announcementIndex]}</span>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -211,21 +269,31 @@ const Careers = () => {
             <Globe className="w-4 h-4 text-secondary" />
             <span>Building for Kenya, together</span>
           </motion.div>
+          
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-5xl md:text-7xl font-black text-white mb-8 tracking-tighter"
+            className="text-5xl md:text-7xl font-black text-white mb-6 tracking-tighter leading-none"
           >
             Join the <span className="text-secondary">Future</span> of Trade
           </motion.h1>
+
+          {/* Emerald accent line with glowing aura */}
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: "140px" }}
+            transition={{ delay: 0.2, duration: 0.8 }}
+            className="h-[3px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_4px_rgba(52,211,153,0.7)] mx-auto mb-8"
+          />
+
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="text-xl text-white/70 leading-relaxed max-w-2xl mx-auto"
+            transition={{ delay: 0.3 }}
+            className="text-lg md:text-xl text-white/70 leading-relaxed max-w-2xl mx-auto"
           >
-            Help us bridge the trust gap in digital commerce. We're looking for passionate individuals to help us build a more secure marketplace for all Kenyans.
+            Help us bridge the trust gap in digital commerce. We're looking for passionate individuals to help us build a more secure, escrow-backed marketplace for all Kenyans.
           </motion.p>
         </div>
       </section>
@@ -316,10 +384,13 @@ const Careers = () => {
                     <span className={cn(
                       "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
                       job.mode === 'Remote' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                      job.mode === 'Hybrid' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" :
+                      job.mode === 'Hybrid' ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-500/20" :
                       "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
                     )}>
                       {job.mode}
+                    </span>
+                    <span className="flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/5 dark:bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/10">
+                      <Coins className="w-3.5 h-3.5 mr-1 text-emerald-500 animate-pulse" /> {job.salary}
                     </span>
                   </div>
                 </div>
@@ -337,9 +408,19 @@ const Careers = () => {
                     className="border-t border-gray-50 dark:border-neutral-800"
                   >
                     <div className="p-6 md:p-8 space-y-8">
-                      <div>
-                        <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-widest mb-3">About the role</h4>
-                        <p className="text-gray-600 dark:text-gray-400 leading-relaxed font-medium">{job.description}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-widest mb-3">About the role</h4>
+                          <p className="text-gray-600 dark:text-gray-400 leading-relaxed font-medium">{job.description}</p>
+                        </div>
+                        <div className="bg-emerald-500/5 dark:bg-emerald-500/10 p-5 rounded-3xl border border-emerald-500/10 flex items-center gap-4">
+                          <Coins className="w-10 h-10 text-emerald-500 flex-shrink-0" />
+                          <div>
+                            <h4 className="text-[10px] uppercase tracking-widest text-emerald-600 dark:text-emerald-400 font-black">Monthly Compensation</h4>
+                            <p className="text-xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">{job.salary}</p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Competitive early-stage package with equity potential</p>
+                          </div>
+                        </div>
                       </div>
 
                       <div>

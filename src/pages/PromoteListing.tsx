@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, OperationType, auth } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { Listing } from '../types';
 import { PROMOTION_TIERS } from '../constants';
@@ -61,6 +61,11 @@ const PromoteListing = () => {
 
   const handlePromote = async () => {
     if (!listing || !user) return;
+
+    if (!user.emailVerified && !auth.currentUser?.emailVerified) {
+      toast.error('Please verify your email address to promote listings.');
+      return;
+    }
     
     const plan = PROMOTION_PLANS.find(p => p.id === selectedTier);
     if (!plan) return;

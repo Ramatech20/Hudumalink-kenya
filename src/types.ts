@@ -178,6 +178,9 @@ export interface Transaction {
   tipAmount?: number;
   createdAt: string;
   updatedAt: string;
+  reviewSubmitted?: boolean;
+  reviewRating?: number;
+  reviewComment?: string;
 }
 
 export interface Dispute {
@@ -187,8 +190,12 @@ export interface Dispute {
   reason: string;
   details: string;
   evidenceUrls: string[]; // URLs to images
-  status: 'open' | 'under_review' | 'resolved' | 'refunded';
+  status: 'open' | 'under_review' | 'resolved' | 'refunded' | 'seller_say_pending' | 'seller_responded';
   resolution?: string;
+  adminVerdictNotes?: string;
+  sellerResponse?: string;
+  sellerRespondedAt?: string;
+  sellerEvidenceUrls?: string[];
   createdAt: string;
 }
 

@@ -65,8 +65,8 @@ const Notifications = () => {
 
   const getIcon = (type: Notification['type']) => {
     switch (type) {
-      case 'message': return <MessageCircle className="w-5 h-5 text-blue-500" />;
-      case 'request': return <Bell className="w-5 h-5 text-purple-500" />;
+      case 'message': return <MessageCircle className="w-5 h-5 text-emerald-500" />;
+      case 'request': return <Bell className="w-5 h-5 text-amber-500" />;
       case 'success': return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'warning': return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
       case 'error': return <AlertTriangle className="w-5 h-5 text-red-500" />;

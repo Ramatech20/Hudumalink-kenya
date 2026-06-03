@@ -3,7 +3,7 @@ import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import { db, auth, storage, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError, handleValidationError } from '../lib/error-handler';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, increment, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, increment, orderBy, limit, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { uploadWithFallback } from '../lib/upload-helper';
 import { Listing, User, Transaction } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
@@ -147,6 +147,65 @@ const Profile = () => {
     fetchData();
   }, [user]);
 
+  useEffect(() => {
+    if (!user || !user.uid) return;
+    
+    const checkAndMatureHolds = async () => {
+      try {
+        const now = new Date().toISOString();
+        const holdsQuery = query(
+          collection(db, 'hold_ledgers'),
+          where('userId', '==', user.uid),
+          where('status', '==', 'locked')
+        );
+        const holdsSnapshot = await getDocs(holdsQuery);
+        if (holdsSnapshot.empty) return;
+
+        for (const docSnap of holdsSnapshot.docs) {
+          const holdData = docSnap.data();
+          const releaseTime = holdData.releaseTime;
+          if (releaseTime && releaseTime <= now) {
+            const amount = holdData.amount || 0;
+            // Clean hold validation lock client transaction
+            await runTransaction(db, async (transaction) => {
+              const freshLedgerSnap = await transaction.get(docSnap.ref);
+              if (!freshLedgerSnap.exists() || freshLedgerSnap.data()?.status !== 'locked') return;
+
+              // Update ledger
+              transaction.update(docSnap.ref, {
+                status: 'unlocked',
+                unlockedAt: new Date().toISOString()
+              });
+
+              // Increment user available balance and decrement hold
+              const userRef = doc(db, 'users', user.uid);
+              transaction.update(userRef, {
+                pendingWithdrawalBalance: increment(-amount),
+                escrowBalance: increment(amount),
+                updatedAt: new Date().toISOString()
+              });
+
+              // Send congratulations notification
+              const notifRef = doc(collection(db, 'notifications'));
+              transaction.set(notifRef, {
+                userId: user.uid,
+                title: 'Escrow Security Hold Released',
+                message: `Congratulations! Your escrow security hold of KES ${amount} has concluded. The funds are cleared and ready for withdrawal.`,
+                type: 'success',
+                read: false,
+                createdAt: new Date().toISOString()
+              });
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Error auto-maturing holds client-side:', e);
+      }
+    };
+
+    checkAndMatureHolds();
+  }, [user]);
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -229,15 +288,13 @@ const Profile = () => {
       }
       
       try {
-        const qPhone = query(collection(db, 'users'), where('phoneNumber', '==', formattedPhone));
-        const snapPhone = await getDocs(qPhone);
-        const duplicateUsers = snapPhone.docs.filter(docSnap => docSnap.id !== user.uid);
-        if (duplicateUsers.length > 0) {
+        const phoneDoc = await getDoc(doc(db, 'phone_registry', formattedPhone));
+        if (phoneDoc.exists() && phoneDoc.data()?.userId !== user.uid) {
           toast.error('This M-Pesa phone number is already registered to another account.');
           return;
         }
       } catch (error: any) {
-        handleFirestoreError(error, OperationType.GET, 'users');
+        handleFirestoreError(error, OperationType.GET, `phone_registry/${formattedPhone}`);
         return;
       }
     }
@@ -264,11 +321,37 @@ const Profile = () => {
       };
 
       await updateDoc(doc(db, 'users', user.uid), updateData);
+      
+      // Update secure phone registry if phone number changes
+      if (formattedPhone) {
+        if (user.phoneNumber && user.phoneNumber !== formattedPhone) {
+          await deleteDoc(doc(db, 'phone_registry', user.phoneNumber)).catch(e => console.warn("Failed deleting old phone doc:", e));
+        }
+        await setDoc(doc(db, 'phone_registry', formattedPhone), {
+          userId: user.uid,
+          createdAt: new Date().toISOString()
+        });
+      }
+
       toast.success('Profile updated successfully!');
       setIsEditing(false);
     } catch (error: any) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }
+  };
+
+  const getSafaricomB2CFeeClient = (amount: number): number => {
+    if (amount < 10) return 0;
+    if (amount <= 49) return 1;
+    if (amount <= 100) return 3;
+    if (amount <= 500) return 5;
+    if (amount <= 1000) return 7;
+    if (amount <= 3500) return 8;
+    if (amount <= 5000) return 9; // Range (3,501 - 5,000) matches standard Safaricom B2C Promotional charge of KSh 9
+    if (amount <= 10000) return 11;
+    if (amount <= 20000) return 14;
+    if (amount <= 50000) return 20;
+    return 30; // Max Safaricom B2C Promotional charge is KSh 30
   };
 
   const handleWithdraw = async (e: React.FormEvent) => {
@@ -281,41 +364,73 @@ const Profile = () => {
     }
 
     const amount = parseFloat(withdrawAmount);
-    const fee = withdrawMethod === 'mpesa' ? 15 : 50;
-    const totalToDeduct = amount + fee;
-
-    if (totalToDeduct > ((user as any).escrowBalance || 0)) {
-      handleValidationError(`Insufficient balance. You need ${formatPrice(totalToDeduct)} (including ${formatPrice(fee)} fee)`);
+    if (isNaN(amount) || amount <= 0) {
+      handleValidationError('Please enter a valid amount.');
       return;
     }
 
     if (amount < 100) {
-      handleValidationError('Minimum withdrawal is KES 100');
+      handleValidationError('Minimum withdrawal is KES 100 to satisfy platform reserve mandates and Safaricom B2C bands.');
+      return;
+    }
+
+    const isMpesa = withdrawMethod === 'mpesa';
+    const platformFee = isMpesa ? 0 : 50;
+    const safaricomFee = isMpesa ? getSafaricomB2CFeeClient(amount) : 0;
+    const totalFee = platformFee + safaricomFee;
+    const totalToDeduct = amount + totalFee;
+
+    if (totalToDeduct > ((user as any).escrowBalance || 0)) {
+      handleValidationError(`Insufficient balance. You need ${formatPrice(totalToDeduct)} (including KES ${platformFee} platform handling fee and KES ${safaricomFee} Safaricom B2C transfer fee)`);
       return;
     }
 
     setSubmittingWithdraw(true);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const response = await fetch('/api/withdrawals/create', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
+      const userRef = doc(db, 'users', user.uid);
+      const withdrawalRef = doc(collection(db, 'withdrawals'));
+
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) {
+          throw new Error('User profile not found');
+        }
+
+        const userData = userDoc.data();
+        const currentBalance = userData?.escrowBalance || 0;
+
+        if (currentBalance < totalToDeduct) {
+          throw new Error(`Insufficient balance. Available withdrawable balance is KES ${currentBalance.toFixed(2)}. Inclusive package requires KES ${totalToDeduct.toFixed(2)}.`);
+        }
+
+        const prevEarnings = userData?.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+        const newEarnings = {
+          ...prevEarnings,
+          withdrawableBalance: Math.max(0, (prevEarnings.withdrawableBalance || 0) - totalToDeduct)
+        };
+
+        // Deduct balance securely under transaction boundary
+        transaction.update(userRef, {
+          escrowBalance: increment(-totalToDeduct),
+          earnings: newEarnings,
+          updatedAt: new Date().toISOString()
+        });
+
+        // Write clean pending withdrawal application record
+        transaction.set(withdrawalRef, {
+          userId: user.uid,
+          userName: userData?.displayName || 'Unknown User',
           amount,
+          fee: totalFee,
+          totalDeducted: totalToDeduct,
           method: withdrawMethod,
           details: withdrawMethod === 'mpesa' 
             ? { phoneNumber: withdrawDetails.phoneNumber }
-            : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber }
-        })
+            : { bankName: withdrawDetails.bankName, accountNumber: withdrawDetails.accountNumber },
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        });
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit withdrawal');
-      }
       
       toast.success('Withdrawal request submitted! Funds have been moved to pending.');
       setShowWithdrawModal(false);
@@ -405,18 +520,18 @@ const Profile = () => {
             <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{user.role}</p>
             
             {user.role === 'customer' && !user.isVerified && (
-              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30 text-left">
+              <div className="mt-4 p-4 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-2xl border border-emerald-500/20 dark:border-emerald-500/30 text-left">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase">{t('profile.verification_progress')}</span>
-                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300">{(user as any).completedPaymentsCount || 0}/5</span>
+                  <span className="text-[10px] font-bold text-emerald-750 dark:text-emerald-400 uppercase">{t('profile.verification_progress')}</span>
+                  <span className="text-[10px] font-bold text-emerald-750 dark:text-emerald-400">{(user as any).completedPaymentsCount || 0}/5</span>
                 </div>
-                <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-neutral-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-blue-600 transition-all duration-500" 
+                    className="h-full bg-emerald-500 transition-all duration-500" 
                     style={{ width: `${Math.min(((user as any).completedPaymentsCount || 0) / 5 * 100, 100)}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-2 leading-tight">
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-2 leading-tight">
                   {t('profile.verification_help')}
                 </p>
               </div>
@@ -863,7 +978,7 @@ const Profile = () => {
                             <div className={cn(
                               "flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase",
                               order.status === 'completed' ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
-                              order.status === 'deposited' ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" :
+                              order.status === 'deposited' ? "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20" :
                               "bg-gray-200 dark:bg-neutral-700 text-gray-600 dark:text-gray-400"
                             )}>
                               {order.status === 'completed' ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <Clock className="w-3 h-3 mr-1" />}
@@ -892,7 +1007,7 @@ const Profile = () => {
                                   <div className={cn(
                                     "h-full transition-all",
                                     m.status === 'released' ? "bg-green-500 w-full" :
-                                    m.status === 'completed' ? "bg-blue-500 w-full" : "bg-gray-300 dark:bg-neutral-600 w-0"
+                                    m.status === 'completed' ? "bg-emerald-500 w-full" : "bg-gray-300 dark:bg-neutral-600 w-0"
                                   )} />
                                 </div>
                               ))}
@@ -994,11 +1109,43 @@ const Profile = () => {
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary transition-colors"
                   />
                   <p className="text-[10px] text-neutral-500 mt-1">Available: KSh {user?.escrowBalance?.toLocaleString() || 0}</p>
-                  <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                    <p className="text-[10px] text-blue-700 dark:text-blue-300 font-medium">
-                      Note: A fee of {withdrawMethod === 'mpesa' ? 'KES 15' : 'KES 50'} applies for {withdrawMethod === 'mpesa' ? 'M-Pesa' : 'Bank'} withdrawals.
+                  <div className="mt-2 p-3 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-xl border border-emerald-500/20 dark:border-emerald-500/30">
+                    <p className="text-[10px] text-emerald-800 dark:text-emerald-400 font-medium">
+                      Note: Payout Minimum Limit is KES 100. For M-Pesa, there is no platform fee; only the official Safaricom B2C dynamic bracket tariff applies. For banks, KES 50 flat applies.
                     </p>
                   </div>
+
+                  {withdrawAmount && parseFloat(withdrawAmount) > 0 && (
+                    <div className="mt-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl border border-neutral-200 dark:border-neutral-700/50 text-xs text-neutral-600 dark:text-neutral-300 space-y-1.5 animate-fadeIn">
+                      <div className="flex justify-between font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-neutral-800 pb-1 mb-1">
+                        <span>Withdrawal Breakdown</span>
+                        <span>Value</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span>Gross Payout Amount:</span>
+                        <span className="font-semibold text-gray-900 dark:text-white">KSh {parseFloat(withdrawAmount).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span>Platform Handling Fee:</span>
+                        <span className="text-gray-700 dark:text-gray-300">KSh {withdrawMethod === 'mpesa' ? 0 : 50}</span>
+                      </div>
+                      {withdrawMethod === 'mpesa' && (
+                        <div className="flex justify-between text-[11px]">
+                          <span>Safaricom B2C Charge:</span>
+                          <span className="text-gray-700 dark:text-gray-300">KSh {getSafaricomB2CFeeClient(parseFloat(withdrawAmount))}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between pt-1 border-t border-dashed border-gray-200 dark:border-neutral-850 text-[11px] font-bold text-primary">
+                        <span>Total Balance Deducted:</span>
+                        <span>
+                          KSh {(
+                            parseFloat(withdrawAmount) + 
+                            (withdrawMethod === 'mpesa' ? 0 + getSafaricomB2CFeeClient(parseFloat(withdrawAmount)) : 50)
+                          ).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>

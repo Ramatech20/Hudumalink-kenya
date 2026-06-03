@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
-import { collection, query, where, getDocs, orderBy, limit, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, addDoc, onSnapshot } from 'firebase/firestore';
 import { Listing, Transaction, Appeal } from '../types';
 import { formatPrice, formatDate, cn } from '../lib/utils';
 import { TrendingUp, ShoppingBag, Eye, MousePointer2, Package, ArrowUpRight, ArrowDownRight, Loader2, Calendar, Zap, AlertTriangle, Scale, X, ShieldCheck, DollarSign } from 'lucide-react';
@@ -26,59 +26,70 @@ const SellerDashboard = () => {
   });
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user || !user.uid) return;
-      try {
-        // Fetch Listings
-        const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
-        let listingsSnapshot;
-        try {
-          listingsSnapshot = await getDocs(listingsQ);
-        } catch (error: any) {
-          handleFirestoreError(error, OperationType.LIST, 'listings');
-          throw error;
-        }
-        const fetchedListings = listingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
-        setListings(fetchedListings);
+    if (!user || !user.uid) return;
+    setLoading(true);
 
-        // Fetch Sales
-        const salesQ = query(
-          collection(db, 'transactions'), 
-          where('sellerId', '==', user.uid),
-          orderBy('createdAt', 'desc'),
-          limit(20)
-        );
-        let salesSnapshot;
-        try {
-          salesSnapshot = await getDocs(salesQ);
-        } catch (error: any) {
-          handleFirestoreError(error, OperationType.LIST, 'transactions');
-          throw error;
-        }
-        const fetchedSales = salesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-        setSales(fetchedSales);
+    let fetchedListings: Listing[] = [];
+    let fetchedSales: Transaction[] = [];
 
-        // Calculate Stats
-        const completedSales = fetchedSales.filter(s => s.status === 'released' || s.status === 'completed');
-        const totalEarnings = completedSales.reduce((sum, sale) => sum + sale.amount, 0);
-        const totalViews = fetchedListings.reduce((sum, l) => sum + (l.viewCount || 0), 0);
-        const activeListings = fetchedListings.filter(l => l.status === 'active').length;
+    const updateStats = (currentListings: Listing[], currentSales: Transaction[]) => {
+      const completedSales = currentSales.filter(s => s.status === 'released' || s.status === 'completed');
+      const totalEarnings = completedSales.reduce((sum, sale) => sum + sale.amount, 0);
+      const totalViews = currentListings.reduce((sum, l) => sum + (l.viewCount || 0), 0);
+      const activeListings = currentListings.filter(l => l.status === 'active').length;
 
-        setStats({
-          totalEarnings,
-          totalViews,
-          totalSales: fetchedSales.length,
-          activeListings
-        });
-      } catch (error: any) {
-        if (!error.operationType) {
-          handleGeneralError(error, 'Failed to fetch dashboard data');
-        }
-      } finally {
-        setLoading(false);
-      }
+      setStats({
+        totalEarnings,
+        totalViews,
+        totalSales: currentSales.length,
+        activeListings
+      });
     };
-    fetchData();
+
+    // 1. Listings snapshot listener
+    const listingsQ = query(collection(db, 'listings'), where('authorId', '==', user.uid));
+    const unsubscribeListings = onSnapshot(listingsQ, (snapshot) => {
+      fetchedListings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
+      setListings(fetchedListings);
+      updateStats(fetchedListings, fetchedSales);
+      setLoading(false);
+    }, (error) => {
+      console.error('Listings listener error on seller dashboard:', error);
+    });
+
+    // 2. Sales snapshot listener with client-side sort fallback
+    const salesQ = query(
+      collection(db, 'transactions'), 
+      where('sellerId', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
+    const unsubscribeSales = onSnapshot(salesQ, (snapshot) => {
+      fetchedSales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+      setSales(fetchedSales);
+      updateStats(fetchedListings, fetchedSales);
+      setLoading(false);
+    }, (error) => {
+      console.warn('Sales listener index fallback configured:', error);
+      const simpleSalesQ = query(
+        collection(db, 'transactions'), 
+        where('sellerId', '==', user.uid)
+      );
+      onSnapshot(simpleSalesQ, (simpleSnap) => {
+        const sortedSales = simpleSnap.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Transaction))
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        fetchedSales = sortedSales.slice(0, 20);
+        setSales(fetchedSales);
+        updateStats(fetchedListings, fetchedSales);
+        setLoading(false);
+      });
+    });
+
+    return () => {
+      unsubscribeListings();
+      unsubscribeSales();
+    };
   }, [user]);
 
   // Mock data for the chart
@@ -189,33 +200,33 @@ const SellerDashboard = () => {
 
         <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl group-hover:scale-110 transition-transform">
-              <Eye className="w-6 h-6 text-blue-600" />
+            <div className="p-3 bg-emerald-500/10 dark:bg-emerald-500/20 rounded-2xl group-hover:scale-110 transition-transform">
+              <Eye className="w-6 h-6 text-emerald-500" />
             </div>
-            <span className="flex items-center text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-full uppercase tracking-widest">
+            <span className="flex items-center text-[10px] font-black text-emerald-500 bg-emerald-500/10 dark:bg-emerald-500/20 px-2 py-1 rounded-full uppercase tracking-widest">
               <ArrowUpRight className="w-3 h-3 mr-1" /> +8.2%
             </span>
           </div>
           <p className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Profile Views</p>
           <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">{stats.totalViews.toLocaleString()}</h3>
           <div className="mt-4 h-1 w-full bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 w-[60%] rounded-full" />
+            <div className="h-full bg-emerald-500 w-[60%] rounded-full" />
           </div>
         </div>
 
         <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-2xl group-hover:scale-110 transition-transform">
-              <ShoppingBag className="w-6 h-6 text-purple-600" />
+            <div className="p-3 bg-slate-100 dark:bg-neutral-800 rounded-2xl group-hover:scale-110 transition-transform">
+              <ShoppingBag className="w-6 h-6 text-emerald-500" />
             </div>
-            <span className="flex items-center text-[10px] font-black text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded-full uppercase tracking-widest">
+            <span className="flex items-center text-[10px] font-black text-emerald-500 bg-emerald-500/10 dark:bg-emerald-500/20 px-2 py-1 rounded-full uppercase tracking-widest">
               <ArrowUpRight className="w-3 h-3 mr-1" /> +5.4%
             </span>
           </div>
           <p className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Total Sales</p>
           <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">{stats.totalSales}</h3>
           <div className="mt-4 h-1 w-full bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-            <div className="h-full bg-purple-500 w-[45%] rounded-full" />
+            <div className="h-full bg-emerald-500 w-[45%] rounded-full" />
           </div>
         </div>
 
@@ -243,7 +254,7 @@ const SellerDashboard = () => {
           <span className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Withdraw</span>
         </button>
         <Link to="/create-listing" className="flex flex-col items-center justify-center p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800 hover:border-primary hover:bg-primary/5 transition-all group">
-          <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 mb-3 group-hover:scale-110 transition-transform">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-3 group-hover:scale-110 transition-transform">
             <Zap className="w-6 h-6" />
           </div>
           <span className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Promote</span>
@@ -319,7 +330,7 @@ const SellerDashboard = () => {
                   <span className="text-xs text-gray-500">Earnings</span>
                 </div>
                 <div className="flex items-center">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full mr-2" />
+                  <div className="w-3 h-3 bg-emerald-500 rounded-full mr-2" />
                   <span className="text-xs text-gray-500">Views</span>
                 </div>
               </div>
@@ -333,8 +344,8 @@ const SellerDashboard = () => {
                       <stop offset="95%" stopColor="#FF6321" stopOpacity={0}/>
                     </linearGradient>
                     <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -358,7 +369,7 @@ const SellerDashboard = () => {
                     }} 
                   />
                   <Area type="monotone" dataKey="earnings" stroke="#FF6321" strokeWidth={3} fillOpacity={1} fill="url(#colorEarnings)" />
-                  <Area type="monotone" dataKey="views" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#colorViews)" />
+                  <Area type="monotone" dataKey="views" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorViews)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

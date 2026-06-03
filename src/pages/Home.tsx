@@ -6,6 +6,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
 import { formatPrice, cn, getDistance } from '../lib/utils';
+import { ListingCard } from '../components/ListingCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { CATEGORIES, KENYAN_COUNTIES } from '../constants';
 import { useAuth } from '../AuthContext';
@@ -381,7 +382,7 @@ const Home = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-full text-blue-600 dark:text-blue-400">
+              <div className="bg-emerald-100 dark:bg-emerald-950 p-3 rounded-full text-emerald-600 dark:text-emerald-400">
                 <Zap className="w-8 h-8" />
               </div>
               <div>
@@ -414,75 +415,22 @@ const Home = () => {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 w-full">
           {featuredListings.map((listing) => (
-            <Link 
-              key={listing.id} 
-              to={`/listing/${listing.id}`}
-              className="group bg-white dark:bg-neutral-900 rounded-2xl overflow-hidden border border-gray-100 dark:border-neutral-800 hover:shadow-xl transition-all"
-            >
-              <div className="relative h-48 overflow-hidden">
-                <img 
-                  src={listing.images[0] || 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=800&q=80'} 
-                  alt={listing.title}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-                  {listing.isOffer && (
-                    <div className="bg-rose-600 text-white px-2 py-1 rounded-lg text-[9px] font-black tracking-widest flex items-center shadow-lg uppercase">
-                      <Tag className="w-2.5 h-2.5 mr-1" />
-                      SPECIAL DEAL
-                    </div>
-                  )}
-                  {listing.isPromoted && (
-                    <div className={cn(
-                      "px-2 py-1 rounded-lg text-[10px] font-black flex items-center shadow-lg animate-pulse",
-                      listing.promotionTier === 'elite' ? "bg-purple-600 text-white" :
-                      listing.promotionTier === 'premium' ? "bg-primary text-white" : "bg-yellow-400 text-black"
-                    )}>
-                      <Zap className="w-3 h-3 mr-1 fill-current" /> 
-                      {listing.promotionTier?.toUpperCase() || 'FEATURED'}
-                    </div>
-                  )}
-                  <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-primary">
-                    {listing.type === 'service' ? t('listings.services').toUpperCase() : t('listings.products').toUpperCase()}
-                  </div>
-                  {listing.type === 'product' && listing.stock !== undefined && (
-                    <div className={cn(
-                      "px-2 py-1 rounded-lg text-[10px] font-bold text-white",
-                      listing.stock > 0 ? "bg-green-500/90" : "bg-red-500/90"
-                    )}>
-                      {listing.stock > 0 ? t('listings.in_stock') : t('listings.out_of_stock')}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="p-4">
-                <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  <MapPin className="w-3 h-3 mr-1" />
-                  {listing.location.estate ? `${listing.location.estate}, ` : ''}{listing.location.town}, {listing.location.county}
-                </div>
-                <h3 className="font-bold text-gray-900 dark:text-gray-100 line-clamp-1 group-hover:text-primary transition-colors">
-                  {listing.title}
-                </h3>
-                <div className="mt-4">
-                  {listing.originalPrice && listing.price && listing.originalPrice > listing.price && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 mb-0.5 font-medium">
-                      <span className="line-through">{formatPrice(listing.originalPrice)}</span>
-                      <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-[9px] px-1 rounded-md">
-                        -{Math.round(((listing.originalPrice - listing.price) / listing.originalPrice) * 100)}%
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-extrabold text-primary">
-                      {listing.price ? formatPrice(listing.price) : t('listings.contact_price')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
+            <ListingCard
+              key={listing.id}
+              id={listing.id}
+              title={listing.title}
+              price={listing.price}
+              location={listing.location.estate ? `${listing.location.estate}, ${listing.location.town}` : `${listing.location.town}, ${listing.location.county}`}
+              imageUrl={listing.images[0]}
+              isOffer={listing.isOffer}
+              isPromoted={listing.isPromoted}
+              promotionTier={listing.promotionTier}
+              type={listing.type === 'service' ? t('listings.services') : t('listings.products')}
+              stock={listing.stock}
+              originalPrice={listing.originalPrice}
+            />
           ))}
           {featuredListings.length === 0 && (
             <div className="col-span-full py-20 text-center text-gray-500 dark:text-gray-400">

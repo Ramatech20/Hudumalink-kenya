@@ -83,6 +83,11 @@ const Messages = () => {
         const listingId = searchParams.get('listingId');
         if (listingId && !selectedChatId) {
           const initiateChat = async () => {
+            if (!user.emailVerified && !auth.currentUser?.emailVerified) {
+              toast.error('Please verify your email address to chat with providers/sellers.');
+              navigate('/profile');
+              return;
+            }
             try {
               const listingDoc = await getDoc(doc(db, 'listings', listingId));
               if (!listingDoc.exists()) return;
@@ -206,6 +211,11 @@ const Messages = () => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedChatId || !newMessage.trim()) return;
+
+    if (!user.emailVerified && !auth.currentUser?.emailVerified) {
+      toast.error('Please verify your email address to send messages.');
+      return;
+    }
 
     const messageText = newMessage.trim();
     setNewMessage('');

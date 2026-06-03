@@ -163,6 +163,28 @@ const KYC = () => {
           </div>
         </div>
 
+        {/* Custom Guideline Checklist Box */}
+        <div className="bg-amber-500/5 border border-amber-500/20 p-5 rounded-2xl mb-8 space-y-2">
+          <h3 className="text-xs font-mono font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+            Verification Rules & Guidelines
+          </h3>
+          <ul className="list-disc list-inside text-xs text-gray-650 dark:text-gray-400 space-y-1.5 leading-relaxed">
+            <li>
+              <strong className="text-gray-900 dark:text-gray-200">Legal Name Match:</strong> Your profile display name must match the official name on your submitted identification document (ID, Passport, or Driving License).
+            </li>
+            <li>
+              <strong className="text-gray-900 dark:text-gray-200">Clear Images Required:</strong> All uploaded photos must be perfectly sharp, well-lit, and legible. Any blurry, low-resolution, edited, or cropped images will result in immediate rejection.
+            </li>
+            <li>
+              <strong className="text-gray-900 dark:text-gray-200">Supported Documents:</strong> We accept a scanned National ID, Passport, or valid Driving License.
+            </li>
+            <li>
+              <strong className="text-gray-900 dark:text-gray-200">Matching Selfie:</strong> Ensure your selfie clearly shows both your face and your identity card next to it, with both being fully readable and in complete focus.
+            </li>
+          </ul>
+        </div>
+
         {user.kycStatus === 'rejected' && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 p-4 rounded-2xl mb-8 flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
@@ -279,9 +301,9 @@ const KYC = () => {
             </div>
           </div>
 
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5" />
-            <p className="text-xs text-blue-700 dark:text-blue-400">
+          <div className="bg-emerald-500/5 dark:bg-emerald-500/10 p-4 rounded-2xl flex items-start space-x-3 border border-emerald-550/10">
+            <AlertCircle className="w-5 h-5 text-emerald-500 mt-0.5 select-none" />
+            <p className="text-xs text-emerald-700 dark:text-emerald-400">
               Your data is encrypted and stored securely. We only use this information to verify your identity and prevent fraud on HudumaLink.
             </p>
           </div>

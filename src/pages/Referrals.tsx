@@ -111,7 +111,7 @@ export default function Referrals() {
       <div className="max-w-4xl mx-auto space-y-8">
         
         {/* Banner Section */}
-        <div className="bg-gradient-to-br from-primary via-primary/90 to-indigo-900 rounded-3xl p-8 text-white relative overflow-hidden shadow-xl border border-white/15">
+        <div className="bg-gradient-to-br from-primary via-emerald-800 to-zinc-950 rounded-3xl p-8 text-white relative overflow-hidden shadow-xl border border-white/15">
           <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-white/5 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-primary-dark/20 rounded-full blur-3xl" />
           

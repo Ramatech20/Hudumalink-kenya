@@ -51,6 +51,8 @@ service cloud.firestore {
              (!('isOnline' in data) || data.isOnline is bool) &&
              (!('lastSeen' in data) || (data.lastSeen is string)) &&
              (!('deviceFingerprint' in data) || (data.deviceFingerprint is string && data.deviceFingerprint.size() <= 256)) &&
+             (!('maxSingleSpend' in data) || data.maxSingleSpend is number) &&
+             (!('totalSpend' in data) || data.totalSpend is number) &&
              (!('escrowBalance' in data) || data.escrowBalance is number) &&
              (!('referralEarnings' in data) || data.referralEarnings is number) &&
              (!('completedPaymentsCount' in data) || data.completedPaymentsCount is number) &&
@@ -119,7 +121,8 @@ service cloud.firestore {
              'residence', 'area', 'gender', 'occupation', 'role', 
              'completedPaymentsCount', 'emailVerified', 'referralCode', 
              'referredBy', 'createdAt', 'updatedAt', 'isVerified', 
-             'kycStatus', 'isOnline', 'lastSeen', 'deviceFingerprint'
+             'kycStatus', 'isOnline', 'lastSeen', 'deviceFingerprint',
+             'maxSingleSpend', 'totalSpend'
            ]) &&
            // Protect critical fields from self-update
            (!('escrowBalance' in incoming()) || incoming().escrowBalance == existing().get('escrowBalance', 0)) &&
@@ -287,6 +290,15 @@ service cloud.firestore {
     match /referral_codes/{code} {
       allow read: if true;
       allow create: if isOwner(incoming().userId);
+      allow update: if isOwner(existing().userId) && isOwner(incoming().userId);
+      allow delete: if isAdmin();
+    }
+    
+    match /phone_registry/{phone} {
+      allow get: if phone.size() <= 32;
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && phone.size() <= 32 && incoming().userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && phone.size() <= 32 && (existing().userId == request.auth.uid || isAdmin());
     }
     
     match /hold_ledgers/{ledgerId} {
@@ -306,6 +318,13 @@ service cloud.firestore {
       allow list: if isSignedIn() && (resource.data.reporterId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && incoming().reporterId == request.auth.uid;
       allow update: if isAdmin();
+    }
+
+    match /support_tickets/{ticketId} {
+      allow get: if isValidId(ticketId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if true;
+      allow update, delete: if isAdmin();
     }
   }
 }

@@ -696,7 +696,13 @@ const CreateListing = () => {
                   )}
                 </div>
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" className="hidden" />
-                <p className="text-[10px] text-gray-400 font-medium">Upload up to 8 high-quality photos. First photo will be your cover.</p>
+                <div className="space-y-1.5 mt-2">
+                  <p className="text-xs text-gray-400 font-medium">Upload up to 8 photos. First photo will be your cover.</p>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/5 p-3 rounded-xl border border-amber-500/10 flex items-start gap-2">
+                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span><strong>Image Clarity Rule:</strong> You must use original, sharp, and clear images representing your actual work or merchandise. Listings with blurry, blurry-text, low-quality, heavily cropped, or deceptive images will be flagged and rejected.</span>
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-neutral-800">

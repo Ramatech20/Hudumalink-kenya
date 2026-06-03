@@ -6,7 +6,7 @@ import {
   ShoppingBag, Wrench, ShieldCheck, Search, MessageCircle, Star, Rocket, 
   CheckCircle2, ArrowRight, UserPlus, Image as ImageIcon, CreditCard,
   Lock, Eye, FileText, AlertTriangle, Handshake, Scale, Info, ShieldAlert,
-  Users, Zap, Globe, Heart, CheckCircle, Facebook, Instagram, Linkedin, Twitter, 
+  Users, Zap, Globe, Heart, CheckCircle, Facebook, Instagram, Linkedin, 
   Send, HelpCircle, ChevronDown, Mail, Phone, MessageSquare, Target, MapPin,
   History, Lightbulb, TrendingUp, Flag, Layout, Building2, Shield, UserCheck, Briefcase
 } from 'lucide-react';
@@ -72,8 +72,8 @@ export const About = () => (
         <div className="relative">
           <div className="aspect-[4/5] rounded-[3rem] overflow-hidden shadow-2xl relative group">
             <img 
-              src="https://picsum.photos/seed/kenya-market/800/1000" 
-              alt="Kenyan Marketplace" 
+              src="https://images.unsplash.com/photo-1618245361464-44124397162a?auto=format&fit=crop&q=80&w=800" 
+              alt="Aerial view of Nairobi Skyline, Kenya" 
               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
               referrerPolicy="no-referrer"
             />
@@ -301,7 +301,7 @@ export const Terms = () => (
         <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
           The legal framework that keeps HudumaLink safe, fair, and trustworthy for everyone.
         </p>
-        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: April 2026</p>
+        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: May 2026</p>
       </div>
     </div>
 
@@ -493,7 +493,7 @@ export const Privacy = () => (
         <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
           At HudumaLink, your privacy is important to us. We protect your information as if it were our own.
         </p>
-        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: April 2026</p>
+        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: May 2026</p>
       </div>
     </div>
 
@@ -1058,10 +1058,14 @@ export const Contact = () => {
               </div>
               <div className="space-y-8">
                 {[
-                  { icon: <Mail className="w-6 h-6" />, title: "Email Us", val: "support@hudumalink.co.ke", desc: "⚡ Average response time: under 2 hours" },
-                  { icon: <MessageCircle className="w-6 h-6" />, title: "WhatsApp Support", val: "0112389628", desc: "Chat with us instantly for faster assistance." },
-                  { icon: <Phone className="w-6 h-6" />, title: "Call Us", val: "0112389628", desc: "Mon-Fri from 8am to 6pm." },
-                  { icon: <MapPin className="w-6 h-6" />, title: "Visit Us", val: "Eldoret, Kenya", desc: "(Operations currently remote as we build and expand)" }
+                  { icon: <Mail className="w-6 h-6" />, title: "Email Us", val: "support@hudumalink.co.ke", href: "mailto:support@hudumalink.co.ke", desc: "⚡ Average response time: under 2 hours" },
+                  { icon: (
+                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                      <path d="M12.004 0C5.372 0 0 5.372 0 12.004c0 2.116.549 4.11 1.612 5.855L.05 24l6.302-1.654a11.97 11.97 0 005.652 1.41h.005c6.629 0 12.001-5.372 12.001-12.004C24.01 5.372 18.636 0 12.004 0zm6.986 16.92c-.287.808-1.42 1.492-2.193 1.583-.726.084-1.658.127-2.68-.198-1.023-.325-2.028-.868-2.914-1.496a15.828 15.828 0 01-3.69-3.692C6.91 12.222 6.38 11.196 6.07 10.155c-.31-.1-.314-.085-.314-.085-.357-1.157.34-1.928.895-2.484l.654-.654c.154-.154.346-.226.544-.226.2 0 .393.072.544.226l1.35 1.35c.154.154.226.346.226.544 0 .2-.072.392-.226.544l-.454.454c-.112.112-.132.278-.052.41a6.602 6.602 0 001.378 1.83 6.577 6.577 0 001.83 1.378c.133.08.3.06.411-.052l.455-.455c.153-.153.345-.226.544-.226s.39.073.543.226l1.35 1.35c.154.154.226.346.226.544 0 .198-.073.39-.227.544l-.35.35c-.092.1-.219.145-.347.118z"/>
+                    </svg>
+                  ), title: "WhatsApp Support", val: "0112389628", href: "https://wa.me/254112389628?text=Hello%20HudumaLink%20Support,%20I'm%20contacting%20you%20from%20the%20platform%20for%20assistance.", desc: "Chat with us instantly for faster assistance." },
+                  { icon: <Phone className="w-6 h-6" />, title: "Call Us", val: "0112389628", href: "tel:254112389628", desc: "Mon-Fri from 8am to 6pm." },
+                  { icon: <MapPin className="w-6 h-6" />, title: "Visit Us", val: "Eldoret, Kenya", href: "", desc: "(Operations currently remote as we build and expand)" }
                 ].map((item, i) => (
                   <div key={i} className="flex gap-6">
                     <div className="w-14 h-14 bg-gray-50 dark:bg-neutral-900 rounded-2xl flex items-center justify-center text-green-500 border border-gray-100 dark:border-neutral-800 flex-shrink-0">
@@ -1069,7 +1073,18 @@ export const Contact = () => {
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900 dark:text-white">{item.title}</h3>
-                      <p className="text-green-600 dark:text-green-400 font-bold mt-1">{item.val}</p>
+                      {item.href ? (
+                        <a 
+                          href={item.href} 
+                          target={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : "_blank"} 
+                          rel={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : "noopener noreferrer"}
+                          className="inline-block text-green-600 dark:text-green-400 font-bold mt-1 hover:underline transition-all"
+                        >
+                          {item.val}
+                        </a>
+                      ) : (
+                        <p className="text-green-600 dark:text-green-400 font-bold mt-1">{item.val}</p>
+                      )}
                       <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">{item.desc}</p>
                     </div>
                   </div>
