@@ -222,6 +222,19 @@ const CreateListing = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    // Strict programmatic role and listing type business rule enforcement
+    if (user.role === 'customer') {
+      toast.error('Customers cannot post listings. Please become a provider or seller first.');
+      navigate('/profile');
+      return;
+    }
+
+    if (user.role === 'seller' && formData.type === 'service') {
+      toast.error('Sellers are restricted to listing goods/products only. Service listings require a Service Provider account.');
+      return;
+    }
+
     if (selectedFiles.length === 0) {
       toast.error('Please upload at least one image');
       return;

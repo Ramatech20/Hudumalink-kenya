@@ -84,6 +84,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 async function testConnection() {
   try {
+    // Settle delay to let long-polling connection establish before forcing network handshakes
+    await new Promise((resolve) => setTimeout(resolve, 3000));
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
