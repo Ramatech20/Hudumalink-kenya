@@ -23,10 +23,11 @@ const firebaseConfig = getInitialConfig();
 // Initialize with what we have
 const app = initializeApp(firebaseConfig);
 
-// Use initializeFirestore with experimentalForceLongPolling to bypass potential gRPC/WebSocket blocks
+// Use initializeFirestore with experimentalForceLongPolling and useFetchStreams: false to bypass potential gRPC/WebSocket blocks and buffering proxies
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
-}, firebaseConfig.firestoreDatabaseId || '(default)');
+  useFetchStreams: false,
+} as any, firebaseConfig.firestoreDatabaseId || '(default)');
 
 export const auth = getAuth(app);
 export const storage = getStorage(app);

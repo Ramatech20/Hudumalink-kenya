@@ -43,6 +43,11 @@ export function StickyPurchasePanel({
   const isAuthor = user && user.uid === listing.authorId;
   const isProduct = listing.type === 'product';
 
+  const hasActiveTransaction = transaction && 
+    transaction.status !== 'released' && 
+    transaction.status !== 'completed' && 
+    transaction.status !== 'cancelled';
+
   const discountPercent = listing.originalPrice && listing.price && listing.originalPrice > listing.price
     ? Math.round(((listing.originalPrice - listing.price) / listing.originalPrice) * 100)
     : 0;
@@ -150,7 +155,7 @@ export function StickyPurchasePanel({
         ) : (
           /* Buyer/End-user interaction suite */
           <div className="space-y-2.5">
-            {!transaction ? (
+            {!hasActiveTransaction ? (
               <>
                 {/* Immediate Escape CTA Actions list */}
                 <div className="grid grid-cols-2 gap-2.5">
@@ -180,7 +185,7 @@ export function StickyPurchasePanel({
               </>
             ) : (
               /* If transaction is open but not confirmed released */
-              transaction.status === 'deposited' && (
+              (transaction.status === 'deposited' || transaction.status === 'delivered') && (
                 <div className="space-y-2">
                   <button 
                     onClick={onConfirmDelivery}

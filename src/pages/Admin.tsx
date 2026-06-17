@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { CheckCircle, XCircle, Shield, User as UserIcon, Package, AlertTriangle, ExternalLink, Flag, Trash2, Eye, Wallet, Gavel, Clock, ArrowUpRight, Scale, TrendingUp, Zap, Phone, MessageCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatPrice, formatDate, cn } from '../lib/utils';
+import { releaseEscrowFunds } from '../services/paymentService';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2 } from 'lucide-react';
 
@@ -22,6 +23,8 @@ const Admin = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [kycRequests, setKycRequests] = useState<User[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
+  const [releasingTx, setReleasingTx] = useState<Record<string, boolean>>({});
   const [adminExplanation, setAdminExplanation] = useState<Record<string, string>>({});
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
@@ -42,6 +45,7 @@ const Admin = () => {
     openDisputes: 0
   });
   const [rejectionReason, setRejectionReason] = useState('');
+  const [selectedDisputeSubTab, setSelectedDisputeSubTab] = useState<'disputes' | 'escrow_requests'>('disputes');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
@@ -169,6 +173,26 @@ const Admin = () => {
     }
   };
 
+  const handleAdminReleaseRequest = async (transactionId: string) => {
+    if (window.confirm("Are you sure you want to approve and manually release this escrow payout? This will transfer KES balance directly to the service provider.")) {
+      setReleasingTx(prev => ({ ...prev, [transactionId]: true }));
+      try {
+        const success = await releaseEscrowFunds(transactionId);
+        if (success) {
+          toast.success("Payout processed and escrowed funds successfully settled to the provider's balance.");
+          setPaymentRequests(prev => prev.filter(req => req.id !== transactionId));
+          // Update overview counts
+          fetchOverviewStats();
+        }
+      } catch (err: any) {
+        console.error("Manual payout release error:", err);
+        toast.error("Failed to release funds: " + err.message);
+      } finally {
+        setReleasingTx(prev => ({ ...prev, [transactionId]: false }));
+      }
+    }
+  };
+
   const fetchTabData = async () => {
     setIsDataLoading(true);
     setSelectedItems([]); // Reset selection on tab change
@@ -266,6 +290,45 @@ const Admin = () => {
             throw error;
           }
           setDisputes(disputesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Dispute)));
+
+          // Fetch all manual payment/escrow requests that are pending
+          try {
+            const escrowRequestsDoc = await getDocs(query(collection(db, 'transactions'), where('paymentRequested', '==', true)));
+            const filteredDocs = escrowRequestsDoc.docs.filter(docSnap => {
+              const txData = docSnap.data();
+              return txData.status === 'deposited' || txData.status === 'delivered';
+            });
+            const requests = await Promise.all(
+              filteredDocs.map(async (docSnap) => {
+                const txData = docSnap.data();
+                let buyerPhone = 'No phone provided';
+                let sellerPhone = 'No phone provided';
+                try {
+                  const [bDoc, sDoc] = await Promise.all([
+                    getDoc(doc(db, 'users', txData.buyerId)),
+                    getDoc(doc(db, 'users', txData.sellerId))
+                  ]);
+                  if (bDoc.exists()) {
+                    buyerPhone = bDoc.data().phoneNumber || bDoc.data().email || 'No phone provided';
+                  }
+                  if (sDoc.exists()) {
+                    sellerPhone = sDoc.data().phoneNumber || sDoc.data().email || 'No phone provided';
+                  }
+                } catch (userErr) {
+                  console.error('Error fetching details for requester/purchaser:', userErr);
+                }
+                return {
+                  id: docSnap.id,
+                  ...txData,
+                  buyerPhone,
+                  sellerPhone
+                };
+              })
+            );
+            setPaymentRequests(requests);
+          } catch (escError) {
+            console.error('Error fetching administrative escrow release requests:', escError);
+          }
           break;
         case 'withdrawals':
           const withdrawalsQuery = query(collection(db, 'withdrawals'), where('status', '==', 'pending'));
@@ -1973,7 +2036,170 @@ const Admin = () => {
         </div>
       ) : activeTab === 'disputes' ? (
         <div className="space-y-6">
-          {disputes.length === 0 ? (
+          {/* Sub-tabs for disputes and escrow manual release requests */}
+          <div className="flex border-b border-gray-150 dark:border-neutral-800 mb-6">
+            <button
+              onClick={() => setSelectedDisputeSubTab('disputes')}
+              className={`pb-4 px-6 text-sm font-extrabold border-b-2 transition-all ${
+                selectedDisputeSubTab === 'disputes'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              Active Disputes ({disputes.length})
+            </button>
+            <button
+              onClick={() => setSelectedDisputeSubTab('escrow_requests')}
+              className={`pb-4 px-6 text-sm font-extrabold border-b-2 transition-all ${
+                selectedDisputeSubTab === 'escrow_requests'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              Payment Requests ({paymentRequests.length})
+            </button>
+          </div>
+
+          {selectedDisputeSubTab === 'escrow_requests' ? (
+            /* ESCROW MANUAL BALANCE RELEASE REQUESTS tab list */
+            <div className="space-y-6 animate-fadeIn">
+              {paymentRequests.length === 0 ? (
+                <div className="bg-white dark:bg-neutral-900 rounded-2xl p-12 text-center border border-gray-100 dark:border-neutral-800">
+                  <Package className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">No pending payment requests</h3>
+                  <p className="text-gray-500 dark:text-gray-400 mt-2">No service providers are currently waiting for administrative release.</p>
+                </div>
+              ) : (
+                paymentRequests.map((req) => {
+                  const deliveredTime = req.deliveredAt ? new Date(req.deliveredAt).getTime() : 0;
+                  const hoursUnresponsive = deliveredTime ? Math.floor((Date.now() - deliveredTime) / (1000 * 60 * 60) * 10) / 10 : null;
+
+                  return (
+                    <div key={req.id} className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-gray-150/30 dark:border-neutral-800 shadow-sm space-y-6 animate-fadeIn">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-gray-100 dark:border-neutral-800 gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="bg-amber-50 text-amber-600 dark:bg-amber-950/20 dark:text-amber-400 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border border-amber-100">
+                              Escrow Release Requested
+                            </span>
+                            <span className="text-xs text-gray-400 font-mono flex items-center">
+                              <Clock className="w-3.5 h-3.5 mr-1" /> Requested {req.paymentRequestedAt ? formatDate(req.paymentRequestedAt) : 'recently'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500 mt-2">
+                            Transaction ID: <span className="font-mono font-bold text-gray-700 dark:text-gray-350">{req.id}</span>
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs text-gray-400 block uppercase font-bold tracking-widest text-[10px]">Escrow amount</span>
+                          <span className="text-lg font-black text-primary">{formatPrice(req.amount)}</span>
+                        </div>
+                      </div>
+
+                      {/* Timely Inspection Warning / Unresponsive Indicator */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <div className="p-4 bg-gray-50 dark:bg-neutral-800/40 rounded-xl border border-gray-100 dark:border-neutral-800">
+                          <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold block mb-1">Delivered On</span>
+                          <p className="font-bold text-gray-850 dark:text-white">
+                            {req.deliveredAt ? formatDate(req.deliveredAt) : 'Not specified'}
+                          </p>
+                        </div>
+                        <div className="p-4 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-xl border border-indigo-100/30">
+                          <span className="text-[10px] text-indigo-400 uppercase tracking-widest font-bold block mb-1">Customer Unresponsive Since</span>
+                          <p className="font-black text-indigo-900 dark:text-indigo-300">
+                            {hoursUnresponsive !== null ? `${hoursUnresponsive} hours` : 'Pending timer'}
+                          </p>
+                        </div>
+                        <div className="p-4 bg-green-50/40 dark:bg-green-950/20 rounded-xl border border-green-100/30">
+                          <span className="text-[10px] text-green-500 uppercase tracking-widest font-bold block mb-1">Response Buffer Status</span>
+                          <p className="font-black text-green-700 dark:text-green-400">
+                            {hoursUnresponsive !== null && hoursUnresponsive >= 24 ? '🚨 Over 24h Buffer Passed' : '⌛ In Review'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* User Contacts Layout */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                        <div className="space-y-3 p-5 bg-gray-50 dark:bg-neutral-800/40 rounded-2xl border border-gray-100 dark:border-neutral-800">
+                          <span className="text-[10px] text-gray-400 uppercase tracking-widest font-black block">Seller / Service Provider (Claimant)</span>
+                          <div>
+                            <p className="font-bold text-gray-900 dark:text-white mb-0.5">{req.sellerName || 'Service Provider'}</p>
+                            <p className="text-xs text-gray-450 font-mono mb-2">{req.sellerId}</p>
+                            <a 
+                              href={`tel:${req.sellerPhone}`} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-xs font-extrabold transition-colors mt-1"
+                            >
+                              <Phone className="w-3.5 h-3.5" /> Speak: {req.sellerPhone}
+                            </a>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 p-5 bg-gray-50 dark:bg-neutral-800/40 rounded-2xl border border-gray-100 dark:border-neutral-800">
+                          <span className="text-[10px] text-gray-400 uppercase tracking-widest font-black block">Buyer / Customer Details (Unresponsive)</span>
+                          <div>
+                            <p className="font-bold text-gray-900 dark:text-white mb-0.5">{req.buyerName || 'Client'}</p>
+                            <p className="text-xs text-gray-450 font-mono mb-2">{req.buyerId}</p>
+                            <a 
+                              href={`tel:${req.buyerPhone}`} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-xs font-extrabold transition-colors mt-1"
+                            >
+                              <Phone className="w-3.5 h-3.5" /> Call Customer: {req.buyerPhone}
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Provider Support Details Proof block */}
+                      <div className="p-6 bg-amber-500/5 rounded-2xl border border-amber-500/10 space-y-3">
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400 uppercase tracking-widest font-black block">Submitted Proof of Execution</span>
+                        <div className="text-xs text-gray-800 dark:text-gray-200 bg-white dark:bg-neutral-900 p-4 border border-amber-500/10 rounded-xl leading-relaxed whitespace-pre-wrap">
+                          {req.paymentRequestProof || 'No proof message specified.'}
+                        </div>
+                        {req.paymentRequestEvidenceUrl && (
+                          <div className="flex items-center gap-1.5 pt-1 text-xs">
+                            <span className="text-gray-400 font-bold">Evidence:</span>
+                            <a 
+                              href={req.paymentRequestEvidenceUrl} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="text-primary underline font-bold hover:text-opacity-80 flex items-center gap-1"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Inspect Attachment View
+                            </a>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-4 bg-yellow-500/5 rounded-2xl border border-yellow-500/10 text-xs text-yellow-800 dark:text-yellow-400 leading-relaxed font-semibold">
+                        ⚖️ <strong>Platform Rule Action Plan:</strong> If the timer has exceeded 24 hours, policy mandates manual payout settlement. 
+                        Please secure voice communication or direct text logs if you are resolving outstanding deliverables.
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          onClick={() => navigate(`/transactions/${req.id}`)}
+                          className="px-5 py-3 bg-gray-50 hover:bg-gray-100 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-800 text-gray-800 dark:text-gray-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                        >
+                          <ExternalLink className="w-4 h-4" /> Open Order Workstream Details
+                        </button>
+                        <button
+                          onClick={() => handleAdminReleaseRequest(req.id)}
+                          disabled={releasingTx[req.id]}
+                          className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/10 disabled:opacity-50"
+                        >
+                          {releasingTx[req.id] ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <span>✔️ Approve & Release Funds to Provider Balance</span>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          ) : disputes.length === 0 ? (
             <div className="bg-white dark:bg-neutral-900 rounded-2xl p-12 text-center border border-gray-100 dark:border-neutral-800">
               <Gavel className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
               <h3 className="text-xl font-bold text-gray-900 dark:text-white">No active disputes</h3>

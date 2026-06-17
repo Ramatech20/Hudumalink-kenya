@@ -8,7 +8,7 @@ import {
   Lock, Eye, FileText, AlertTriangle, Handshake, Scale, Info, ShieldAlert,
   Users, Zap, Globe, Heart, CheckCircle, Facebook, Instagram, Linkedin, 
   Send, HelpCircle, ChevronDown, Mail, Phone, MessageSquare, Target, MapPin,
-  History, Lightbulb, TrendingUp, Flag, Layout, Building2, Shield, UserCheck, Briefcase
+  History, Lightbulb, TrendingUp, Flag, Layout, Building2, Shield, UserCheck, Briefcase, Clock
 } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
@@ -38,10 +38,10 @@ export const About = () => (
             About HudumaLink
           </motion.div>
           <h1 className="text-5xl md:text-7xl font-black text-gray-900 dark:text-white mb-8 tracking-tight leading-none">
-            Empowering Kenya’s <span className="text-primary">Digital Economy</span> 🇰🇪
+            Empowering Kenya’s <span className="text-primary">Digital Economy</span>
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-400 leading-relaxed max-w-3xl mx-auto">
-            HudumaLink is more than just a marketplace — it is a growing digital ecosystem designed to connect skilled service providers, sellers, and everyday Kenyans in a safe, structured, and trustworthy environment.
+            HudumaLink is more than just a marketplace — it is a centralized digital ecosystem designed to connect skilled service providers, sellers, and everyday Kenyans in a safe, structured, and trustworthy environment.
           </p>
         </div>
       </div>
@@ -177,11 +177,11 @@ export const About = () => (
             </h2>
             <div className="space-y-6">
               {[
-                "Discover trusted service providers and sellers",
-                "Book services or purchase products بسهولة (with ease)",
-                "Use secure payment systems (including M-Pesa integration)",
-                "Benefit from structured transactions and accountability",
-                "Access a growing digital marketplace"
+                "Discover verified, skilled service providers and authorized vendors.",
+                "Initiate milestone agreements and escrow deposits through our streamlined system.",
+                "Execute secure transactions backed by an automated third-party payment infrastructure.",
+                "Benefit from structured transactions, system tracking, and complete accountability.",
+                "Access a modern, regulated digital marketplace."
               ].map((text, i) => (
                 <div key={i} className="flex items-start gap-4">
                   <div className="w-6 h-6 bg-green-500/10 text-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
@@ -212,7 +212,7 @@ export const About = () => (
           },
           { 
             title: "Local Innovation", 
-            desc: "HudumaLink is built for Kenya — integrating local payment systems like M-Pesa and reflecting real market needs and behaviors.", 
+            desc: "HudumaLink is built specifically for Kenya — integrating secure transactions and accommodating standard local mobile money services.", 
             icon: <Zap className="w-8 h-8 text-accent" />,
             color: "bg-accent/10"
           },
@@ -296,12 +296,12 @@ export const Terms = () => (
           <Scale className="w-10 h-10" />
         </motion.div>
         <h1 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
-          Terms of <span className="text-secondary">Service</span> ⚖️
+          Terms of <span className="text-secondary">Service</span>
         </h1>
         <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
-          The legal framework that keeps HudumaLink safe, fair, and trustworthy for everyone.
+          The regulatory, operational, and structural framework governing the use of the HudumaLink platform.
         </p>
-        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: May 2026</p>
+        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: June 17, 2026</p>
       </div>
     </div>
 
@@ -311,38 +311,35 @@ export const Terms = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">1</div>
-              Account, Eligibility & Role Rules
+              Account, Eligibility and Authorized User Classes
             </h2>
             <div className="bg-gray-50 dark:bg-neutral-900 p-10 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800">
               <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-8">
-                To use HudumaLink, you must be at least 18 years old and possess a valid Kenyan National ID. Accounts are classified under strictly governed roles to maintain platform integrity, safety, and transparency:
+                To use HudumaLink Kenya, individuals must be at least 18 years of age and possess a valid Kenyan National Identification Card. The platform strictly enforces three non-overlapping user classifications to preserve operational integrity, safety, and systemic compliance:
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-                {[
-                  "Accurate registration info",
-                  "Account security responsibility",
-                  "Mandatory KYC for sellers",
-                  "Compliance with Kenyan laws"
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
-                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
               
-              <div className="border-t border-gray-200 dark:border-neutral-800 pt-6 space-y-4">
-                <h3 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-xs">Role-Based Posting Restraints</h3>
-                <div className="space-y-3 text-sm text-gray-500 dark:text-gray-400">
-                  <p>
-                    <strong>Sellers (Goods Only):</strong> Users signed up under the "Seller" role are strictly permitted to post physical goods/products. Listing professional services, digital hours, or manual construction labor under a Seller account is strictly prohibited.
-                  </p>
-                  <p>
-                    <strong>Service Providers (Goods & Services):</strong> Licensed manual workers, specialists, and freelancers signed up under the "Service Provider" role possess dual-tier authority to list both services (consultancy, installations, manual labour) and relevant physical products/consumables.
-                  </p>
-                  <p>
-                    <strong>Customers/Buyers (No Posting Allowed):</strong> Users registered as Customers/Buyers do not have permission to publish listings of any standard on our platform. They enjoy complete access to search, escrow booking, messaging, and transaction flows.
-                  </p>
+              <div className="border-t border-gray-200 dark:border-neutral-800 pt-6 space-y-6">
+                <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300 font-sans">
+                  <div className="p-5 bg-transparent rounded-2xl border border-gray-200 dark:border-neutral-800">
+                    <strong className="text-gray-950 dark:text-white block mb-1">Class 1: Consumer Account (Buyer)</strong>
+                    <p className="mt-1 leading-relaxed">
+                      <strong>Privileges:</strong> Authorized for search, directory browsing, native messaging, escrow booking execution, and payment transaction flows.<br />
+                      <strong>Restrictions:</strong> Absolute zero publication privileges. Consumer accounts are strictly prohibited from publishing listings or offering items, products, or services of any nature.
+                    </p>
+                  </div>
+                  <div className="p-5 bg-transparent rounded-2xl border border-gray-200 dark:border-neutral-800">
+                    <strong className="text-gray-950 dark:text-white block mb-1">Class 2: Merchant Account (Seller)</strong>
+                    <p className="mt-1 leading-relaxed">
+                      <strong>Privileges:</strong> Authorized exclusively for the publication, management, and fulfillment of physical products and tangible inventory items.<br />
+                      <strong>Restrictions:</strong> Strictly prohibited from listing professional consultations, digital hours, freelance services, or manual labor of any type.
+                    </p>
+                  </div>
+                  <div className="p-5 bg-transparent rounded-2xl border border-gray-200 dark:border-neutral-800">
+                    <strong className="text-gray-950 dark:text-white block mb-1">Class 3: Service Provider Account (Dual-Tier Dual-Authority)</strong>
+                    <p className="mt-1 leading-relaxed">
+                      <strong>Privileges:</strong> Authorized with dual-tier credentials to list, advertise, and execute professional services (including technical labor, consultancy, artisanal installations, and freelance contracts) as well as any directly relevant physical consumables or component products necessary to fulfill those services.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -355,21 +352,21 @@ export const Terms = () => (
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {[
-                { title: "No Fraud", desc: "Misrepresentation of products, services, or identity is strictly prohibited." },
-                { title: "No Illegal Goods", desc: "Listing prohibited items like drugs or stolen property will lead to immediate termination." },
-                { title: "No Spam", desc: "Unsolicited messages, harassment, or bulk advertising is not allowed." },
-                { title: "No Bypassing", desc: "Attempting to circumvent our payment or security systems is a violation." }
+                { title: "No Fraudulent Misrepresentation", desc: "Any misrepresentation of products, services, capabilities, or identity is strictly prohibited." },
+                { title: "No Unauthorized Listings", desc: "Listing prohibited items, illicit goods, or service types outside authorized account privileges will result in immediate termination." },
+                { title: "No Platform Bypassing", desc: "Attempting to circumvent native escrow, payment, or security infrastructures violates these Terms." },
+                { title: "No Interference", desc: "Any system abuse, harassment, spamming, or disruption of platform activities is strictly prohibited." }
               ].map((item, i) => (
-                <div key={i} className="p-8 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
-                  <h3 className="font-bold text-gray-900 dark:text-white mb-3">{item.title}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{item.desc}</p>
+                <div key={i} className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm">
+                  <h3 className="font-bold text-gray-950 dark:text-white mb-3">{item.title}</h3>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{item.desc}</p>
                 </div>
               ))}
             </div>
             <div className="mt-8 p-6 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-2xl flex items-start gap-4">
               <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0" />
               <p className="text-sm text-red-600 dark:text-red-400 font-medium">
-                ⚠️ Violations may result in immediate suspension or permanent account termination without prior notice.
+                Violations of platform boundaries or operational constraints will result in immediate suspension or permanent account termination without prior administrative notice.
               </p>
             </div>
           </section>
@@ -377,25 +374,48 @@ export const Terms = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary">3</div>
-              Payments & Escrow
+              Third-Party Payments and Escrow Timeline Protocols
             </h2>
-            <div className="p-10 bg-secondary/5 dark:bg-secondary/10 rounded-[2.5rem] border border-secondary/10">
-              <div className="space-y-6 text-gray-600 dark:text-gray-300">
+            <div className="p-10 bg-gray-50 dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800">
+              <div className="space-y-6 text-gray-650 dark:text-gray-300 text-sm">
                 <div className="flex gap-4">
                   <ShieldCheck className="w-6 h-6 text-secondary flex-shrink-0" />
-                  <p><strong>Escrow Protection:</strong> Payments are held securely until agreed conditions are met and delivery is confirmed.</p>
+                  <div>
+                    <strong className="text-gray-950 dark:text-white">Third-Party Payment Integration:</strong>
+                    <p className="mt-1 leading-relaxed">
+                      HudumaLink utilizes a secure third-party payment system to process all monetary transactions, deposit escrow balances, and handle payouts. By transacting on the platform, users agree to abide by the terms of service of such automated third-party processors.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex gap-4">
-                  <Zap className="w-6 h-6 text-secondary flex-shrink-0" />
-                  <p><strong>Service Fees:</strong> Fees are clearly displayed before payment and are non-refundable once successfully completed.</p>
+
+                <div className="flex gap-4 border-t border-gray-200 dark:border-neutral-800 pt-6">
+                  <Clock className="w-6 h-6 text-secondary flex-shrink-0" />
+                  <div>
+                    <strong className="text-gray-950 dark:text-white">Physical Goods Escrow Lifecycle:</strong>
+                    <p className="mt-1 leading-relaxed">
+                      Upon vendor delivery of physical inventory, the buyer must physically inspect the items at the point of delivery prior to confirming acceptance. Once delivery is confirmed, the escrow contract is irrevocably finalized. Any formal dispute regarding physical goods must be filed within a strict 24-hour window from the documented timestamp of delivery.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex gap-4 border-t border-secondary/10 pt-6">
+
+                <div className="flex gap-4 border-t border-gray-200 dark:border-neutral-800 pt-6">
+                  <Clock className="w-6 h-6 text-secondary flex-shrink-0" />
+                  <div>
+                    <strong className="text-gray-950 dark:text-white">Service Provider 72-Hour Buffering Standard:</strong>
+                    <p className="mt-1 leading-relaxed">
+                      Upon a Service Provider marking a project milestone or order as "Delivered," the customer has exactly 72 hours to verify parameters or lodge a formal in-platform dispute. If the customer remains non-responsive with no active dispute filed after 48 hours, the provider may submit a Request for Administrative Release. Following an additional 24-hour response window, administrators reserve the authority to manually execute the escrow settlement.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 border-t border-gray-200 dark:border-neutral-800 pt-6">
                   <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0" />
-                  <p><strong>M-Pesa Limits & Wallets:</strong> Users are strictly responsible for ensuring their personal M-Pesa wallets have sufficient capacity to receive B2C payouts. HudumaLink is not liable for delayed payloads or API execution rejections caused by Safaricom consumer account holding limits (maximum account holding balance of KSh 500,000).</p>
-                </div>
-                <div className="flex gap-4 border-t border-secondary/10 pt-6">
-                  <ShoppingBag className="w-6 h-6 text-secondary flex-shrink-0" />
-                  <p><strong>Physical Inspection Mandate:</strong> For physical products, buyers are legally required to thoroughly inspect the item at the point of delivery BEFORE clicking "Confirm Delivery". Once a user clicks "Confirm", the escrow contract is legally finalized, funds are released immediately via our automated pipeline, and HudumaLink cannot recover or refund those funds.</p>
+                  <div>
+                    <strong className="text-gray-950 dark:text-white">Wallet Holding and Capacity Constraints:</strong>
+                    <p className="mt-1 leading-relaxed">
+                      Users assume full and sole legal responsibility for ensuring and maintaining operational financial capacity within their connected mobile money wallets to facilitate seamless payouts. HudumaLink Kenya explicitly disclaims liability for transaction rejections, delays, or failures arising from mobile network capacity limits (specifically including payment provider capacity limits or consumer holding balance thresholds). A minimum withdrawal limit of KES 100 is contractually enforced. While the platform charges KES 0 platform fees on M-Pesa withdrawals, Safaricom's official dynamic B2C tariff brackets (ranging from KES 1 to KES 30 depending on the principal amount) apply to all mobile money payouts.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -404,11 +424,11 @@ export const Terms = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">4</div>
-              Platform Role
+              Platform Neutrality and Liability Isolation
             </h2>
             <div className="bg-gray-50 dark:bg-neutral-900 p-10 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800">
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                HudumaLink acts solely as a <strong>digital marketplace platform</strong> connecting buyers and sellers. We do NOT directly provide services or sell products. Sellers are fully responsible for their offerings, and buyers are responsible for making informed decisions.
+              <p className="text-gray-650 dark:text-gray-300 text-sm leading-relaxed">
+                HudumaLink Kenya operates strictly as a centralized, trust-driven digital intermediary connecting users. We do not direct, hire, manage, or employ service providers, nor do we control physical inventories or delivery metrics. Users agree that operators disclaim all liability for contractor performance, product defaults, injury, or damage occurring during physical fulfillment.
               </p>
             </div>
           </section>
@@ -416,20 +436,21 @@ export const Terms = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent">5</div>
-              Dispute Resolution & Admissible Evidence
+              Dispute Resolution and Admissible Evidence
             </h2>
-            <div className="p-10 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm space-y-6">
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                HudumaLink acts as a neutral mediator. Decisions are made based on fairness, available evidence, and platform policies. Funds may be held until a resolution is reached.
-              </p>
-              <div className="p-6 bg-amber-550/5 rounded-2xl border border-amber-500/10 text-xs text-amber-700 dark:text-amber-400 space-y-2">
-                <span className="font-bold block text-sm text-gray-900 dark:text-white">Strict Definition of Admissible Evidence:</span>
+            <div className="p-10 bg-neutral-50 dark:bg-neutral-900 rounded-[2.5rem] border border-gray-200 dark:border-neutral-800 shadow-sm space-y-6">
+              <div className="space-y-4 text-sm text-gray-650 dark:text-gray-300 leading-relaxed">
                 <p>
-                  To prevent fraud and fabricated screenshots, <strong>only communications, chat histories, and files uploaded directly within the HudumaLink platform portal</strong>, official system timestamps, and native file submissions are admissible as evidence in a dispute resolution. Screenshots of WhatsApp chats, external SMS logs, or off-platform communication links are completely inadmissible and will be discarded to ensure system integrity.
+                  <strong className="text-gray-950 dark:text-white block mb-1">Internal Data Supremacy Protocol:</strong>
+                  Arbitration, mediation, and final settlement determinations shall be adjudicated exclusively based on untampered, native system data captured within the platform portal. This includes internal chat logs, official platform timestamps, and files uploaded directly to the platform interface.
+                </p>
+                <p>
+                  <strong className="text-gray-950 dark:text-white block mb-1">External Data Exclusion:</strong>
+                  External digital artifacts—including but not limited to screenshots of WhatsApp conversations, external SMS logs, call recordings, or third-party communication links—are strictly inadmissible in dispute evaluations and shall be completely discarded to preserve systemic and evidentiary integrity.
                 </p>
               </div>
               <div className="p-6 bg-gray-50 dark:bg-neutral-800 rounded-2xl text-center italic font-bold text-gray-900 dark:text-white">
-                "Fairness is the core of our community — backed by untampered internal session records."
+                "Fairness and systemic integrity are adjudicated exclusively on internal, verifiable portal records."
               </div>
             </div>
           </section>
@@ -441,31 +462,28 @@ export const Terms = () => (
             <Scale className="w-12 h-12 text-primary mb-6" />
             <h3 className="text-2xl font-bold mb-4">Governing Law</h3>
             <p className="text-gray-400 text-sm leading-relaxed mb-8">
-              These Terms are governed by the laws of Kenya. Any disputes shall be resolved within Kenyan jurisdiction.
+              These Terms of Service are constructed and governed strictly in accordance with the statutory laws of the Republic of Kenya. All parties contractually submit to the exclusive jurisdiction of Kenyan courts.
             </p>
-            <div className="p-4 bg-white/5 rounded-2xl text-xs text-gray-500 italic">
-              "HudumaLink — Building trust in every transaction."
-            </div>
           </div>
 
           <div className="p-8 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
             <h3 className="font-bold text-gray-900 dark:text-white mb-4">Refund Policy</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-              Refunds are only issued through the escrow system after a valid dispute. Completed and confirmed payments are final.
+              Refunds are issued exclusively via the secure escrow platform following formal administrative arbitration. Completed and authorized transactions are legally final and non-refundable.
             </p>
           </div>
 
           <div className="p-8 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
-            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Intellectual Property</h3>
+            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Intellectual Property Restrictions</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-              All branding, logos, and design are the property of HudumaLink and may not be reproduced without permission.
+              All platform source code, structural designs, text, brand marks, and layout mechanisms are the exclusive intellectual property of the platform operators, protected under Kenyan copyright and trademark statutes.
             </p>
           </div>
 
           <div className="p-8 bg-primary text-white rounded-3xl shadow-xl shadow-primary/20">
-            <h3 className="font-bold mb-4">Changes to Terms</h3>
+            <h3 className="font-bold mb-4">Amendments</h3>
             <p className="text-sm text-white/80 leading-relaxed">
-              We may update these Terms at any time. Continued use of the platform constitutes acceptance of the revised Terms.
+              The platform operators reserve the absolute corporate right to amend these Terms at any interval. Continued access or usage of platform services signifies contractual consent to the amended terms.
             </p>
           </div>
         </div>
@@ -488,12 +506,12 @@ export const Privacy = () => (
           <Lock className="w-10 h-10" />
         </motion.div>
         <h1 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
-          Privacy <span className="text-primary">Policy</span> 🔐
+          Privacy <span className="text-primary">Policy</span>
         </h1>
         <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
           At HudumaLink, your privacy is important to us. We protect your information as if it were our own.
         </p>
-        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: May 2026</p>
+        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: June 17, 2026</p>
       </div>
     </div>
 
@@ -507,18 +525,18 @@ export const Privacy = () => (
               </div>
               ODPC Kenya Compliance
             </h2>
-            <div className="p-8 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6 font-medium">
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2.5rem] border border-gray-200 dark:border-neutral-800 shadow-sm">
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6 font-medium">
                 HudumaLink is committed to protecting your personal data in accordance with the <strong>Data Protection Act (2019) of Kenya</strong>.
               </p>
               <div className="space-y-4">
-                <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-2xl">
-                  <span className="font-bold text-gray-900 dark:text-white block mb-1">KYC Data Retention</span>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Identity documents (National ID, Passport) are retained securely for the duration of account activity plus 7 years as per financial regulations. All identity data is encrypted at rest.</p>
+                <div className="p-4 bg-gray-100/50 dark:bg-neutral-800 rounded-2xl">
+                  <span className="font-bold text-gray-950 dark:text-white block mb-1">KYC Data Retention</span>
+                  <p className="text-xs text-gray-700 dark:text-gray-300">Identity documents (National ID, Passport) are retained securely for the duration of account activity plus 7 years as per financial regulations. All identity data is encrypted at rest.</p>
                 </div>
-                <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-2xl">
-                  <span className="font-bold text-gray-900 dark:text-white block mb-1">Purpose Limitation</span>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">KYC information is collected solely for the purpose of identity verification, fraud prevention, and maintaining a high-trust marketplace for all Kenyans.</p>
+                <div className="p-4 bg-gray-100/50 dark:bg-neutral-800 rounded-2xl">
+                  <span className="font-bold text-gray-950 dark:text-white block mb-1">Purpose Limitation</span>
+                  <p className="text-xs text-gray-700 dark:text-gray-300">KYC information is collected solely for the purpose of identity verification, fraud prevention, and maintaining a high-trust marketplace for all Kenyans.</p>
                 </div>
               </div>
             </div>
@@ -533,13 +551,13 @@ export const Privacy = () => (
               {[
                 { label: "Personal Information", val: "Full name, email address, phone number, and National ID (for verification)." },
                 { label: "Account & Usage", val: "Login activity, listings, transactions, and platform interactions." },
-                { label: "Payment Info", val: "M-Pesa transaction details and payment confirmations (processed securely)." }
+                { label: "Payment Info", val: "Transaction reference details, escrow balances, and payment disbursement outcomes processed securely by our designated third-party payment system." }
               ].map((item, i) => (
-                <div key={i} className="flex items-center gap-4 p-6 bg-gray-50 dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
+                <div key={i} className="flex items-center gap-4 p-6 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 font-sans">
                   <div className="w-3 h-3 rounded-full bg-secondary flex-shrink-0"></div>
                   <div>
-                    <span className="font-bold text-gray-900 dark:text-white block mb-1">{item.label}</span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{item.val}</span>
+                    <span className="font-bold text-gray-950 dark:text-white block mb-1">{item.label}</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{item.val}</span>
                   </div>
                 </div>
               ))}
@@ -551,8 +569,8 @@ export const Privacy = () => (
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">2</div>
               How We Use It
             </h2>
-            <div className="p-8 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
-              <ul className="space-y-4 text-gray-600 dark:text-gray-300">
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2.5rem] border border-gray-200 dark:border-neutral-800 shadow-sm">
+              <ul className="space-y-4 text-gray-700 dark:text-gray-300">
                 {[
                   "Managing your account and facilitating transactions.",
                   "Verifying identity (KYC for sellers) and preventing fraud.",
@@ -573,13 +591,13 @@ export const Privacy = () => (
               <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent">3</div>
               How We Protect It
             </h2>
-            <div className="p-8 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6">
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2.5rem] border border-gray-200 dark:border-neutral-800 shadow-sm">
+              <p className="text-gray-750 dark:text-gray-300 leading-relaxed mb-6">
                 We implement secure servers, encrypted connections, and restricted access to sensitive information. We actively monitor for suspicious activity to keep your data safe.
               </p>
-              <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-2xl flex items-center gap-3">
+              <div className="p-4 bg-gray-100/50 dark:bg-neutral-800 rounded-2xl flex items-center gap-3">
                 <ShieldCheck className="w-5 h-5 text-accent" />
-                <span className="text-sm font-medium text-gray-900 dark:text-white">Industry-standard encryption protocols</span>
+                <span className="text-sm font-medium text-gray-950 dark:text-white font-sans">Industry-standard encryption protocols</span>
               </div>
             </div>
           </section>
@@ -591,11 +609,8 @@ export const Privacy = () => (
             <Globe className="w-12 h-12 text-primary mb-8" />
             <h3 className="text-2xl font-bold mb-4">Sharing of Information</h3>
             <p className="text-gray-400 leading-relaxed mb-8">
-              We do NOT sell your personal data. We share information only when necessary for transactions, with payment providers (M-Pesa), or when required by law.
+              We do NOT sell your personal data. We share information only when necessary for transaction processing, with our verified third-party payment system, or as required by governing statutes or regulatory bodies of Kenya.
             </p>
-            <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center italic font-bold">
-              "HudumaLink — Your data, your control."
-            </div>
           </div>
 
           <section>
@@ -608,9 +623,9 @@ export const Privacy = () => (
                 { title: "Access & Edit", desc: "View and update your personal info in settings." },
                 { title: "Data Erasure", desc: "Request account and data deletion at any time." }
               ].map((item, i) => (
-                <div key={i} className="p-8 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
-                  <h4 className="font-bold text-gray-900 dark:text-white mb-3">{item.title}</h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{item.desc}</p>
+                <div key={i} className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm">
+                  <h4 className="font-bold text-gray-950 dark:text-white mb-3">{item.title}</h4>
+                  <p className="text-sm text-gray-700 dark:text-gray-350 leading-relaxed">{item.desc}</p>
                 </div>
               ))}
             </div>
@@ -622,13 +637,13 @@ export const Privacy = () => (
               Cookies & Retention
             </h2>
             <div className="space-y-6">
-              <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
-                <h4 className="font-bold text-gray-900 dark:text-white mb-3">Cookies & Tracking</h4>
-                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">We use cookies to improve experience and track platform usage. You can disable them in your browser.</p>
+              <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm">
+                <h4 className="font-bold text-gray-950 dark:text-white mb-3">Cookies & Tracking</h4>
+                <p className="text-sm text-gray-700 dark:text-gray-350 leading-relaxed">We use strictly necessary session identifiers to manage authenticated states and safeguard active financial transactions.</p>
               </div>
-              <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
-                <h4 className="font-bold text-gray-900 dark:text-white mb-3">Data Retention</h4>
-                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">We retain information only as long as necessary for services, legal obligations, or dispute resolution.</p>
+              <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm">
+                <h4 className="font-bold text-gray-950 dark:text-white mb-3">Data Retention</h4>
+                <p className="text-sm text-gray-700 dark:text-gray-350 leading-relaxed">We retain information only as long as necessary for services, legal obligations, or dispute resolution.</p>
               </div>
             </div>
           </section>
@@ -660,11 +675,12 @@ export const Safety = () => (
           <ShieldCheck className="w-10 h-10" />
         </motion.div>
         <h1 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
-          Safety <span className="text-green-500">Center</span> 🛡️
+          Safety <span className="text-green-500">Center</span>
         </h1>
         <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
-          Your safety is our priority. Follow these guidelines to protect yourself when buying, selling, or hiring services on HudumaLink.
+          Operational safety frameworks and transaction security protocols for consumer protection, physical inspections, and credential defense.
         </p>
+        <p className="mt-4 text-sm font-bold text-gray-400 uppercase tracking-widest">Last Updated: June 17, 2026</p>
       </div>
     </div>
 
@@ -674,48 +690,48 @@ export const Safety = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">1</div>
-              Core Safety Rules
+              Core Safety and Communication Protocols
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="p-8 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
+              <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2.5rem] border border-gray-200 dark:border-neutral-800 shadow-sm font-sans">
                 <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary mb-6">
                   <MessageSquare className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Always Use the Platform</h3>
-                <ul className="space-y-3 text-sm text-gray-500 dark:text-gray-400">
+                <h3 className="text-xl font-bold text-gray-950 dark:text-white mb-4">In-Portal Communications</h3>
+                <ul className="space-y-3 text-sm text-gray-700 dark:text-gray-350">
                   <li className="flex gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span>Keep all communication within HudumaLink</span>
+                    <span>Route all communications exclusively within HudumaLink chat modules.</span>
                   </li>
                   <li className="flex gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span>Avoid moving to WhatsApp too early</span>
+                    <span>Avoid transitioning to external chat channels (including WhatsApp).</span>
                   </li>
                   <li className="flex gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span>Never agree to payments outside the platform</span>
+                    <span>Never pay contractors or vendors outside the platform interface.</span>
                   </li>
                 </ul>
-                <p className="mt-6 text-xs font-bold text-primary italic">👉 This ensures you are protected by our system.</p>
+                <p className="mt-6 text-xs font-bold text-primary italic">This protocol ensures you are protected by the platform's regulatory safeguards.</p>
               </div>
 
-              <div className="p-8 bg-white dark:bg-neutral-900 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-sm">
+              <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2.5rem] border border-gray-200 dark:border-neutral-800 shadow-sm font-sans">
                 <div className="w-12 h-12 bg-secondary/10 rounded-2xl flex items-center justify-center text-secondary mb-6">
                   <CreditCard className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Use Secure Payments</h3>
-                <ul className="space-y-3 text-sm text-gray-500 dark:text-gray-400">
+                <h3 className="text-xl font-bold text-gray-955 dark:text-white mb-4">Secure Payment Execution</h3>
+                <ul className="space-y-3 text-sm text-gray-700 dark:text-gray-350">
                   <li className="flex gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span>Only pay through official payment system</span>
+                    <span>Ensure all payment actions are performed within the native, secure escrow gateway.</span>
                   </li>
                   <li className="flex gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span>Do NOT send money directly to sellers</span>
+                    <span>Never wire funds directly to provider or vendor mobile money accounts.</span>
                   </li>
                   <li className="flex gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span>Avoid upfront payments without confirmation</span>
+                    <span>Refuse high upfront payments prior to official system project initiation.</span>
                   </li>
                 </ul>
               </div>
@@ -725,25 +741,25 @@ export const Safety = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent">2</div>
-              Verification & Roles
+              Verification and User Role Mandates
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-6 bg-gray-50 dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
+              <div className="p-6 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm">
                 <UserCheck className="w-8 h-8 text-accent mb-4" />
-                <h4 className="font-bold text-gray-900 dark:text-white mb-2">Verify Users</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">Check ratings, verified badges, and be cautious with incomplete profiles.</p>
+                <h4 className="font-bold text-gray-950 dark:text-white mb-2">Perform Diligent Reviews</h4>
+                <p className="text-xs text-gray-700 dark:text-gray-350 leading-relaxed font-sans">Check verified badges, historical reviews, and user ratings to safeguard interactions.</p>
               </div>
-              <div className="p-6 bg-gray-50 dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
+              <div className="p-6 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm">
                 <ShoppingBag className="w-8 h-8 text-accent mb-4" />
-                <h4 className="font-bold text-gray-900 dark:text-white mb-2">For Buyers (Inspection Mandate)</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                  For physical products, buyers are legally required to thoroughly inspect the item at the point of delivery <strong>BEFORE</strong> clicking "Confirm Delivery". Once you click "Confirm", the escrow is legally completed, funds are released immediately via our automated pipeline, and HudumaLink cannot recover or refund those payments.
+                <h4 className="font-bold text-gray-955 dark:text-white mb-2">Consumer Inspection Mandate</h4>
+                <p className="text-xs text-gray-700 dark:text-gray-350 leading-relaxed font-sans">
+                  Upon fulfillment of physical inventory, consumers are contractually mandated to inspect products at delivery BEFORE confirming acceptance. After confirmation, transactions are legally finalized, and funds cannot be recovered.
                 </p>
               </div>
-              <div className="p-6 bg-gray-50 dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
+              <div className="p-6 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm">
                 <Briefcase className="w-8 h-8 text-accent mb-4" />
-                <h4 className="font-bold text-gray-900 dark:text-white mb-2">For Sellers</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">Provide accurate descriptions, deliver as agreed, and communicate professionally.</p>
+                <h4 className="font-bold text-gray-955 dark:text-white mb-2">Vendor Compliance</h4>
+                <p className="text-xs text-gray-700 dark:text-gray-350 leading-relaxed font-sans">Provide absolute, truthful listings. Perform services and goods deliveries exactly as described under penalty of restriction.</p>
               </div>
             </div>
           </section>
@@ -751,7 +767,7 @@ export const Safety = () => (
           <section>
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-8 flex items-center gap-4">
               <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary">3</div>
-              Documentation
+              Evidentiary Records and Documentation
             </h2>
             <div className="p-10 bg-secondary/5 dark:bg-secondary/10 rounded-[2.5rem] border border-secondary/10">
               <div className="flex flex-col md:flex-row gap-8 items-center">
@@ -759,9 +775,9 @@ export const Safety = () => (
                   <FileText className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Keep Records</h3>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Preserve Native Records</h3>
                   <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
-                    Save receipts, transaction details, and keep communication history on the platform. Take screenshots of important agreements if necessary.
+                    Always maintain transaction confirmations, service specifications, and conversations inside the platform portal. To resolve disputes successfully, remember that external screenshots and recordings are completely inadmissible during arbitration.
                   </p>
                 </div>
               </div>
@@ -772,14 +788,14 @@ export const Safety = () => (
         <div className="space-y-8">
           <div className="p-8 bg-red-500 text-white rounded-[2.5rem] shadow-xl shadow-red-500/20">
             <AlertTriangle className="w-12 h-12 mb-6" />
-            <h3 className="text-2xl font-bold mb-4">Red Flags 🚩</h3>
-            <p className="text-white/80 mb-6 text-sm">Be cautious if someone:</p>
+            <h3 className="text-2xl font-bold mb-4">Systemic Risk Indicators</h3>
+            <p className="text-white/80 mb-6 text-sm">Exercise extreme caution if any user:</p>
             <ul className="space-y-4 text-sm">
               {[
-                "Rushes you to make payment",
-                "Refuses to use platform system",
-                "Provides inconsistent info",
-                "Requests unusual payment methods"
+                "Demands rushed off-portal pre-payments or deposits",
+                "Refuses to use our designated third-party payment system",
+                "Provides inconsistent credentials or fake identities",
+                "Requests unusual payment methods or off-platform direct wires"
               ].map((flag, i) => (
                 <li key={i} className="flex gap-3">
                   <div className="w-1.5 h-1.5 bg-white rounded-full mt-1.5 flex-shrink-0"></div>
@@ -791,10 +807,9 @@ export const Safety = () => (
 
           <div className="p-8 bg-red-650 text-white dark:bg-red-950/40 rounded-[2.5rem] shadow-xl border border-red-500/20">
             <ShieldAlert className="w-12 h-12 mb-6 text-red-500" />
-            <h3 className="text-xl font-bold mb-3">Login & PIN Integrity 🔒</h3>
+            <h3 className="text-xl font-bold mb-3">Authentication and Credential Integrity</h3>
             <p className="text-xs text-gray-200 dark:text-gray-300 leading-relaxed font-semibold">
-              HudumaLink Kenya will <strong>never</strong> ask you for your account login passwords or security tokens — they are your secret, never disclose them to anyone. 
-              Further, <strong>we will never ask you for your M-Pesa PIN</strong> under any circumstances. Anyone demanding these credentials is attempting fraud; please report them immediately.
+              HudumaLink Kenya administrators and support representatives will never ask you for account passwords, security tokens, or mobile money PINs. Any attempt to solicit credentials constitutes fraud; please report such actions to support immediately.
             </p>
           </div>
 
@@ -802,23 +817,23 @@ export const Safety = () => (
             <ShieldAlert className="w-12 h-12 text-primary mb-6" />
             <h3 className="text-2xl font-bold mb-4">Report Activity</h3>
             <p className="text-gray-400 text-sm leading-relaxed mb-6">
-              If something feels wrong, report the user immediately and do NOT proceed with the transaction.
+              If you experience suspicious activity, immediately flag the respective user and suspend active transaction negotiations.
             </p>
             <a href="mailto:support@hudumalink.co.ke" className="inline-flex items-center gap-2 text-primary font-bold hover:underline">
               <Mail className="w-5 h-5" /> support@hudumalink.co.ke
             </a>
           </div>
 
-          <div className="p-8 bg-white dark:bg-neutral-900 rounded-3xl border border-gray-100 dark:border-neutral-800">
-            <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm font-sans">
+            <h3 className="font-bold text-gray-955 dark:text-white mb-4 flex items-center gap-2">
               <Handshake className="w-5 h-5 text-green-500" />
               Our Commitment
             </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+            <p className="text-xs text-gray-700 dark:text-gray-350 leading-relaxed">
               HudumaLink is committed to protecting users through secure systems, providing fair dispute resolution, and continuously improving safety measures.
             </p>
             <div className="mt-6 p-4 bg-gray-50 dark:bg-neutral-800 rounded-2xl text-center font-bold text-xs text-gray-900 dark:text-white uppercase tracking-widest">
-              Stay smart. Stay safe.
+              Security. Integrity. Compliance.
             </div>
           </div>
         </div>
@@ -832,24 +847,24 @@ export const FAQ = () => {
     {
       category: "General",
       questions: [
-        { q: "What is HudumaLink?", a: "HudumaLink is a digital marketplace designed to connect skilled service providers and sellers with customers across Kenya in a safe and trusted environment." },
-        { q: "Is HudumaLink free to use?", a: "Creating an account and browsing listings is completely free. We charge a small service fee on successful transactions to maintain the platform and provide escrow protection." },
+        { q: "What is HudumaLink?", a: "HudumaLink is a digital marketplace designed to connect authorized skilled service providers and sellers with consumers across Kenya in a safe and trusted environment." },
+        { q: "Is HudumaLink free to use?", a: "Account creation and catalog exploration are completely free. We charge a reasonable service fee on completed contracts in order to offset escrow administrative overhead and maintain transactional integrity." },
         { q: "Which areas do you cover?", a: "We are designed to serve all 47 counties in Kenya, from major cities like Nairobi and Mombasa to rural areas." }
       ]
     },
     {
       category: "Safety & Payments",
       questions: [
-        { q: "How does the escrow system work?", a: "When you pay for a service, HudumaLink holds the funds securely. The money is only released to the seller once you confirm that the work has been completed to your satisfaction." },
-        { q: "What should I do if I get scammed?", a: "If you use our escrow system, your money is protected. You can raise a dispute in your dashboard, and our team will mediate. Never pay sellers directly outside the platform." },
-        { q: "Can I pay via M-Pesa?", a: "Yes! HudumaLink is fully integrated with M-Pesa for both payments and seller withdrawals." }
+        { q: "How does the escrow system work?", a: "Whenever a contract is initiated, funds are securely sequestered in our automated third-party custody system. Payout release is conditional upon client acceptance, or following administrative adjudication in the event of an active dispute." },
+        { q: "What should I do if I experience transactional risk?", a: "If you utilize our integrated third-party escrow system, your funds are fully protected. You can easily initiate a formal dispute within your dashboard, and our mediation division will adjudicate. Never wire funds directly to vendors outside our system." },
+        { q: "Can I transact using mobile money?", a: "Yes. Our third-party integrations facilitate secure payment processing via Kenya's standard mobile money systems for both contract escrowing and merchant settlements." }
       ]
     },
     {
-      category: "For Sellers",
+      category: "For Providers and Sellers",
       questions: [
-        { q: "How do I become a verified seller?", a: "You need to complete the KYC (Know Your Customer) process by providing a valid National ID and other required details in your profile settings." },
-        { q: "How do I get paid?", a: "Once the buyer confirms the service, the funds are moved to your HudumaLink wallet. You can then withdraw them directly to your M-Pesa number." }
+        { q: "How do I become a verified merchant?", a: "You need to complete the KYC identity verification process by providing a valid national ID and submitting requested regulatory documentation in account settings." },
+        { q: "How do I receive payouts?", a: "Upon delivery confirmation and escrow finalization, funds are deposited directly to your platform wallet balance. You can then request automated withdrawal distributions directly to your verified mobile money number." }
       ]
     }
   ];
@@ -868,7 +883,7 @@ export const FAQ = () => {
             <HelpCircle className="w-10 h-10" />
           </motion.div>
           <h1 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
-            Frequently Asked <span className="text-primary">Questions</span> 🤔
+            Frequently Asked <span className="text-primary">Questions</span>
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
             Everything you need to know about HudumaLink. Can't find the answer? Contact our support team.
@@ -885,12 +900,12 @@ export const FAQ = () => {
               </h2>
               <div className="space-y-4">
                 {group.questions.map((faq, j) => (
-                  <details key={j} className="group bg-gray-50 dark:bg-neutral-900 rounded-2xl border border-gray-100 dark:border-neutral-800 overflow-hidden transition-all">
+                  <details key={j} className="group bg-neutral-50 dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden transition-all shadow-sm">
                     <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                      <span className="font-bold text-gray-900 dark:text-white pr-4">{faq.q}</span>
-                      <ChevronDown className="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform" />
+                      <span className="font-bold text-gray-950 dark:text-white pr-4 font-sans">{faq.q}</span>
+                      <ChevronDown className="w-5 h-5 text-gray-550 group-open:rotate-180 transition-transform" />
                     </summary>
-                    <div className="px-6 pb-6 text-gray-600 dark:text-gray-400 leading-relaxed border-t border-gray-100 dark:border-neutral-800 pt-4">
+                    <div className="px-6 pb-6 text-gray-700 dark:text-gray-300 leading-relaxed border-t border-gray-100 dark:border-neutral-800 pt-4 font-sans text-sm">
                       {faq.a}
                     </div>
                   </details>
@@ -1116,10 +1131,10 @@ export const EscrowPolicy = () => (
           Escrow, Refund & <span className="text-primary">Dispute Policy</span> 🤝
         </h1>
         <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto leading-relaxed">
-          The legal and technical framework governing M-Pesa payments, escrow holds, dispute resolutions, and administration on HudumaLink Kenya.
+          The legal and technical framework governing consumer deposits, escrow holds, dispute resolutions, and administration on HudumaLink Kenya.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
-          <span>Effective Date: May 20, 2026</span>
+          <span>Effective Date: June 17, 2026</span>
           <span>•</span>
           <span>Jurisdiction: Eldoret, Kenya</span>
         </div>
@@ -1133,17 +1148,17 @@ export const EscrowPolicy = () => (
           <section id="deposit-phase">
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-4">
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">1</div>
-              The Safe Deposit Phase (M-Pesa STK Push)
+              The Safe Deposit Phase
             </h2>
-            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
-              <p className="text-gray-650 dark:text-gray-300 leading-relaxed text-base">
-                When a buyer initiates a purchase or hires a service provider, payment is collected via a secure <strong>M-Pesa STK Push</strong>. 
-                Upon a successful Safaricom transaction, the funds enter the neutral, secure <strong>HudumaLink Escrow Ledger</strong>.
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-200 dark:border-neutral-800 space-y-4">
+              <p className="text-gray-750 dark:text-gray-300 leading-relaxed text-base font-sans">
+                When a buyer initiates a purchase or hires a service provider, payment is collected via a secure digital payment portal. 
+                Upon a successful billing operation, the funds enter the neutral, secure <strong>HudumaLink Escrow Ledger</strong>.
               </p>
-              <div className="p-6 bg-white dark:bg-neutral-950 rounded-2xl border border-gray-200 dark:border-neutral-800 flex gap-4 items-start">
+              <div className="p-6 bg-transparent rounded-2xl border border-gray-300 dark:border-neutral-800 flex gap-4 items-start shadow-sm">
                 <ShieldCheck className="w-6 h-6 text-green-500 flex-shrink-0 mt-1" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  <strong className="text-gray-900 dark:text-white block mb-1">Neutral Custodian Rule</strong>
+                <p className="text-sm text-gray-700 dark:text-gray-300 font-sans">
+                  <strong className="text-gray-950 dark:text-white block mb-1">Neutral Custodian Rule</strong>
                   These funds are legally locked inside the HudumaLink ledger as custody. Under no circumstances can the seller/provider access, borrow, or draw down on these funds prior to delivery validation, and buyers cannot double-spend or retreat on active contracts.
                 </p>
               </div>
@@ -1153,24 +1168,23 @@ export const EscrowPolicy = () => (
           <section id="auto-release">
             <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-4">
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">2</div>
-              The 72-Hour Auto-Release Latch
+              Escrow Release & Non-Unilateral Transfer Policies
             </h2>
-            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
-              <p className="text-gray-650 dark:text-gray-300 leading-relaxed text-base">
-                Once a product is dispatched or a service is completed, the seller/provider marks the transaction status as <strong className="text-primary">"Delivered"</strong>. 
-                This action invokes an absolute, deterministic cryptographic and legal countdown.
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-200 dark:border-neutral-800 space-y-4 font-sans">
+              <p className="text-gray-750 dark:text-gray-300 leading-relaxed text-base">
+                Once a product is dispatched or a service is completed, the seller or service provider may claim delivery. To ensure absolute compliance, funds are NOT automatically transferred to the provider after 72 hours. Funds can only be released via buyer consent or administrative override.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-6 bg-amber-500/5 rounded-2xl border border-amber-500/10">
-                  <span className="font-bold text-gray-900 dark:text-white block mb-1">Absolute 72-Hour Window</span>
-                  <p className="text-xs text-gray-550 dark:text-gray-400">
-                    The buyer must either click <strong>"Confirm Delivery"</strong> (to release the escrow funds directly to the provider's wallet balance) or click <strong>"File Dispute"</strong> within exactly <strong>72 hours</strong>.
+                <div className="p-6 bg-amber-500/5 rounded-2xl border border-amber-500/20">
+                  <span className="font-bold text-gray-950 dark:text-white block mb-1">Escrow Hold Policy</span>
+                  <p className="text-xs text-gray-700 dark:text-gray-300">
+                    The buyer must either click <strong>"Confirm Delivery"</strong> (to release the escrow funds directly to the provider's balance) or click <strong>"File Dispute"</strong> if there are any pending issues.
                   </p>
                 </div>
-                <div className="p-6 bg-red-500/5 rounded-2xl border border-red-500/10">
-                  <span className="font-bold text-gray-900 dark:text-white block mb-1">Irreversible Auto-Release</span>
-                  <p className="text-xs text-gray-550 dark:text-gray-400">
-                    If the buyer takes no action within 72 hours, the background auto-release routine will execute automatically, releasing the escrow balance to the seller's wallet. Once executed, auto-releases are legally and technically final and cannot be reverted or disputed.
+                <div className="p-6 bg-red-500/5 rounded-2xl border border-red-500/20">
+                  <span className="font-bold text-gray-955 dark:text-white block mb-1">Administrative Audits</span>
+                  <p className="text-xs text-gray-700 dark:text-gray-300">
+                    If the buyer has forgot or sits unresponsive for a lengthy duration, the provider may trigger a payment request. The administrator will audit the transaction milestones and manually release the funds without customer consent if no dispute has been raised.
                   </p>
                 </div>
               </div>
@@ -1182,16 +1196,16 @@ export const EscrowPolicy = () => (
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">3</div>
               The Immutable Contract Lock
             </h2>
-            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
-              <p className="text-gray-650 dark:text-gray-300 leading-relaxed text-base">
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-200 dark:border-neutral-800 space-y-4 font-sans">
+              <p className="text-gray-750 dark:text-gray-300 leading-relaxed text-base">
                 To eliminate payment defaults, buyer fraud, and bad-faith cancelations, certain statuses create an <strong>immutable contract lock</strong>:
               </p>
               <ul className="space-y-3">
-                <li className="flex gap-3 text-sm text-gray-500 dark:text-gray-400">
+                <li className="flex gap-3 text-sm text-gray-700 dark:text-gray-300">
                   <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <span>Once the seller claims delivery, the buyer is technically barred from unilaterally canceling the order or demanding self-service refunds.</span>
                 </li>
-                <li className="flex gap-3 text-sm text-gray-500 dark:text-gray-400">
+                <li className="flex gap-3 text-sm text-gray-700 dark:text-gray-300">
                   <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <span>Sellers are bound to deliver exactly what was specified in the marketplace listing or in communications on the platform. Any off-platform modifications violate these terms.</span>
                 </li>
@@ -1204,16 +1218,16 @@ export const EscrowPolicy = () => (
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">4</div>
               Dispute Resolution & Administrative Override
             </h2>
-            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-6">
-              <p className="text-gray-650 dark:text-gray-300 leading-relaxed text-base">
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-200 dark:border-neutral-800 space-y-6 font-sans">
+              <p className="text-gray-750 dark:text-gray-300 leading-relaxed text-base">
                 If the buyer files a dispute, the funds remain frozen in the escrow locker. Both parties will be prompted to submit valid physical or digital proofs of execution or non-execution (e.g., GPS coordination photos, client chats, service logs, sign-off forms) within <strong>48 hours</strong>.
               </p>
-              <div className="p-6 bg-red-500/5 border border-red-500/20 text-red-700 dark:text-red-400 rounded-2xl">
+              <div className="p-6 bg-red-500/5 border border-red-500/20 text-red-750 dark:text-red-400 rounded-2xl">
                 <span className="font-bold block mb-1 uppercase tracking-wider text-xs flex items-center gap-2">
                   <Scale className="w-4 h-4" /> Legal Administrative Override
                 </span>
                 <p className="text-xs leading-relaxed mt-1">
-                  HudumaLink Kenya acts as a neutral, third-party binding arbiter. Based on the objective evidence presented, HudumaLink reserves the absolute legal right to perform an <strong>administrative override</strong>. This override will either programmatically trigger a payout to the seller or return a B2C M-Pesa refund to the buyer. HudumaLink's final decision is contractually binding.
+                  HudumaLink Kenya acts as a neutral, third-party binding arbiter. Based on the objective evidence presented, HudumaLink reserves the absolute legal right to perform an <strong>administrative override</strong>. This override will either programmatically trigger a payout to the seller or return an escrow refund to the buyer. HudumaLink's final decision is contractually binding.
                 </p>
               </div>
             </div>
@@ -1224,19 +1238,23 @@ export const EscrowPolicy = () => (
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary text-lg font-bold">5</div>
               Non-Refundable Platform and Payment Fees
             </h2>
-            <div className="p-8 bg-gray-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 space-y-4">
-              <p className="text-gray-620 dark:text-gray-300 leading-relaxed text-base">
-                Safaricom channels and automated systems impose transactional and ledger operation fees. 
+            <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-200 dark:border-neutral-800 space-y-4">
+              <p className="text-gray-750 dark:text-gray-300 leading-relaxed text-base">
+                Third-party processors and automated systems impose transactional and ledger operation fees. 
                 Our commission fee structured to power HudumaLink escrow custody is non-refundable.
               </p>
-              <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
+              <ul className="space-y-2 text-sm text-gray-750 dark:text-gray-300 font-sans">
                 <li className="flex gap-2">
                   <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                   <span>The 2% HudumaLink administrative escrow fee is non-refundable upon successful delivery.</span>
                 </li>
                 <li className="flex gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-550 mt-0.5 flex-shrink-0" />
+                  <span>Standard processing rates and transactional fees from our third-party payment gateways are fully borne by the respective contracting users and are consumed instantly upon transit.</span>
+                </li>
+                <li className="flex gap-2">
                   <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span>Standard Safaricom M-Pesa transaction rates for STK Push and B2C payouts are fully borne by the respective contracting users and are consumed instantly upon transit.</span>
+                  <span>Payout withdrawals via M-Pesa incur KES 0 platform transfer fees, with only the dynamic Safaricom B2C corporate payment tariff applied depending on the transfer amount (subject to a contractually enforced KES 100 minimum payout). Bank payouts are subject to a flat platform handling fee of KES 50.</span>
                 </li>
               </ul>
             </div>
@@ -1257,9 +1275,9 @@ export const EscrowPolicy = () => (
             </div>
           </div>
 
-          <div className="p-8 bg-white dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800">
-            <h4 className="font-bold text-gray-900 dark:text-white mb-2">Need Dispute Help?</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+          <div className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-[2rem] border border-gray-200 dark:border-neutral-800">
+            <h4 className="font-bold text-gray-955 dark:text-white mb-2">Need Dispute Help?</h4>
+            <p className="text-xs text-gray-750 dark:text-gray-350 leading-relaxed font-sans">
               If an order has gone awry, please immediately notify our specialized support desk with your active Transaction ID.
             </p>
             <Link to="/contact" className="mt-4 text-xs font-bold text-primary hover:underline block">Contact Support desk →</Link>
@@ -1308,15 +1326,15 @@ export const Cookies = () => (
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-            <div className="p-6 bg-white dark:bg-neutral-950 rounded-2xl border border-gray-200 dark:border-neutral-800">
+            <div className="p-6 bg-transparent rounded-2xl border border-gray-300 dark:border-neutral-800">
               <span className="font-bold text-xs text-primary uppercase block mb-1">State Management</span>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-gray-750 dark:text-gray-300 font-sans">
                 To securely persist credentials, enabling buyers and providers to browse, list products, or chat with contractors without repeatedly re-authenticating, protecting workflow continuity.
               </p>
             </div>
-            <div className="p-6 bg-white dark:bg-neutral-950 rounded-2xl border border-gray-200 dark:border-neutral-800">
+            <div className="p-6 bg-transparent rounded-2xl border border-gray-300 dark:border-neutral-800">
               <span className="font-bold text-xs text-primary uppercase block mb-1">CSRF & Security Defender</span>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-gray-750 dark:text-gray-300 font-sans">
                 To protect local operations against Cross-Site Request Forgery (CSRF) and validation manipulation attacks, preventing bad-faith hijackers from injecting malicious payments into live sessions.
               </p>
             </div>

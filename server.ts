@@ -2191,12 +2191,14 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
   });
 
   // Schedule the auto-release system to execute every 12 hours (43,200,000 milliseconds)
-  setInterval(() => {
-    runAutoReleaseJob().catch((err) => console.error("Periodic Auto-Release Failure:", err));
-  }, 12 * 60 * 60 * 1000);
+  // Disabled as per active request - Escrow releases must match explicit client confirmation or manual admin audit override.
+  // setInterval(() => {
+  //   runAutoReleaseJob().catch((err) => console.error("Periodic Auto-Release Failure:", err));
+  // }, 12 * 60 * 60 * 1000);
 
   // Run immediately on boot to ensure current system catch up
-  runAutoReleaseJob().catch((err) => console.error("Boot Time Auto-Release Failure:", err));
+  // Disabled as per active request - Escrow releases must match explicit client confirmation or manual admin audit override.
+  // runAutoReleaseJob().catch((err) => console.error("Boot Time Auto-Release Failure:", err));
 
   // API routes
   // fintech-grade escrow completion and referral tracking engine

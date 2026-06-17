@@ -273,7 +273,20 @@ const ListingDetail = () => {
       );
       const txSnap = await getDocs(txQuery);
       if (!txSnap.empty) {
-        setTransaction({ id: txSnap.docs[0].id, ...txSnap.docs[0].data() } as Transaction);
+        let activeTx: Transaction | null = null;
+        for (const txDoc of txSnap.docs) {
+          const txData = { id: txDoc.id, ...txDoc.data() } as Transaction;
+          const isActive = txData.status === 'pending' || 
+                           txData.status === 'deposited' || 
+                           txData.status === 'delivered' || 
+                           txData.status === 'disputed';
+          if (isActive && !activeTx) {
+            activeTx = txData;
+          }
+        }
+        setTransaction(activeTx);
+      } else {
+        setTransaction(null);
       }
     } catch (error: any) {
       handleFirestoreError(error, OperationType.UPDATE, `transactions/${transaction?.id}`);
@@ -324,9 +337,25 @@ const ListingDetail = () => {
             try {
               const txSnap = await getDocs(txQuery);
               if (!txSnap.empty) {
-                const txData = { id: txSnap.docs[0].id, ...txSnap.docs[0].data() } as Transaction;
-                setTransaction(txData);
-                if (txData.status === 'completed') {
+                let activeTx: Transaction | null = null;
+                let hasCompleted = false;
+
+                for (const txDoc of txSnap.docs) {
+                  const txData = { id: txDoc.id, ...txDoc.data() } as Transaction;
+                  if (txData.status === 'completed' || txData.status === 'released') {
+                    hasCompleted = true;
+                  }
+                  const isActive = txData.status === 'pending' || 
+                                   txData.status === 'deposited' || 
+                                   txData.status === 'delivered' || 
+                                   txData.status === 'disputed';
+                  if (isActive && !activeTx) {
+                    activeTx = txData;
+                  }
+                }
+
+                setTransaction(activeTx);
+                if (hasCompleted) {
                   setHasCompletedTransaction(true);
                 }
               }

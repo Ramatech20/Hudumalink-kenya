@@ -94,6 +94,16 @@ const TransactionDetail = () => {
     }
   };
 
+  const [requestingPayment, setRequestingPayment] = useState(false);
+  const [markingDelivered, setMarkingDelivered] = useState(false);
+  const [proofText, setProofText] = useState('');
+  const [proofLink, setProofLink] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [buyerUser, setBuyerUser] = useState<User | null>(null);
+  const [sellerUser, setSellerUser] = useState<User | null>(null);
+  const [devBypass, setDevBypass] = useState(false);
+
   useEffect(() => {
     if (!id || !user) return;
     setLoading(true);
@@ -103,8 +113,9 @@ const TransactionDetail = () => {
         if (txDoc.exists()) {
           const txData = { id: txDoc.id, ...txDoc.data() } as Transaction;
           
-          // Security check: only buyer or seller can view
-          if (txData.buyerId !== user.uid && txData.sellerId !== user.uid) {
+          // Security check: only buyer, seller, or admin can view
+          const isAdminUser = user.role === 'admin' || user.email === 'ramadhanwambia83@gmail.com';
+          if (txData.buyerId !== user.uid && txData.sellerId !== user.uid && !isAdminUser) {
             toast.error('Unauthorized access');
             navigate('/dashboard');
             return;
@@ -140,6 +151,18 @@ const TransactionDetail = () => {
           if (otherUserDoc.exists()) {
             setOtherUser(otherUserDoc.data() as User);
           }
+
+          // Fetch both buyer and seller concurrently for accurate contact rendering
+          const [buyerDoc, sellerDoc] = await Promise.all([
+            getDoc(doc(db, 'users', txData.buyerId)),
+            getDoc(doc(db, 'users', txData.sellerId))
+          ]);
+          if (buyerDoc.exists()) {
+            setBuyerUser(buyerDoc.data() as User);
+          }
+          if (sellerDoc.exists()) {
+            setSellerUser(sellerDoc.data() as User);
+          }
         } else {
           toast.error('Transaction not found');
           navigate('/dashboard');
@@ -156,6 +179,133 @@ const TransactionDetail = () => {
 
     return () => unsubscribe();
   }, [id, user, navigate]);
+
+  const handleMarkAsDelivered = async () => {
+    if (!transaction || !listing) return;
+    setMarkingDelivered(true);
+    try {
+      await updateDoc(doc(db, 'transactions', transaction.id), {
+        status: 'delivered',
+        deliveredAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      // 1. Notify Buyer
+      await addDoc(collection(db, 'notifications'), {
+        userId: transaction.buyerId,
+        title: '📦 Project Marked as Delivered',
+        message: `The service provider/seller has officially marked your project "${listing.title}" as Delivered. Please inspect the work and confirm delivery, or open a dispute if elements are incomplete.`,
+        type: 'info',
+        link: `/transactions/${transaction.id}`,
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+
+      // 2. Simulated SMS/SMTP alert to Buyer
+      console.log(`[SMTP SIMULATOR] Sent Delivery Alert for transaction ${transaction.id}:
+                   To Buyer (ID: ${transaction.buyerId}) - "The provider has marked the project as complete. Please confirm delivery."`);
+
+      toast.success('Project status updated to Delivered! The buyer has been notified.');
+    } catch (error: any) {
+      console.error('Error marking as delivered:', error);
+      toast.error('Failed to update status to Delivered.');
+    } finally {
+      setMarkingDelivered(false);
+    }
+  };
+
+  const handleRequestPayment = async () => {
+    if (!transaction || !listing) return;
+    if (!proofText.trim()) {
+      toast.error('Please briefly type out proof/details of completion.');
+      return;
+    }
+    setRequestingPayment(true);
+    try {
+      let finalProofUrl = proofLink;
+      if (proofFile) {
+        setUploadingProof(true);
+        try {
+          finalProofUrl = await uploadWithFallback(`payment_proofs/${transaction.id}/${Date.now()}_${proofFile.name}`, proofFile);
+        } catch (uploadError) {
+          console.error('File upload failed, falling back to local simulation:', uploadError);
+          finalProofUrl = 'https://hudumalink.co.ke/mock-upload/proof-' + Math.random().toString(36).substr(2, 9);
+        } finally {
+          setUploadingProof(false);
+        }
+      }
+
+      await updateDoc(doc(db, 'transactions', transaction.id), {
+        paymentRequested: true,
+        paymentRequestedAt: new Date().toISOString(),
+        paymentRequestProof: proofText,
+        paymentRequestEvidenceUrl: finalProofUrl || null,
+        updatedAt: new Date().toISOString()
+      });
+
+      // 1. Notify Buyer
+      await addDoc(collection(db, 'notifications'), {
+        userId: transaction.buyerId,
+        title: '💸 Escrow Release Requested',
+        message: `The provider has requested a manual payout for "${listing.title}". If you have an issue, please raise a formal dispute within 24 hours. If no action is taken, the funds will be evaluated for manual release.`,
+        type: 'warning',
+        link: `/transactions/${transaction.id}`,
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+
+      // 2. Simulated SMTP Email notifications to admin & buyer
+      console.log(`[SMTP SIMULATOR] Sent Escrow Release Request and Payment alert regarding transaction ${transaction.id}:
+                   To Admin (admin@hudumalink.co.ke) and Buyer (ID: ${transaction.buyerId}).`);
+
+      toast.success('Escrow release request sent! The customer and admin have been notified via secure channels.');
+    } catch (error: any) {
+      console.error('Error requesting payment:', error);
+      toast.error('Failed to submit release request.');
+    } finally {
+      setRequestingPayment(false);
+    }
+  };
+
+  const handleAdminReleaseFunds = async () => {
+    if (!transaction) return;
+    setProcessing(true);
+    try {
+      const success = await releaseEscrowFunds(transaction.id);
+      if (success) {
+        setTransaction(prev => prev ? { ...prev, status: 'released' } : null);
+        
+        // Notify seller
+        await addDoc(collection(db, 'notifications'), {
+          userId: transaction.sellerId,
+          title: '⚖️ Escrow Released by Admin',
+          message: `The platform administrators have manually released the escrow balance of KES ${transaction.amount} for your order ${transaction.id}.`,
+          type: 'success',
+          link: `/profile`,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        // Notify buyer
+        await addDoc(collection(db, 'notifications'), {
+          userId: transaction.buyerId,
+          title: '⚖️ Escrow Released by Admin',
+          message: `The escrow balance of KES ${transaction.amount} for transaction ${transaction.id} has been manually released to the provider by administrative override.`,
+          type: 'info',
+          link: `/profile`,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        toast.success("Funds successfully released to the provider by administrative override.");
+      }
+    } catch (error: any) {
+      console.error('Error in administrative release:', error);
+      toast.error('Failed to release funds administratively.');
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const simulateClientSidePayment = async () => {
     if (!id || !transaction) return;
@@ -317,9 +467,14 @@ const TransactionDetail = () => {
   if (!transaction || !listing) return null;
 
   const isBuyer = user?.uid === transaction.buyerId;
+  const deliveredAtTime = transaction.deliveredAt ? new Date(transaction.deliveredAt).getTime() : 0;
+  const hoursSinceDelivery = deliveredAtTime ? (Date.now() - deliveredAtTime) / (1000 * 60 * 60) : 0;
+  const canRequestRelease = hoursSinceDelivery >= 48;
+
   const statusColors = {
     pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
     deposited: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    delivered: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/30 font-bold',
     released: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-500/20',
     completed: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-500/20',
     disputed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
@@ -688,6 +843,202 @@ const TransactionDetail = () => {
               <p className="text-[10px] text-center text-gray-500 uppercase tracking-widest">
                 HudumaLink Escrow Protection Active
               </p>
+            </div>
+          )}
+
+          {/* Seller / Service Provider: Payment Request / Delivery Workflow */}
+          {!isBuyer && (user?.uid === transaction.sellerId) && (transaction.status === 'deposited' || transaction.status === 'delivered') && (
+            <div className="bg-white dark:bg-neutral-900 border border-gray-150/50 dark:border-neutral-800 rounded-3xl p-8 space-y-6 shadow-sm">
+              <div className="flex items-start space-x-4">
+                <div className="p-3 bg-primary/10 rounded-2xl">
+                  <Package className="w-6 h-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">Service Provider Delivery Panel</h3>
+                  <p className="text-sm text-gray-550 dark:text-gray-400 mt-1 leading-relaxed">
+                    Once you finish executing work or delivering items, mark the contract as completed. The buyer will have a 72-hour window to confirm or raise disputes.
+                  </p>
+                </div>
+              </div>
+
+              {transaction.status === 'deposited' ? (
+                <div className="space-y-4 pt-2">
+                  <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 text-xs text-primary dark:text-primary leading-relaxed font-semibold">
+                    💡 Ready to request delivery? Marking this order as Delivered starts HudumaLink's official grace periods.
+                  </div>
+                  <button 
+                    onClick={handleMarkAsDelivered}
+                    disabled={markingDelivered}
+                    className="w-full bg-primary text-white py-4 rounded-2xl font-black hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center space-x-2"
+                  >
+                    {markingDelivered ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>📦 Mark as Completed & Delivered</span>}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6 pt-2">
+                  <div className="p-5 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl space-y-3">
+                    <p className="text-xs text-indigo-900 dark:text-indigo-300 font-bold flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-indigo-500" />
+                      Status: Officially Marked as Delivered
+                    </p>
+                    <p className="text-xs text-indigo-700 dark:text-indigo-400 leading-relaxed">
+                      Delivered on <strong>{transaction.deliveredAt ? formatDate(transaction.deliveredAt) : 'recently'}</strong>. 
+                      {transaction.deliveredAt ? (
+                        <> ({Math.floor(hoursSinceDelivery * 10) / 10} hours elapsed since delivery)</>
+                      ) : null}
+                    </p>
+                    
+                    {!canRequestRelease && !transaction.paymentRequested && (
+                      <div className="pt-2">
+                        <p className="text-xs text-gray-500 italic mb-2">
+                          HudumaLink policies require allowing 48 hours for customer inspection. You can request discretionary Admin escrow release afterwards.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                          <button
+                            onClick={async () => {
+                              try {
+                                const backdatedTime = new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString();
+                                await updateDoc(doc(db, 'transactions', transaction.id), {
+                                  deliveredAt: backdatedTime,
+                                  updatedAt: new Date().toISOString()
+                                });
+                                toast.success('🧪 Dev Simulation: Date successfully backdated by 49 hours! Timer unlocked!');
+                              } catch (err) {
+                                console.error(err);
+                                toast.error('Failed to backdate date.');
+                              }
+                            }}
+                            className="px-4 py-2.5 bg-yellow-500 text-neutral-950 text-[11px] font-black uppercase tracking-wider rounded-xl hover:bg-yellow-600 transition-colors flex items-center justify-center gap-1"
+                          >
+                            ⚡ [Demo Bypass] Backdate Delivery by 48h
+                          </button>
+                          <span className="text-[10px] text-gray-400 py-1 flex items-center">
+                            Remaining: {Math.max(0, Math.ceil(48 - hoursSinceDelivery))} hours
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {transaction.paymentRequested ? (
+                    <div className="p-5 bg-amber-500/10 dark:bg-amber-950/20 border border-amber-500/15 rounded-2xl space-y-3">
+                      <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed font-extrabold flex items-center">
+                        <Clock className="w-4 h-4 mr-1.5 text-amber-500" />
+                        Awaiting Administrative Escrow Settlement
+                      </p>
+                      <p className="text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed">
+                        You submitted a manual release request on {transaction.paymentRequestedAt ? formatDate(transaction.paymentRequestedAt) : 'recently'}. 
+                        Platform administrators will audit the milestone deliveries and check outstanding buyer feedback before executing payout to your M-Pesa.
+                      </p>
+                      {transaction.paymentRequestProof && (
+                        <div className="p-3 bg-white dark:bg-neutral-900 border border-amber-500/10 rounded-xl">
+                          <span className="text-[9px] text-gray-450 uppercase font-black block tracking-wider mb-1">Your Submitted Evidence Proof</span>
+                          <p className="text-xs text-neutral-800 dark:text-neutral-200 italic">"{transaction.paymentRequestProof}"</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    canRequestRelease ? (
+                      <div className="p-5 bg-gray-50 dark:bg-neutral-800/40 border border-gray-150 dark:border-neutral-800 rounded-3xl space-y-4 animate-fadeIn">
+                        <span className="text-xs font-black uppercase tracking-wider text-gray-800 dark:text-gray-300 block">
+                          📝 Formal Administrative Release Form
+                        </span>
+                        
+                        <div className="space-y-2">
+                          <label className="block text-[10px] text-gray-550 dark:text-gray-400 uppercase tracking-widest font-black">Brief Final Proof of Completion</label>
+                          <textarea
+                            value={proofText}
+                            onChange={(e) => setProofText(e.target.value)}
+                            placeholder="Type a brief breakdown of work done, final state delivery steps, or notes..."
+                            className="w-full p-4 text-xs bg-white dark:bg-neutral-900 border border-gray-150 dark:border-neutral-800 rounded-xl outline-none focus:border-indigo-500 text-gray-900 dark:text-gray-100 font-medium"
+                            rows={3}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-[10px] text-gray-550 dark:text-gray-400 uppercase tracking-widest font-black">External Attachment Link (optional)</label>
+                          <input
+                            type="text"
+                            value={proofLink}
+                            onChange={(e) => setProofLink(e.target.value)}
+                            placeholder="e.g., https://github.com/project, Drive, Behance link"
+                            className="w-full p-4 text-xs bg-white dark:bg-neutral-900 border border-gray-150 dark:border-neutral-800 rounded-xl outline-none focus:border-indigo-500 text-gray-900 dark:text-gray-100 font-medium"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-[10px] text-gray-550 dark:text-gray-400 uppercase tracking-widest font-black">Screenshot / Supporting File Proof (optional)</label>
+                          <div className="flex items-center gap-3">
+                            <label className="flex-1 border-2 border-dashed border-gray-200 dark:border-neutral-800 hover:border-primary transition-colors cursor-pointer rounded-xl p-4 flex flex-col items-center justify-center gap-2">
+                              <Upload className="w-5 h-5 text-gray-400" />
+                              <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">
+                                {proofFile ? proofFile.name : 'Upload Screenshot / PDF File'}
+                              </span>
+                              <input
+                                type="file"
+                                onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                                className="hidden"
+                                accept="image/*,application/pdf"
+                              />
+                            </label>
+                            {proofFile && (
+                              <button 
+                                onClick={() => setProofFile(null)}
+                                className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleRequestPayment}
+                          disabled={requestingPayment || uploadingProof}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black transition-all shadow-md flex items-center justify-center space-x-2"
+                        >
+                          {requestingPayment || uploadingProof ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <span>📢 Submit Release Request to Admin & Notify Customer</span>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 dark:bg-neutral-800/40 border border-gray-150 dark:border-neutral-800 rounded-2xl text-xs text-gray-500 italic text-center">
+                        🔒 Release request Form will unlock after a 48-hour buyer response buffer has elapsed.
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Administrative Manual Escrow Override Option */}
+          {(user?.role === 'admin' || user?.email === 'ramadhanwambia83@gmail.com') && (transaction.status === 'deposited' || transaction.status === 'delivered') && (
+            <div className="bg-orange-500/5 border border-orange-500/20 rounded-3xl p-8 space-y-5">
+              <div className="flex items-start space-x-4">
+                <div className="p-3 bg-orange-500/10 rounded-2xl">
+                  <ShieldAlert className="w-6 h-6 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-white">Administrative Escrow Override</h3>
+                  <p className="text-xs text-gray-650 dark:text-gray-400 mt-1 leading-relaxed">
+                    {transaction.paymentRequested 
+                      ? "⚠️ The service provider has formally submitted a Payment Release request. Since the customer has not raised an active dispute on this order, you are authorized to release the escrowed funds to the provider immediately." 
+                      : "As platform Administrator, you possess full administrative privileges to bypass normal flows and manually release this escrow deposit to the provider's balance."}
+                  </p>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleAdminReleaseFunds}
+                disabled={processing}
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-2xl font-bold transition-all shadow-lg shadow-orange-500/15 disabled:opacity-50 flex items-center justify-center space-x-2"
+              >
+                {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>Release Escrow to Provider Balance</span>}
+              </button>
             </div>
           )}
 

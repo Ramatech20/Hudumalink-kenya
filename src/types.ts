@@ -120,7 +120,7 @@ export interface Listing {
   createdAt: string;
 }
 
-export type TransactionStatus = 'pending' | 'deposited' | 'disputed' | 'completed' | 'released' | 'cancelled';
+export type TransactionStatus = 'pending' | 'deposited' | 'delivered' | 'disputed' | 'completed' | 'released' | 'cancelled';
 
 export interface Promotion {
   id: string;
@@ -181,6 +181,11 @@ export interface Transaction {
   reviewSubmitted?: boolean;
   reviewRating?: number;
   reviewComment?: string;
+  paymentRequested?: boolean;
+  paymentRequestedAt?: string;
+  deliveredAt?: string;
+  paymentRequestProof?: string;
+  paymentRequestEvidenceUrl?: string;
 }
 
 export interface Dispute {
