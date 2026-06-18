@@ -621,7 +621,7 @@ export const Privacy = () => (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {[
                 { title: "Access & Edit", desc: "View and update your personal info in settings." },
-                { title: "Data Erasure", desc: "Request account and data deletion at any time." }
+                { title: "Data Erasure & Account Deletion", desc: "You have the right to request account deletion or termination at any time directly through your Profile page. Upon requesting, all of your personal details, listings, files, and authentication records will be completely and permanently removed from HudumaLink servers and databases." }
               ].map((item, i) => (
                 <div key={i} className="p-8 bg-neutral-50 dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm">
                   <h4 className="font-bold text-gray-950 dark:text-white mb-3">{item.title}</h4>

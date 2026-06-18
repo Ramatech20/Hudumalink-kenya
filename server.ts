@@ -295,6 +295,100 @@ async function startServer() {
     return cleaned;
   };
 
+  // IntaSend Payments API Integration Configuration
+  const INTASEND_PUB_KEY = process.env.INTASEND_PUBLIC_KEY || "IS_PUB_test_mock";
+  const INTASEND_SEC_KEY = process.env.INTASEND_SECRET_KEY || "IS_SEC_test_mock";
+  const INTASEND_ENV = process.env.INTASEND_ENVIRONMENT || "sandbox";
+
+  const INTASEND_BASE_URL = INTASEND_ENV === "production"
+    ? "https://payment.intasend.com"
+    : "https://sandbox.intasend.com";
+
+  const initiateIntasendStkPush = async (phone: string, amount: number, apiRef: string) => {
+    const formattedPhone = formatMpesaPhoneNumber(phone);
+    if (INTASEND_SEC_KEY === "IS_SEC_test_mock" || !process.env.INTASEND_SECRET_KEY) {
+      console.log(`[SIMULATION] IntaSend STK Push requested: Phone=${phone} (Formatted = ${formattedPhone}), Amount=${amount}, Ref=${apiRef}`);
+      return {
+        id: "IS-MOCK-CO-" + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        invoice: {
+          invoice_id: "IS-MOCK-INV-" + Math.random().toString(36).substring(2, 10).toUpperCase(),
+          state: "PENDING",
+          amount: amount
+        },
+        isMock: true
+      };
+    }
+
+    const pushUrl = `${INTASEND_BASE_URL}/api/v1/payment/mpesa-stk-push/`;
+    const headers = {
+      "Authorization": `Bearer ${INTASEND_PUB_KEY}`,
+      "Content-Type": "application/json"
+    };
+
+    console.log(`[IntaSend STK Push Request] Dispatching post to IntaSend at: ${pushUrl}`);
+    const response = await axios.post(pushUrl, {
+      amount: amount,
+      phone_number: formattedPhone,
+      api_ref: apiRef
+    }, { headers });
+
+    return response.data;
+  };
+
+  const dispatchIntasendPayout = async (name: string, phone: string, amount: number, narrative: string) => {
+    const formattedPhone = formatMpesaPhoneNumber(phone);
+    if (INTASEND_SEC_KEY === "IS_SEC_test_mock" || !process.env.INTASEND_SECRET_KEY) {
+      console.log(`[SIMULATION] IntaSend Secure Payout payload dispatched: Name=${name}, Phone=${formattedPhone}, Amount=${amount}, Narrative: ${narrative}`);
+      return {
+        success: true,
+        trackingId: "IS-MOCK-TX-" + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        receiptNumber: "IS-REC-" + Math.random().toString(36).substring(2, 12).toUpperCase(),
+        isMock: true
+      };
+    }
+
+    const initiateUrl = `${INTASEND_BASE_URL}/api/v1/send-money/initiate/`;
+    const headers = {
+      "Authorization": `Bearer ${INTASEND_SEC_KEY}`,
+      "Content-Type": "application/json"
+    };
+
+    console.log(`[IntaSend Payout] Step 1: Initiating post to ${initiateUrl}`);
+    // Step 1: Initiate payout
+    const response = await axios.post(initiateUrl, {
+      currency: "KES",
+      transactions: [
+        {
+          name: name,
+          account: formattedPhone,
+          account_type: "MPESA-B2C",
+          amount: amount.toString(),
+          narrative: narrative
+        }
+      ]
+    }, { headers });
+
+    // Response returns an identifier for the transaction file / batch
+    const fileId = response.data.file_id || response.data.id;
+    if (!fileId) {
+      throw new Error("Failed to retrieve payout tracking ID from IntaSend");
+    }
+
+    console.log(`[IntaSend Payout] Step 2: Approving payout file ID: ${fileId}`);
+    // Step 2: Approve the payout file to execute it instantly
+    const approveUrl = `${INTASEND_BASE_URL}/api/v1/send-money/approve/`;
+    const approveResponse = await axios.post(approveUrl, {
+      file_id: fileId
+    }, { headers });
+
+    return {
+      success: true,
+      trackingId: fileId,
+      receiptNumber: approveResponse.data?.receipt || fileId,
+      data: approveResponse.data
+    };
+  };
+
   const getMpesaToken = async () => {
     const consumerKey = process.env.MPESA_CONSUMER_KEY;
     const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
@@ -419,64 +513,38 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     const { phoneNumber, amount, accountReference, transactionDesc, transactionId } = req.body;
     const formattedPhone = formatMpesaPhoneNumber(phoneNumber);
 
-    console.log(`[M-Pesa STK Push Request] Received parameters: Phone = ${phoneNumber} (Formatted as: ${formattedPhone}), Amount = ${amount}, Transaction ID = ${transactionId}`);
+    console.log(`[IntaSend STK Push Request] Received parameters: Phone = ${phoneNumber} (Formatted as: ${formattedPhone}), Amount = ${amount}, Transaction ID = ${transactionId}`);
 
     try {
-      const token = await getMpesaToken();
-      const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14);
-      const shortCode = process.env.MPESA_SHORTCODE || "174379";
-      const passkey = process.env.MPESA_PASSKEY;
-      
-      if (!passkey) {
-        throw new Error("M-Pesa passkey not found in environment");
-      }
-
-      const password = Buffer.from(`${shortCode}${passkey}${timestamp}`).toString("base64");
-
-      console.log(`[M-Pesa STK Push] Dispatching post to sandbox.safaricom with Shortcode: ${shortCode}`);
-      const response = await axios.post(
-        "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-        {
-          BusinessShortCode: shortCode,
-          Password: password,
-          Timestamp: timestamp,
-          TransactionType: "CustomerPayBillOnline",
-          Amount: amount,
-          PartyA: formattedPhone,
-          PartyB: shortCode,
-          PhoneNumber: formattedPhone,
-          CallBackURL: `${process.env.APP_URL}/api/mpesa/callback`,
-          AccountReference: accountReference || "HudumaLink",
-          TransactionDesc: transactionDesc || "Payment for services",
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const responseData = await initiateIntasendStkPush(
+        formattedPhone,
+        amount,
+        transactionId || `TX-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
       );
 
-      console.log("[M-Pesa STK Push] Safaricom response:", response.data);
+      console.log("[IntaSend STK Push] Upstream response:", responseData);
 
-      // If we have a transactionId, update it with the CheckoutRequestID
-      if (transactionId) {
+      const trackingId = responseData.id || (responseData.invoice && responseData.invoice.invoice_id);
+
+      // If we have a transactionId, update it with the CheckoutRequestID (trackingId)
+      if (transactionId && trackingId) {
         await db.collection("transactions").doc(transactionId).update({
-          checkoutRequestId: response.data.CheckoutRequestID,
+          checkoutRequestId: trackingId,
           updatedAt: new Date().toISOString()
         });
       }
 
       res.json({
-        ...response.data,
-        isSandboxPromptWarning: true,
-        message: "STK push requested. Standard Safaricom Sandbox limitations apply: physical PIN prompts will only display if using designated developer test phone numbers."
+        ...responseData,
+        CheckoutRequestID: trackingId,
+        ResponseCode: "0",
+        ResponseDescription: "Success",
+        CustomerMessage: "IntaSend M-Pesa STK push requested successfully."
       });
     } catch (error: any) {
-      const safaricomError = error.response?.data || error.message;
-      console.warn("[M-Pesa STK Push] Dispatch failed:", safaricomError);
-      console.warn("⚠️ Standard Sandbox behavior: Physical SIM cards cannot receive prompts without white-listed test numbers. Falling back to Simulated Checkout!");
-
-      // Always fall back to simulated checkout on any Safaricom Sandbox dispatch failure (e.g. wrong credentials, timeouts) to prevent blocking the user
+      console.warn("[IntaSend STK Push] Dispatch failed:", error.response?.data || error.message);
+      
+      // Fallback sandbox simulation
       const checkoutId = "ws_CO_" + Math.random().toString(36).substr(2, 9);
       if (transactionId) {
         try {
@@ -485,9 +553,10 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
             updatedAt: new Date().toISOString()
           });
         } catch (dbErr: any) {
-          console.warn("[M-Pesa STK Push] Fallback firestore transaction update skipped:", dbErr.message);
+          console.warn("[IntaSend STK Push] Fallback firestore update skipped:", dbErr.message);
         }
       }
+
       return res.json({
         MerchantRequestID: "req_" + Math.random().toString(36).substr(2, 9),
         CheckoutRequestID: checkoutId,
@@ -503,7 +572,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     const { phoneNumber, amount, listingId, userId, tier, durationDays } = req.body;
     const formattedPhone = formatMpesaPhoneNumber(phoneNumber);
 
-    console.log(`[M-Pesa Promotion Payment Request] Received parameters: Phone = ${phoneNumber} (Formatted as: ${formattedPhone}), Amount = ${amount}`);
+    console.log(`[IntaSend Promotion Payment Request] Received parameters: Phone = ${phoneNumber} (Formatted as: ${formattedPhone}), Amount = ${amount}`);
 
     try {
       const promotionRef = await db.collection("promotions").add({
@@ -516,52 +585,32 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
         createdAt: new Date().toISOString()
       });
 
-      const token = await getMpesaToken();
-      const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14);
-      const shortCode = process.env.MPESA_SHORTCODE || "174379";
-      const passkey = process.env.MPESA_PASSKEY;
-      
-      if (!passkey) {
-        throw new Error("M-Pesa passkey not found in environment");
-      }
-
-      const password = Buffer.from(`${shortCode}${passkey}${timestamp}`).toString("base64");
-
-      const response = await axios.post(
-        "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-        {
-          BusinessShortCode: shortCode,
-          Password: password,
-          Timestamp: timestamp,
-          TransactionType: "CustomerPayBillOnline",
-          Amount: amount,
-          PartyA: formattedPhone,
-          PartyB: shortCode,
-          PhoneNumber: formattedPhone,
-          CallBackURL: `${process.env.APP_URL}/api/mpesa/callback`,
-          AccountReference: `PROM-${listingId.substring(0, 5)}`,
-          TransactionDesc: `Promotion for listing ${listingId}`,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const responseData = await initiateIntasendStkPush(
+        formattedPhone,
+        amount,
+        promotionRef.id
       );
 
-      console.log("[M-Pesa Promotion STK Push] Safaricom response:", response.data);
+      console.log("[IntaSend Promotion STK Push] Upstream response:", responseData);
 
-      await promotionRef.update({
-        checkoutRequestId: response.data.CheckoutRequestID
+      const trackingId = responseData.id || (responseData.invoice && responseData.invoice.invoice_id);
+
+      if (trackingId) {
+        await promotionRef.update({
+          checkoutRequestId: trackingId
+        });
+      }
+
+      res.json({
+        ...responseData,
+        CheckoutRequestID: trackingId,
+        ResponseCode: "0",
+        ResponseDescription: "Success"
       });
-
-      res.json(response.data);
     } catch (error: any) {
-      const safaricomError = error.response?.data || error.message;
-      console.warn("[M-Pesa Promotion STK Push] Dispatch failed:", safaricomError);
-      console.warn("⚠️ Sandbox Promo fallback acting.");
+      console.warn("[IntaSend Promotion STK Push] Dispatch failed:", error.response?.data || error.message);
 
-      // Always fall back to simulated promotion on any Safaricom Sandbox dispatch failure to prevent blocking the user
+      // Always fall back to simulated promotion on any Sandbox dispatch failure to prevent blocking the user
       const checkoutId = "ws_CO_PROM_" + Math.random().toString(36).substr(2, 9);
       try {
         await db.collection("promotions").add({
@@ -575,7 +624,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
           createdAt: new Date().toISOString()
         });
       } catch (dbErr: any) {
-        console.warn("[M-Pesa Promotion] Fallback promotion document save skipped:", dbErr.message);
+        console.warn("[IntaSend Promotion] Fallback promotion document save skipped:", dbErr.message);
       }
 
       return res.json({
@@ -589,7 +638,141 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     }
   });
 
+  app.post("/api/intasend/callback", async (req, res) => {
+    console.log("[IntaSend Webhook Callback received]:", JSON.stringify(req.body, null, 2));
+
+    const { api_ref, invoice_id, state } = req.body;
+    
+    try {
+      if (state === "COMPLETE") {
+        // Find transaction
+        let txDoc = null;
+        if (api_ref) {
+          const txQuery = await db.collection("transactions").doc(api_ref).get();
+          if (txQuery.exists) {
+            txDoc = txQuery;
+          }
+        }
+        
+        if (!txDoc && invoice_id) {
+          // fallback query checkoutRequestId
+          const txQuery = await db.collection("transactions")
+            .where("checkoutRequestId", "==", invoice_id)
+            .limit(1)
+            .get();
+          if (!txQuery.empty) {
+            txDoc = txQuery.docs[0];
+          }
+        }
+
+        if (txDoc) {
+          const txData = txDoc.data() || {};
+          if (txData.status !== "deposited") {
+            await txDoc.ref.update({
+              status: "deposited",
+              updatedAt: new Date().toISOString(),
+              mpesaReceiptNumber: invoice_id || "IS-REC-" + Math.random().toString(36).substr(2, 6).toUpperCase()
+            });
+
+            // Notify buyer and seller
+            const buyerId = txData.buyerId;
+            const sellerId = txData.sellerId;
+
+            if (buyerId) {
+              await db.collection("notifications").add({
+                userId: buyerId,
+                title: "Payment Successful",
+                message: `Your payment of KES ${txData.amount} has been deposited into Escrow via IntaSend.`,
+                type: "success",
+                read: false,
+                link: `/profile`,
+                createdAt: new Date().toISOString()
+              });
+            }
+
+            if (sellerId) {
+              await db.collection("notifications").add({
+                userId: sellerId,
+                title: "New Escrow Payment",
+                message: `A payment of KES ${txData.amount} has been deposited into Escrow for your listing via IntaSend.`,
+                type: "success",
+                read: false,
+                link: `/profile`,
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+        } else {
+          // Check if it's a promotion
+          let promDoc = null;
+          if (api_ref) {
+            const promQuery = await db.collection("promotions").doc(api_ref).get();
+            if (promQuery.exists) {
+              promDoc = promQuery;
+            }
+          }
+
+          if (!promDoc && invoice_id) {
+            const promQuery = await db.collection("promotions")
+              .where("checkoutRequestId", "==", invoice_id)
+              .limit(1)
+              .get();
+            if (!promQuery.empty) {
+              promDoc = promQuery.docs[0];
+            }
+          }
+
+          if (promDoc) {
+            const promData = promDoc.data() || {};
+            if (promData.status !== "completed") {
+              const expiresAt = new Date();
+              expiresAt.setDate(expiresAt.getDate() + (promData.durationDays || 3));
+
+              await promDoc.ref.update({
+                status: "completed",
+                expiresAt: expiresAt.toISOString()
+              });
+
+              // Update the listing
+              await db.collection("listings").doc(promData.listingId).update({
+                isPromoted: true,
+                promotionTier: promData.tier,
+                featuredUntil: expiresAt.toISOString()
+              });
+
+              // Notify user
+              if (promData.userId) {
+                await db.collection("notifications").add({
+                  userId: promData.userId,
+                  title: "Promotion Activated!",
+                  message: `Your listing has been promoted to ${promData.tier} for ${promData.durationDays} days.`,
+                  type: "success",
+                  read: false,
+                  link: `/listing/${promData.listingId}`,
+                  createdAt: new Date().toISOString()
+                });
+              }
+            }
+          }
+        }
+      }
+
+      res.json({ success: true, message: "Webhook integrated and successfully acknowledged." });
+    } catch (error: any) {
+      console.error("Error processing IntaSend callback webhook payload:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.post("/api/mpesa/callback", async (req, res) => {
+    // Forward to IntaSend if this callback contains IntaSend webhook payload elements
+    if (req.body && (req.body.invoice_id || req.body.state)) {
+      console.log("[M-Pesa Webhook Callback] Rerouting IntaSend format callback payload");
+      const { api_ref, invoice_id, state } = req.body;
+      const response = await axios.post(`${process.env.APP_URL || "http://localhost:3000"}/api/intasend/callback`, req.body);
+      return res.json(response.data);
+    }
+
     const callbackToken = req.query.token;
     if (process.env.MPESA_CALLBACK_TOKEN && callbackToken !== process.env.MPESA_CALLBACK_TOKEN) {
       console.warn("M-Pesa Callback: Unauthorized attempt with invalid token");
@@ -1651,45 +1834,33 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     }
   });
 
-  // Admin Actions: B2C Payouts (Withdrawals & Refunds)
+  // Admin Actions: B2C Payouts (Withdrawals & Refunds) via IntaSend Secure Payouts Engine
   app.post("/api/admin/payout", verifyAdmin, async (req, res) => {
     const { userId, amount, phoneNumber, reason, type } = req.body;
-    // In a real app, you'd verify the admin's session here
 
     try {
-      const token = await getMpesaToken();
-      
-      // B2C Initiation (Mocked for sandbox if credentials missing)
-      if (!process.env.MPESA_B2C_SHORTCODE) {
-        console.log(`Mock B2C Payout: ${amount} to ${phoneNumber} for ${reason}`);
-        return res.json({ status: "success", message: "Payout initiated" });
+      if (amount <= 0 || !phoneNumber) {
+        return res.status(400).json({ error: "Invalid amount or recipient details" });
       }
 
-      const response = await axios.post(
-        "https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest",
-        {
-          InitiatorName: process.env.MPESA_B2C_INITIATOR_NAME,
-          SecurityCredential: process.env.MPESA_B2C_SECURITY_CREDENTIAL,
-          CommandID: process.env.MPESA_B2C_COMMAND_ID || "BusinessPayment",
-          Amount: amount,
-          PartyA: process.env.MPESA_B2C_SHORTCODE,
-          PartyB: phoneNumber,
-          Remarks: reason || "Payout",
-          QueueTimeOutURL: `${process.env.APP_URL}/api/mpesa/b2c/timeout`,
-          ResultURL: `${process.env.APP_URL}/api/mpesa/b2c/result`,
-          Occasion: type || "Withdrawal"
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const formattedPhone = formatMpesaPhoneNumber(phoneNumber);
+      console.log(`[Admin Payout Request] Initiating IntaSend payout for KES ${amount} to ${formattedPhone} (${reason})`);
+
+      const payloadResult = await dispatchIntasendPayout(
+        "Client Name",
+        formattedPhone,
+        amount,
+        reason || "HudumaLink Administrative Payout"
       );
 
-      res.json(response.data);
+      res.json({
+        status: "success",
+        message: "Payout initiated and approved successfully.",
+        ...payloadResult
+      });
     } catch (error: any) {
-      console.error("M-Pesa B2C error:", error.response?.data || error.message);
-      res.status(500).json({ error: "Failed to initiate payout" });
+      console.error("IntaSend Outbound Payment (Payout) error:", error.response?.data || error.message);
+      res.status(500).json({ error: "Failed to process payout via IntaSend" });
     }
   });
 
@@ -1920,56 +2091,44 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
         });
       });
 
-      // Hit upstream Daraja B2C endpoint
+      // Hit upstream IntaSend payout endpoint
       let isUpstreamSuccess = true;
-      let mockDarajaReceipt = "MPESA-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+      let trackingReceipt = "IS-TX-" + Math.random().toString(36).substring(2, 10).toUpperCase();
 
-      if (process.env.MPESA_B2C_SHORTCODE && process.env.MPESA_CONSUMER_KEY) {
+      if (process.env.INTASEND_SECRET_KEY && process.env.INTASEND_SECRET_KEY !== "IS_SEC_test_mock") {
         try {
-          const token = await getMpesaToken();
-          const response = await axios.post(
-            "https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest",
-            {
-              InitiatorName: process.env.MPESA_B2C_INITIATOR_NAME,
-              SecurityCredential: process.env.MPESA_B2C_SECURITY_CREDENTIAL,
-              CommandID: process.env.MPESA_B2C_COMMAND_ID || "BusinessPayment",
-              Amount: grossAmount,
-              PartyA: process.env.MPESA_B2C_SHORTCODE,
-              PartyB: formattedPhone,
-              Remarks: "HudumaLink B2C Payout",
-              QueueTimeOutURL: `${process.env.APP_URL}/api/mpesa/b2c/timeout`,
-              ResultURL: `${process.env.APP_URL}/api/mpesa/b2c/result`,
-              Occasion: "Withdrawal"
-            },
-            {
-              headers: { Authorization: `Bearer ${token}` }
-            }
+          const payoutResult = await dispatchIntasendPayout(
+            userData.displayName || "Client User",
+            formattedPhone,
+            grossAmount,
+            "HudumaLink Outbound Payout"
           );
-
-          if (response.data && response.data.ConversationID) {
-            mockDarajaReceipt = response.data.ConversationID;
+          if (payoutResult && payoutResult.success) {
+            trackingReceipt = payoutResult.receiptNumber;
+          } else {
+            isUpstreamSuccess = false;
           }
-        } catch (mpesaError: any) {
-          console.error("Upstream Daraja B2C payment failure:", mpesaError.response?.data || mpesaError.message);
+        } catch (intasendError: any) {
+          console.error("Upstream IntaSend payment failure:", intasendError.response?.data || intasendError.message);
           isUpstreamSuccess = false;
         }
       } else {
-        console.log(`[MOCK B2C] Dispatching payment: Recipient=${formattedPhone}, GrossAmount=${grossAmount}, PlatformFee=0, SafaricomFee=${safaricomB2CCharge}`);
+        console.log(`[SIMULATION B2C] Dispatching IntaSend payout: Recipient=${formattedPhone}, GrossAmount=${grossAmount}`);
       }
 
       if (isUpstreamSuccess) {
         // Mark as completed
         await withdrawalRef.update({
           status: "completed",
-          receiptNumber: mockDarajaReceipt,
+          receiptNumber: trackingReceipt,
           updatedAt: new Date().toISOString()
         });
 
         // Add success notifications
         await db.collection("notifications").add({
           userId,
-          title: "Safaricom B2C Disbursement Successful",
-          message: `Payout of KES ${grossAmount} sent to ${formattedPhone}. MPesa Charge: KES ${safaricomB2CCharge}. Receipt Ref: ${mockDarajaReceipt}`,
+          title: "IntaSend Disbursement Successful",
+          message: `Payout of KES ${grossAmount} sent to ${formattedPhone}. Webhook Charge: KES ${safaricomB2CCharge}. Receipt Ref: ${trackingReceipt}`,
           type: "success",
           read: false,
           createdAt: new Date().toISOString()
@@ -1978,7 +2137,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
         return res.json({
           success: true,
           withdrawalId: withdrawalRef.id,
-          receiptNumber: mockDarajaReceipt,
+          receiptNumber: trackingReceipt,
           amount: grossAmount,
           deductedAmount: totalToDeduct,
           fee: totalDeductedFee
@@ -2402,7 +2561,7 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     }
   });
 
-  // Client M-Pesa B2C instant cash-out proxy
+  // Client M-Pesa B2C instant cash-out proxy via IntaSend Payouts Engine
   app.post("/api/withdrawals/execute", verifyUser, async (req: any, res: any) => {
     const { amount, phoneNumber } = req.body;
     const userId = req.user.uid;
@@ -2418,28 +2577,25 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
 
     try {
       const userRef = db.collection("users").doc(userId);
-      
-      const payoutResult = await db.runTransaction(async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists) {
-          throw new Error("User profile not found");
-        }
+      const userDoc = await userRef.get();
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: "User profile not found." });
+      }
+      const userData = userDoc.data() || {};
 
-        const userData = userDoc.data() || {};
-        const withdrawableBalance = userData.earnings?.withdrawableBalance ?? userData.escrowBalance ?? 0;
+      const withdrawalRef = db.collection("withdrawals").doc();
+
+      // Step 1: Deduct escrow balance atomically first
+      await db.runTransaction(async (transaction) => {
+        const refreshedUserDoc = await transaction.get(userRef);
+        const refreshedUserData = refreshedUserDoc.data() || {};
+        const withdrawableBalance = refreshedUserData.earnings?.withdrawableBalance ?? refreshedUserData.escrowBalance ?? 0;
 
         if (withdrawableBalance < requestedAmount) {
           throw new Error(`Insufficient funds. Your withdrawable balance is KSh ${withdrawableBalance.toLocaleString()}`);
         }
 
-        const mpesaDispatchAmount = requestedAmount;
-
-        // Mock Safaricom Daraja B2C API payout invocation block
-        const mockDarajaReceipt = "MPESA-" + Math.random().toString(36).substring(2, 10).toUpperCase();
-        console.log(`[DARAJA B2C] Dispatching payment: PartyB=${phoneNumber}, PayloadAmount=${mpesaDispatchAmount}, Fee=0, Receipt=${mockDarajaReceipt}`);
-
-        // Deduct complete Requested Amount from both new and legacy balances
-        const prevEarnings = userData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+        const prevEarnings = refreshedUserData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
         const newEarnings = {
           totalVolume: prevEarnings.totalVolume || 0,
           withdrawableBalance: Math.max(0, (prevEarnings.withdrawableBalance || 0) - requestedAmount),
@@ -2452,45 +2608,101 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
           updatedAt: new Date().toISOString()
         });
 
-        // Add to persistent records
-        const withdrawalRef = db.collection("withdrawals").doc();
         transaction.set(withdrawalRef, {
           userId,
           amount: requestedAmount,
           fee: 0,
-          actualPayout: mpesaDispatchAmount,
+          actualPayout: requestedAmount,
           phoneNumber,
-          receiptNumber: mockDarajaReceipt,
-          status: "completed",
+          status: "processing",
           method: "mpesa",
           createdAt: new Date().toISOString()
         });
+      });
 
-        // Create transaction notification
-        const notificationRef = db.collection("notifications").doc();
-        transaction.set(notificationRef, {
+      // Step 2: Hit upstream IntaSend payout endpoint
+      let isUpstreamSuccess = true;
+      let trackingReceipt = "IS-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+
+      if (process.env.INTASEND_SECRET_KEY && process.env.INTASEND_SECRET_KEY !== "IS_SEC_test_mock") {
+        try {
+          const payoutResult = await dispatchIntasendPayout(
+            userData.displayName || "Client User",
+            phoneNumber,
+            requestedAmount,
+            "HudumaLink Client Instant Cash-Out"
+          );
+          if (payoutResult && payoutResult.success) {
+            trackingReceipt = payoutResult.receiptNumber;
+          } else {
+            isUpstreamSuccess = false;
+          }
+        } catch (intasendError: any) {
+          console.error("Upstream IntaSend payment failure inside cash-out:", intasendError.response?.data || intasendError.message);
+          isUpstreamSuccess = false;
+        }
+      } else {
+        console.log(`[SIMULATION B2C] Dispatching IntaSend cash-out: Recipient=${phoneNumber}, RequestedAmount=${requestedAmount}`);
+      }
+
+      if (isUpstreamSuccess) {
+        // Mark as completed
+        await withdrawalRef.update({
+          status: "completed",
+          receiptNumber: trackingReceipt,
+          updatedAt: new Date().toISOString()
+        });
+
+        // Add success notifications
+        await db.collection("notifications").add({
           userId,
           title: "M-Pesa Cash-Out Completed",
-          message: `Your withdrawal of KSh ${requestedAmount} was successful. KSh ${mpesaDispatchAmount} sent to ${phoneNumber}. MPesa Ref: ${mockDarajaReceipt}`,
+          message: `Your withdrawal of KSh ${requestedAmount} was successful. KSh ${requestedAmount} sent to ${phoneNumber}. IntaSend Ref: ${trackingReceipt}`,
           type: "success",
           read: false,
           createdAt: new Date().toISOString()
         });
 
-        return {
+        return res.json({
+          success: true,
           withdrawalId: withdrawalRef.id,
-          receiptNumber: mockDarajaReceipt,
+          receiptNumber: trackingReceipt,
           requestedAmount,
-          dispatchedAmount: mpesaDispatchAmount,
+          dispatchedAmount: requestedAmount,
           platformCharge: 0,
           phoneNumber
-        };
-      });
+        });
+      } else {
+        // Refund the balance back to user if upstream payout failed!
+        await db.runTransaction(async (refundTransaction) => {
+          const refreshedUserDoc = await refundTransaction.get(userRef);
+          const refreshedUserData = refreshedUserDoc.data() || {};
+          const prevEarnings = refreshedUserData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+          const newEarnings = {
+            ...prevEarnings,
+            withdrawableBalance: Math.max(0, (prevEarnings.withdrawableBalance || 0) + requestedAmount),
+          };
 
-      res.json({ success: true, ...payoutResult });
+          refundTransaction.update(userRef, {
+            escrowBalance: admin.firestore.FieldValue.increment(requestedAmount),
+            earnings: newEarnings,
+            updatedAt: new Date().toISOString()
+          });
+
+          refundTransaction.update(withdrawalRef, {
+            status: "failed",
+            failReason: "Upstream IntaSend Secure Payouts engine returned an error.",
+            updatedAt: new Date().toISOString()
+          });
+        });
+
+        return res.status(502).json({
+          error: "Upstream IntaSend payout failed. Your escrow balance has been automatically refunded."
+        });
+      }
     } catch (err: any) {
-      console.error("Withdrawal execution error:", err);
-      res.status(400).json({ error: err.message || "Failed to execute Safaricom M-Pesa payout withdrawal" });
+      console.error("Execute withdrawal failed:", err);
+      res.status(500).json({ error: err.message || "Failed to process escrow completeness details" });
     }
   });
 

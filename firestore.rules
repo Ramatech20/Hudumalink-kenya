@@ -60,7 +60,14 @@ service cloud.firestore {
              (!('escrowBalance' in data) || data.escrowBalance is number) &&
              (!('referralEarnings' in data) || data.referralEarnings is number) &&
              (!('completedPaymentsCount' in data) || data.completedPaymentsCount is number) &&
-             (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']);
+             (!('idNumber' in data) || (data.idNumber is string)) &&
+             (!('isFlagged' in data) || data.isFlagged is bool) &&
+             (!('flagReason' in data) || (data.flagReason is string)) &&
+             (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']) &&
+             (!('roleRequestStatus' in data) || data.roleRequestStatus in ['none', 'pending', 'approved', 'rejected']) &&
+             (!('requestedRole' in data) || data.requestedRole in ['customer', 'provider', 'seller']) &&
+             (!('roleRequestCreatedAt' in data) || (data.roleRequestCreatedAt is string)) &&
+             (!('roleRequestProcessedAt' in data) || (data.roleRequestProcessedAt is string));
     }
 
     function isValidListing(data) {
@@ -108,7 +115,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId);
-      allow list: if isAdmin();
+      allow list: if isSignedIn();
       allow create: if (isOwner(userId) && isValidUser(incoming()) && 
                     incoming().role != 'admin' && 
                     // No sneaky balances on create
@@ -126,9 +133,11 @@ service cloud.firestore {
              'completedPaymentsCount', 'emailVerified', 'referralCode', 
              'referredBy', 'createdAt', 'updatedAt', 'isVerified', 
              'kycStatus', 'isOnline', 'lastSeen', 'deviceFingerprint',
-             'maxSingleSpend', 'totalSpend', 'escrowBalance', 'pendingWithdrawalBalance', 'earnings'
+             'maxSingleSpend', 'totalSpend', 'escrowBalance', 'pendingWithdrawalBalance', 'earnings',
+             'idNumber', 'isFlagged', 'flagReason',
+             'roleRequestStatus', 'requestedRole', 'roleRequestCreatedAt', 'roleRequestProcessedAt'
            ]) &&
-           (existing().get('role', 'customer') == 'admin' || !('role' in incoming()) || incoming().role == existing().get('role', 'customer') || (existing().get('role', 'customer') == 'customer' && incoming().role in ['provider', 'seller']) || (existing().get('role', 'customer') != 'customer' && incoming().role == 'customer'))
+           (isAdmin() || existing().get('role', 'customer') == 'admin' || !('role' in incoming()) || incoming().role == existing().get('role', 'customer'))
           )
         )) || 
         // Action: Balance Update (allow any authentic user to modify)

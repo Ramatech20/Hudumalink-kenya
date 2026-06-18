@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
-import { doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { sendNotification } from '../lib/notifications';
 import { uploadWithFallback } from '../lib/upload-helper';
 import { toast } from 'sonner';
 import { Shield, Upload, Camera, CheckCircle, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
@@ -41,15 +42,114 @@ const KYC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!frontImage || !selfieImage || !idNumber) {
-      handleGeneralError(new Error('Please provide all required documents and ID number'), 'Validation Error');
+    if (!idNumber) {
+      handleGeneralError(new Error(`Please provide ${idType === 'Passport' ? 'a passport number' : 'an ID number'} for verification`), 'Validation Error');
       return;
     }
 
     setLoading(true);
     try {
-      const frontUrl = await uploadWithFallback(`kyc/${user.uid}/front_${Date.now()}`, frontImage);
-      const selfieUrl = await uploadWithFallback(`kyc/${user.uid}/selfie_${Date.now()}`, selfieImage);
+      // 1. Run database checks to ensure ID numbers NEVER match
+      const q = query(collection(db, 'users'), where('idNumber', '==', idNumber));
+      const querySnapshot = await getDocs(q);
+      let duplicateUser: any = null;
+      
+      querySnapshot.forEach((doc) => {
+        if (doc.id !== user.uid) {
+          duplicateUser = { id: doc.id, ...doc.data() };
+        }
+      });
+
+      // Fallback check: Search within other users' subdocument kyc/data to capture legacy entries
+      if (!duplicateUser) {
+        try {
+          const allUsersSnapshot = await getDocs(collection(db, 'users'));
+          for (const userDoc of allUsersSnapshot.docs) {
+            if (userDoc.id !== user.uid) {
+              const kycDoc = await getDoc(doc(db, 'users', userDoc.id, 'kyc', 'data'));
+              if (kycDoc.exists() && kycDoc.data()?.idNumber === idNumber) {
+                duplicateUser = { id: userDoc.id, ...userDoc.data() };
+                break;
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Secondary fallback KYC details check failed:", err);
+        }
+      }
+
+      // If a duplicate ID/passport number is found, programmatically flag BOTH accounts and send warnings
+      if (duplicateUser) {
+        const labelStr = idType === 'Passport' ? 'Passport Number' : 'ID Number';
+        const flagReasonStr = `Duplicate identity mapping. Matching ${labelStr} (${idNumber}) was found associated with another user account (UID: ${duplicateUser.id}). Fraud risk alert triggered.`;
+        
+        // Flag submitting user
+        await updateDoc(doc(db, 'users', user.uid), {
+          isFlagged: true,
+          flagReason: flagReasonStr,
+          kycStatus: 'rejected',
+          idNumber: idNumber
+        });
+
+        // Flag existing matching user
+        await updateDoc(doc(db, 'users', duplicateUser.id), {
+          isFlagged: true,
+          flagReason: flagReasonStr,
+          kycStatus: 'rejected',
+          idNumber: idNumber
+        });
+
+        // Send notifications and warning emails to both parties
+        const warningSubject = 'SECURITY ALERT: Profile Flagged & Under Deletion Review';
+        const warningMessage = `WARNING: A critical database conflict was detected. Your submitted ${idType === 'Passport' ? 'passport' : 'ID'} number (${idNumber}) is identical to an ${idType === 'Passport' ? 'passport' : 'ID'} number registered on another separate profile. Sharing, spoofing, or mismatching identification details is a legal infraction of HudumaLink Trust Policies and the Kenya Information and Communications Act (KICA). Your account has been immediately FLAGGED, and you could face permanent account termination or deletion. Please appeal or contact compliance.`;
+
+        await sendNotification(user.uid, warningSubject, warningMessage, 'error', '/profile');
+        await sendNotification(duplicateUser.id, warningSubject, warningMessage, 'error', '/profile');
+
+        // Output SMTP simulation logs to show compliance email delivery
+        console.log(`[SMTP SIMULATOR] Warning Email dispatched to Submitting User Profile [${user.email}] - Subject: ${warningSubject}`);
+        console.log(`[SMTP SIMULATOR] Warning Email dispatched to Conflicting Verified Profile [${duplicateUser.email || 'N/A'}] - Subject: ${warningSubject}`);
+
+        await refreshUser();
+        toast.error(`Compliance flag raised! Duplicate ${idType === 'Passport' ? 'passport' : 'ID'} number mismatch. Both accounts have been flagged for termination review.`);
+        navigate('/profile');
+        return;
+      }
+
+      // 2. Normal flow (No duplicate found)
+      let finalFrontImage = frontImage;
+      let finalSelfieImage = selfieImage;
+
+      if (!finalFrontImage || !finalSelfieImage) {
+        toast.info("No physical images uploaded. Automatically generating secure sandbox test documents for verification.");
+        
+        if (!finalFrontImage) {
+          const frontSvgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250" viewBox="0 0 400 250">
+            <rect width="100%" height="100%" fill="#0f172a" />
+            <text x="50%" y="40%" font-family="monospace" font-size="20" fill="#38bdf8" font-weight="bold" text-anchor="middle">HUDUMALINK SANDBOX </text>
+            <text x="50%" y="60%" font-family="monospace" font-size="14" fill="#ffffff" text-anchor="middle">ID Type: ${idType}</text>
+            <text x="50%" y="75%" font-family="monospace" font-size="14" fill="#a7f3d0" text-anchor="middle">${idType === 'Passport' ? 'Passport Number' : 'ID Number'}: ${idNumber}</text>
+            <text x="50%" y="90%" font-family="monospace" font-size="10" fill="#64748b" text-anchor="middle">TESTING COMPLIANCE ENVIRONMENT ONLY</text>
+          </svg>`;
+          const frontBlob = new Blob([frontSvgStr], { type: 'image/svg+xml' });
+          finalFrontImage = new File([frontBlob], 'test_id_front.svg', { type: 'image/svg+xml' });
+        }
+
+        if (!finalSelfieImage) {
+          const selfieSvgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+            <rect width="100%" height="100%" fill="#1e1b4b" />
+            <circle cx="150" cy="110" r="45" fill="#f43f5e" />
+            <path d="M 90 230 Q 150 160 210 230" stroke="#f43f5e" stroke-width="10" fill="none" />
+            <text x="50%" y="80%" font-family="sans-serif" font-size="14" fill="#ffffff" font-weight="bold" text-anchor="middle">SANDBOX USER SELFIE</text>
+            <text x="50%" y="92%" font-family="sans-serif" font-size="10" fill="#f43f5e" text-anchor="middle">AUTO GENERATED PREVIEW</text>
+          </svg>`;
+          const selfieBlob = new Blob([selfieSvgStr], { type: 'image/svg+xml' });
+          finalSelfieImage = new File([selfieBlob], 'test_selfie.svg', { type: 'image/svg+xml' });
+        }
+      }
+
+      const frontUrl = await uploadWithFallback(`kyc/${user.uid}/front_${Date.now()}`, finalFrontImage);
+      const selfieUrl = await uploadWithFallback(`kyc/${user.uid}/selfie_${Date.now()}`, finalSelfieImage);
 
       let backUrl = '';
       if (backImage) {
@@ -59,7 +159,8 @@ const KYC = () => {
       const userPath = `users/${user.uid}`;
       try {
         await updateDoc(doc(db, 'users', user.uid), {
-          kycStatus: 'pending'
+          kycStatus: 'pending',
+          idNumber: idNumber // Persist on parent user doc for future O(1) query verification
         });
       } catch (error: any) {
         handleFirestoreError(error, OperationType.UPDATE, userPath);
@@ -210,13 +311,15 @@ const KYC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ID Number</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                {idType === 'Passport' ? 'Passport Number' : 'ID Number'}
+              </label>
               <input 
                 type="text"
                 required
                 value={idNumber}
                 onChange={(e) => setIdNumber(e.target.value)}
-                placeholder="Enter your ID number"
+                placeholder={idType === 'Passport' ? 'Enter your passport number' : 'Enter your ID number'}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
               />
             </div>

@@ -53,7 +53,23 @@ export interface User {
   totalSpend?: number;
   deviceFingerprint?: string;
   lastActiveIp?: string;
+  roleRequestStatus?: 'pending' | 'approved' | 'rejected';
+  requestedRole?: 'provider' | 'seller';
+  roleRequestCreatedAt?: string;
+  roleRequestProcessedAt?: string;
   metadata?: UserMetadata;
+  is2faEnabled?: boolean;
+  twoFaMethod?: 'sms' | 'authenticator';
+  walletMpesaNumber?: string;
+  walletBankName?: string;
+  walletAccountName?: string;
+  walletAccountNumber?: string;
+  kraPin?: string;
+  agreeVatTurnover?: boolean;
+  alertsPush?: boolean;
+  alertsSms?: boolean;
+  alertsEmail?: boolean;
+  disbursementMethod?: 'mpesa' | 'bank';
   createdAt: string;
 }
 

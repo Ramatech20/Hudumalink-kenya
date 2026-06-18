@@ -6,7 +6,7 @@ import { useAuth } from '../AuthContext';
 import { sendNotification } from '../lib/notifications';
 import { Listing, User, Report, UserKYC, Dispute, WithdrawalRequest, Appeal, Transaction, UserRole } from '../types';
 import { toast } from 'sonner';
-import { CheckCircle, XCircle, Shield, User as UserIcon, Package, AlertTriangle, ExternalLink, Flag, Trash2, Eye, Wallet, Gavel, Clock, ArrowUpRight, Scale, TrendingUp, Zap, Phone, MessageCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Shield, User as UserIcon, Package, AlertTriangle, ExternalLink, Flag, Trash2, Eye, Wallet, Gavel, Clock, ArrowUpRight, Scale, TrendingUp, Zap, Phone, MessageCircle, Briefcase } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatPrice, formatDate, cn } from '../lib/utils';
 import { releaseEscrowFunds } from '../services/paymentService';
@@ -30,7 +30,8 @@ const Admin = () => {
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [promotions, setPromotions] = useState<any[]>([]);
   const [kycDataMap, setKycDataMap] = useState<Record<string, UserKYC>>({});
-  const [activeTab, setActiveTab] = useState<'overview' | 'listings' | 'users' | 'reports' | 'kyc' | 'disputes' | 'withdrawals' | 'appeals' | 'promotions'>('overview');
+  const [roleRequests, setRoleRequests] = useState<User[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'listings' | 'users' | 'reports' | 'kyc' | 'disputes' | 'withdrawals' | 'appeals' | 'promotions' | 'roleRequests'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [userFilter, setUserFilter] = useState<'all' | 'unverified' | 'flagged' | 'provider' | 'seller'>('all');
   const [listingFilter, setListingFilter] = useState<'pending' | 'active' | 'removed' | 'all'>('pending');
@@ -254,6 +255,17 @@ const Admin = () => {
             throw error;
           }
           setReports(reportsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report)));
+          break;
+        case 'roleRequests':
+          const roleQuery = query(collection(db, 'users'), where('roleRequestStatus', '==', 'pending'));
+          let roleSnapshot;
+          try {
+            roleSnapshot = await getDocs(roleQuery);
+          } catch (error: any) {
+            handleFirestoreError(error, OperationType.LIST, 'users/role_requests');
+            throw error;
+          }
+          setRoleRequests(roleSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
           break;
         case 'kyc':
           const kycQuery = query(collection(db, 'users'), where('kycStatus', '==', 'pending'));
@@ -727,6 +739,87 @@ const Admin = () => {
       setSelectedUser(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    }
+  };
+
+  const handleApproveRoleRequest = async (uid: string, requestedRole: 'provider' | 'seller' | 'customer') => {
+    setIsDataLoading(true);
+    try {
+      if (requestedRole === 'customer') {
+        // Change role back to customer
+        await updateDoc(doc(db, 'users', uid), {
+          role: 'customer',
+          roleRequestStatus: 'approved',
+          roleRequestProcessedAt: new Date().toISOString()
+        });
+        
+        // Hide all their active listings
+        const listingsQ = query(collection(db, 'listings'), where('authorId', '==', uid));
+        const listingsSnapshot = await getDocs(listingsQ);
+        const batchPromises = listingsSnapshot.docs.map(listingDoc => 
+          updateDoc(doc(db, 'listings', listingDoc.id), { status: 'hidden' })
+        );
+        await Promise.all(batchPromises);
+        
+        await sendNotification(
+          uid,
+          'Account Role Changed',
+          'Your request to convert your account back to a Customer has been approved. Your active listings have been hidden.',
+          'success',
+          '/profile'
+        );
+        toast.success('Successfully approved request: Account reverted back to Customer.');
+      } else {
+        // Approve provider or seller
+        await updateDoc(doc(db, 'users', uid), {
+          role: requestedRole,
+          roleRequestStatus: 'approved',
+          roleRequestProcessedAt: new Date().toISOString()
+        });
+        
+        await sendNotification(
+          uid,
+          'Partner Upgrade Approved!',
+          `Congratulations! Your application to become a ${requestedRole === 'provider' ? 'Service Provider' : 'Goods Seller'} has been approved! You can now list services or sell items.`,
+          'success',
+          '/profile'
+        );
+        toast.success(`Successfully approved ${requestedRole} request!`);
+      }
+      
+      // Update local state and trigger tab refresh
+      setRoleRequests(prev => prev.filter(u => u.uid !== uid));
+      fetchTabData();
+    } catch (error: any) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    } finally {
+      setIsDataLoading(false);
+    }
+  };
+
+  const handleRejectRoleRequest = async (uid: string, requestedRole: string) => {
+    setIsDataLoading(true);
+    try {
+      await updateDoc(doc(db, 'users', uid), {
+        roleRequestStatus: 'rejected',
+        roleRequestProcessedAt: new Date().toISOString()
+      });
+      
+      await sendNotification(
+        uid,
+        'Application Rejected',
+        `Your request to become a ${requestedRole === 'provider' ? 'Service Provider' : requestedRole === 'seller' ? 'Goods Seller' : 'Customer'} was reviewed and declined by the admin.`,
+        'error',
+        '/profile'
+      );
+      
+      toast.success('Role request rejected.');
+      setRoleRequests(prev => prev.filter(u => u.uid !== uid));
+      fetchTabData();
+    } catch (error: any) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    } finally {
+      setIsDataLoading(false);
     }
   };
 
@@ -1398,6 +1491,17 @@ const Admin = () => {
             KYC ({kycRequests.length})
           </button>
           <button 
+            onClick={() => setActiveTab('roleRequests')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
+              activeTab === 'roleRequests' 
+                ? 'bg-white dark:bg-neutral-700 text-primary shadow-sm' 
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            <Briefcase className="w-4 h-4 inline-block mr-2" />
+            Role Requests ({roleRequests.length})
+          </button>
+          <button 
             onClick={() => setActiveTab('disputes')}
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
               activeTab === 'disputes' 
@@ -1972,7 +2076,9 @@ const Admin = () => {
                         <p className="text-sm font-bold text-gray-900 dark:text-white">{kycDataMap[u.uid]?.idType}</p>
                       </div>
                       <div className="bg-gray-50 dark:bg-neutral-800/50 p-3 rounded-xl">
-                        <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">ID Number</p>
+                        <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">
+                          {kycDataMap[u.uid]?.idType === 'Passport' ? 'Passport Number' : 'ID Number'}
+                        </p>
                         <p className="text-sm font-bold text-gray-900 dark:text-white">{kycDataMap[u.uid]?.idNumber}</p>
                       </div>
                       <div className="bg-gray-50 dark:bg-neutral-800/50 p-3 rounded-xl">
@@ -2032,6 +2138,83 @@ const Admin = () => {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      ) : activeTab === 'roleRequests' ? (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-gray-100 dark:border-neutral-800 shadow-sm">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center mb-2">
+              <Briefcase className="w-5 h-5 mr-2 text-secondary" /> Pending Role Upgrade & Reversion Requests
+            </h3>
+            <p className="text-xs text-gray-500">
+              Users who requested account upgrades to Service Providers or Sellers (with safety vetting), or partners requesting safe reversion back to Customer account status.
+            </p>
+          </div>
+
+          {roleRequests.length === 0 ? (
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl p-12 text-center border border-gray-100 dark:border-neutral-800">
+              <Briefcase className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">No pending role conversion requests</h3>
+              <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">All role upgrades and clearance tasks have been fully processed.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {roleRequests.map((u) => (
+                <div key={u.uid} className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-gray-100 dark:border-neutral-800 hover:shadow-md transition-all flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary capitalize">
+                          {u.displayName ? u.displayName[0] : (u.email ? u.email[0] : 'U')}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-gray-900 dark:text-white">{u.displayName || 'Anonymous User'}</h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{u.email}</p>
+                        </div>
+                      </div>
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-xs font-bold capitalize",
+                        u.role === 'customer' ? "bg-slate-100 text-slate-700 dark:bg-neutral-800 dark:text-slate-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                      )}>
+                        Current: {u.role}
+                      </span>
+                    </div>
+
+                    <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-xl mb-4 border border-gray-100 dark:border-neutral-800 text-xs text-gray-600 dark:text-gray-450 space-y-2">
+                      <div className="flex justify-between">
+                        <span>Requested Upgrade Type:</span>
+                        <strong className="text-primary capitalize font-black">{u.requestedRole || 'None'}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Application Status:</span>
+                        <span className="font-bold uppercase text-yellow-600 animate-pulse">{u.roleRequestStatus || 'Pending'}</span>
+                      </div>
+                      {u.roleRequestCreatedAt && (
+                        <div className="flex justify-between font-mono text-[10px]">
+                          <span>Time Filed:</span>
+                          <span>{new Date(u.roleRequestCreatedAt).toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-3 pt-2">
+                    <button
+                      onClick={() => handleRejectRoleRequest(u.uid, u.requestedRole || 'provider')}
+                      className="flex-1 px-4 py-2 border border-red-200 dark:border-red-900/30 text-red-655 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/10 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Reject request
+                    </button>
+                    <button
+                      onClick={() => handleApproveRoleRequest(u.uid, (u.requestedRole || 'provider') as any)}
+                      className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
+                    >
+                      Approve & Promote
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       ) : activeTab === 'disputes' ? (

@@ -94,9 +94,7 @@ const CreateListing = () => {
 
   const needsKYC = user && 
     (user.role === 'provider' || user.role === 'seller') && 
-    user.kycStatus !== 'verified' && 
-    listingCount !== null && 
-    listingCount >= 2;
+    user.kycStatus !== 'verified';
 
   if (needsKYC) {
     return (
@@ -105,7 +103,7 @@ const CreateListing = () => {
           <Shield className="w-16 h-16 text-primary mx-auto mb-6" />
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Identity Verification Required</h1>
           <p className="text-gray-500 dark:text-gray-400 mb-8">
-            You have reached the limit of 2 free listings. To maintain a safe marketplace, all service providers and sellers must verify their identity before posting more listings.
+            To maintain a safe and trustworthy marketplace, all service providers and sellers must complete their identity verification (Government KYC) before posting any services or goods on HudumaLink Kenya.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button 
@@ -320,10 +318,10 @@ const CreateListing = () => {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-black text-gray-900 dark:text-white">Post a Listing</h1>
-            {user?.kycStatus !== 'verified' && listingCount !== null && listingCount < 2 && (
-              <p className="text-xs font-bold text-primary mt-1 flex items-center">
-                <Shield className="w-3 h-3 mr-1" />
-                Trial Listing {listingCount + 1}/2. Verify to become a trusted provider!
+            {user?.kycStatus === 'verified' && (
+              <p className="text-xs font-bold text-green-500 mt-1 flex items-center">
+                <Shield className="w-3 h-3 mr-1 fill-green-500/10" />
+                Verified Marketplace Partner
               </p>
             )}
           </div>
