@@ -136,7 +136,7 @@ export interface Listing {
   createdAt: string;
 }
 
-export type TransactionStatus = 'pending' | 'deposited' | 'delivered' | 'disputed' | 'completed' | 'released' | 'cancelled';
+export type TransactionStatus = 'pending' | 'pending_payment' | 'deposited' | 'paid_escrow' | 'delivered' | 'pending_release' | 'disputed' | 'completed' | 'released' | 'refunded' | 'cancelled';
 
 export interface Promotion {
   id: string;
@@ -296,4 +296,27 @@ export interface Notification {
   read: boolean;
   link?: string;
   createdAt: string;
+}
+
+export interface ExtendedUser extends User {
+  completedPaymentsCount: number;
+  referralCode: string;
+  escrowBalance: number;
+  pendingWithdrawalBalance: number;
+  referralEarnings: number;
+  kycStatus: KYCStatus; // matching the KYCStatus enum or custom types
+  is2faEnabled: boolean;
+  twoFaMethod: 'sms' | 'authenticator';
+  walletMpesaNumber: string;
+  walletBankName: string;
+  walletAccountName: string;
+  walletAccountNumber: string;
+  kraPin: string;
+  agreeVatTurnover: boolean;
+  alertsPush: boolean;
+  alertsSms: boolean;
+  alertsEmail: boolean;
+  disbursementMethod: 'mpesa' | 'bank';
+  isFlagged: boolean;
+  flagReason?: string;
 }

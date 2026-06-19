@@ -638,14 +638,231 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
     }
   });
 
-  app.post("/api/intasend/callback", async (req, res) => {
-    console.log("[IntaSend Webhook Callback received]:", JSON.stringify(req.body, null, 2));
+  // --- INTA-SEND ESCROW WORKFLOW ENGINE & PIPELINE ---
 
+  // Commission computation helper
+  const calculateSellerCommission = (amount: number, type: 'product' | 'service') => {
+    let commPercentage = 0.10; // Default 10%
+    if (type === 'service') {
+      commPercentage = 0.10;
+    } else {
+      if (amount >= 100 && amount <= 700) {
+        commPercentage = 0.10;
+      } else if (amount >= 701 && amount <= 1500) {
+        commPercentage = 0.08;
+      } else if (amount >= 1501 && amount <= 2500) {
+        commPercentage = 0.07;
+      } else if (amount > 2500) {
+        commPercentage = 0.05; // Standard high tier
+      } else {
+        commPercentage = 0.10; // Default fallback
+      }
+    }
+    const commission = amount * commPercentage;
+    const sellerAmount = amount - commission;
+    return { commission, sellerAmount };
+  };
+
+  // Endpoint for fee calculations (Server-side financial compliance)
+  app.post("/api/withdrawal-fees", async (req, res) => {
+    try {
+      const { amount, method, userRole, orderType } = req.body;
+      const numAmount = Number(amount) || 0;
+      
+      const safaricomFee = getSafaricomB2CFee(numAmount);
+      
+      // Platform commission: 10% for services, tiered for goods/products
+      const type = (orderType === 'service' || orderType === 'services') ? 'service' : 'product';
+      const commissionResult = calculateSellerCommission(numAmount, type);
+      
+      const bankFee = method === 'bank' ? 50 : 0;
+      
+      res.json({
+        success: true,
+        safaricomFee,
+        commission: commissionResult.commission,
+        commissionRate: numAmount > 0 ? (commissionResult.commission / numAmount) : 0,
+        bankFee,
+        totalFees: (method === 'mpesa' ? safaricomFee : bankFee) + commissionResult.commission
+      });
+    } catch (error: any) {
+      console.error("Fee calculation error:", error);
+      res.status(500).json({ error: error.message || "Internal fee calculation error" });
+    }
+  });
+
+  // 1. Create Pending Escrow Transfer on IntaSend
+  const initiateIntasendPayoutPending = async (name: string, phone: string, amount: number, narrative: string) => {
+    const formattedPhone = formatMpesaPhoneNumber(phone);
+    if (INTASEND_SEC_KEY === "IS_SEC_test_mock" || !process.env.INTASEND_SECRET_KEY) {
+      console.log(`[SIMULATION] IntaSend Pending Payout initiated (requires_approval='YES'): Name=${name}, Phone=${formattedPhone}, Amount=${amount}, Narrative: ${narrative}`);
+      return {
+        success: true,
+        trackingId: "IS-MOCK-PENDING-" + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        isMock: true
+      };
+    }
+
+    const initiateUrl = `${INTASEND_BASE_URL}/api/v1/send-money/initiate/`;
+    const headers = {
+      "Authorization": `Bearer ${INTASEND_SEC_KEY}`,
+      "Content-Type": "application/json"
+    };
+
+    console.log(`[IntaSend Payout] Initiating pending payout to ${initiateUrl} with requires_approval = YES`);
+    const response = await axios.post(initiateUrl, {
+      currency: "KES",
+      requires_approval: "YES",  // Strictly required by prompt!
+      transactions: [
+        {
+          name: name,
+          account: formattedPhone,
+          account_type: "MPESA-B2C",
+          amount: amount.toString(),
+          narrative: narrative
+        }
+      ]
+    }, { headers });
+
+    const fileId = response.data.file_id || response.data.id;
+    if (!fileId) {
+      throw new Error("Failed to retrieve payout tracking ID from IntaSend");
+    }
+
+    return {
+      success: true,
+      trackingId: fileId,
+      data: response.data
+    };
+  };
+
+  // 2. Approve Payout Transfer on IntaSend
+  const approveIntasendPayout = async (fileId: string) => {
+    if (INTASEND_SEC_KEY === "IS_SEC_test_mock" || !process.env.INTASEND_SECRET_KEY || fileId.startsWith("IS-MOCK-")) {
+      console.log(`[SIMULATION] IntaSend Payout approved for fileID: ${fileId}`);
+      return {
+        success: true,
+        receiptNumber: "IS-REC-MOCK-" + Math.random().toString(36).substring(2, 10).toUpperCase()
+      };
+    }
+
+    const approveUrl = `${INTASEND_BASE_URL}/api/v1/send-money/approve/`;
+    const headers = {
+      "Authorization": `Bearer ${INTASEND_SEC_KEY}`,
+      "Content-Type": "application/json"
+    };
+
+    console.log(`[IntaSend Payout] Approving payout file ID: ${fileId}`);
+    const response = await axios.post(approveUrl, {
+      file_id: fileId
+    }, { headers });
+
+    return {
+      success: true,
+      receiptNumber: response.data?.receipt || fileId,
+      data: response.data
+    };
+  };
+
+  // 3. Refund Payment on IntaSend
+  const refundIntasendPayment = async (invoiceId: string, amount: number, reason: string) => {
+    if (INTASEND_SEC_KEY === "IS_SEC_test_mock" || !process.env.INTASEND_SECRET_KEY || invoiceId.startsWith("IS-MOCK-")) {
+      console.log(`[SIMULATION] IntaSend Refund requested: InvoiceID=${invoiceId}, Amount=${amount}, Reason: ${reason}`);
+      return {
+        success: true,
+        refundId: "IS-REF-MOCK-" + Math.random().toString(36).substring(2, 10).toUpperCase()
+      };
+    }
+
+    const refundUrl = `${INTASEND_BASE_URL}/api/v1/payment/refunds/`;
+    const headers = {
+      "Authorization": `Bearer ${INTASEND_SEC_KEY}`,
+      "Content-Type": "application/json"
+    };
+
+    console.log(`[IntaSend Refund] Requesting refund for invoice ${invoiceId} of KES ${amount}`);
+    const response = await axios.post(refundUrl, {
+      invoice_id: invoiceId,
+      amount: amount,
+      reason: reason
+    }, { headers });
+
+    return {
+      success: true,
+      refundId: response.data?.id || invoiceId,
+      data: response.data
+    };
+  };
+
+  // API Route: Create IntaSend Checkout
+  app.post("/api/create-payment", async (req, res) => {
+    const { transactionId, amount, email, firstName, lastName, phone, redirectUrl } = req.body;
+    try {
+      if (!transactionId) {
+        return res.status(400).json({ error: "Missing transactionId" });
+      }
+
+      const txRef = db.collection("transactions").doc(transactionId);
+      const txDoc = await txRef.get();
+      if (!txDoc.exists) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      const txData = txDoc.data() || {};
+      const txAmount = amount || txData.amount || 0;
+
+      let checkoutUrl = "";
+      let checkoutRequestId = "";
+
+      if (INTASEND_SEC_KEY === "IS_SEC_test_mock" || !process.env.INTASEND_SECRET_KEY) {
+        checkoutRequestId = "IS-MOCK-INV-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+        checkoutUrl = `${process.env.APP_URL || "http://localhost:3000"}/transaction/${transactionId}?mock_pay_id=${checkoutRequestId}`;
+      } else {
+        const checkoutApiUrl = `${INTASEND_BASE_URL}/api/v1/payment/checkout/`;
+        const headers = {
+          "Authorization": `Bearer ${INTASEND_PUB_KEY}`,
+          "Content-Type": "application/json"
+        };
+        const response = await axios.post(checkoutApiUrl, {
+          public_key: INTASEND_PUB_KEY,
+          amount: txAmount,
+          currency: "KES",
+          email: email || "customer@hudumalink.co.ke",
+          first_name: firstName || "HudumaLink",
+          last_name: lastName || "Customer",
+          phone_number: phone ? formatMpesaPhoneNumber(phone) : undefined,
+          api_ref: transactionId,
+          redirect_url: redirectUrl || `${process.env.APP_URL || "http://localhost:3000"}/transaction/${transactionId}`
+        }, { headers });
+
+        checkoutUrl = response.data?.url || response.data?.checkout?.url;
+        checkoutRequestId = response.data?.id || response.data?.invoice?.invoice_id || response.data?.checkout?.id;
+      }
+
+      await txRef.update({
+        status: "pending_payment",
+        paymentIntentId: checkoutRequestId,
+        checkoutRequestId: checkoutRequestId,
+        updatedAt: new Date().toISOString()
+      });
+
+      return res.json({
+        success: true,
+        url: checkoutUrl,
+        id: checkoutRequestId
+      });
+    } catch (error: any) {
+      console.error("Error creating payment:", error.response?.data || error.message);
+      return res.status(500).json({ error: error.message || "Failed to create checkout link" });
+    }
+  });
+
+  // API Route: Handle IntaSend Webhooks
+  app.post("/api/webhook/intasend", async (req, res) => {
+    console.log("[IntaSend Webhook API Received]:", JSON.stringify(req.body, null, 2));
     const { api_ref, invoice_id, state } = req.body;
-    
+
     try {
       if (state === "COMPLETE") {
-        // Find transaction
         let txDoc = null;
         if (api_ref) {
           const txQuery = await db.collection("transactions").doc(api_ref).get();
@@ -655,7 +872,6 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
         }
         
         if (!txDoc && invoice_id) {
-          // fallback query checkoutRequestId
           const txQuery = await db.collection("transactions")
             .where("checkoutRequestId", "==", invoice_id)
             .limit(1)
@@ -665,24 +881,33 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
           }
         }
 
+        if (!txDoc && invoice_id) {
+          const txQuery = await db.collection("transactions")
+            .where("paymentIntentId", "==", invoice_id)
+            .limit(1)
+            .get();
+          if (!txQuery.empty) {
+            txDoc = txQuery.docs[0];
+          }
+        }
+
         if (txDoc) {
           const txData = txDoc.data() || {};
-          if (txData.status !== "deposited") {
+          if (txData.status !== "paid_escrow") {
             await txDoc.ref.update({
-              status: "deposited",
+              status: "paid_escrow",
               updatedAt: new Date().toISOString(),
               mpesaReceiptNumber: invoice_id || "IS-REC-" + Math.random().toString(36).substr(2, 6).toUpperCase()
             });
 
-            // Notify buyer and seller
             const buyerId = txData.buyerId;
             const sellerId = txData.sellerId;
 
             if (buyerId) {
               await db.collection("notifications").add({
                 userId: buyerId,
-                title: "Payment Successful",
-                message: `Your payment of KES ${txData.amount} has been deposited into Escrow via IntaSend.`,
+                title: "Payment Received",
+                message: `Your payment of KES ${txData.amount} is secured in HudumaLink Escrow. Status: paid_escrow.`,
                 type: "success",
                 read: false,
                 link: `/profile`,
@@ -693,8 +918,8 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
             if (sellerId) {
               await db.collection("notifications").add({
                 userId: sellerId,
-                title: "New Escrow Payment",
-                message: `A payment of KES ${txData.amount} has been deposited into Escrow for your listing via IntaSend.`,
+                title: "New Escrow Order Paid",
+                message: `Escrow payment of KES ${txData.amount} has been secured. You can now deliver services safely.`,
                 type: "success",
                 read: false,
                 link: `/profile`,
@@ -703,22 +928,12 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
             }
           }
         } else {
-          // Check if it's a promotion
+          // Check if promotion
           let promDoc = null;
           if (api_ref) {
             const promQuery = await db.collection("promotions").doc(api_ref).get();
             if (promQuery.exists) {
               promDoc = promQuery;
-            }
-          }
-
-          if (!promDoc && invoice_id) {
-            const promQuery = await db.collection("promotions")
-              .where("checkoutRequestId", "==", invoice_id)
-              .limit(1)
-              .get();
-            if (!promQuery.empty) {
-              promDoc = promQuery.docs[0];
             }
           }
 
@@ -733,34 +948,641 @@ const verifyAdmin = async (req: any, res: any, next: any) => {
                 expiresAt: expiresAt.toISOString()
               });
 
-              // Update the listing
               await db.collection("listings").doc(promData.listingId).update({
                 isPromoted: true,
                 promotionTier: promData.tier,
                 featuredUntil: expiresAt.toISOString()
               });
-
-              // Notify user
-              if (promData.userId) {
-                await db.collection("notifications").add({
-                  userId: promData.userId,
-                  title: "Promotion Activated!",
-                  message: `Your listing has been promoted to ${promData.tier} for ${promData.durationDays} days.`,
-                  type: "success",
-                  read: false,
-                  link: `/listing/${promData.listingId}`,
-                  createdAt: new Date().toISOString()
-                });
-              }
             }
           }
         }
       }
-
-      res.json({ success: true, message: "Webhook integrated and successfully acknowledged." });
+      return res.json({ success: true, message: "Webhook integrated and successfully acknowledged" });
     } catch (error: any) {
-      console.error("Error processing IntaSend callback webhook payload:", error);
+      console.error("Error holding IntaSend webhook callback:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Keep compatibility URL
+  app.post("/api/intasend/callback", async (req, res) => {
+    console.log("[Rerouting /api/intasend/callback to /api/webhook/intasend]");
+    // Call internal webhook implementation directly
+    const { api_ref, invoice_id, state } = req.body;
+    try {
+      if (state === "COMPLETE") {
+        let txDoc = null;
+        if (api_ref) {
+          const txQuery = await db.collection("transactions").doc(api_ref).get();
+          if (txQuery.exists) {
+            txDoc = txQuery;
+          }
+        }
+        if (!txDoc && invoice_id) {
+          const txQuery = await db.collection("transactions")
+            .where("checkoutRequestId", "==", invoice_id)
+            .limit(1)
+            .get();
+          if (!txQuery.empty) {
+            txDoc = txQuery.docs[0];
+          }
+        }
+
+        if (txDoc) {
+          const txData = txDoc.data() || {};
+          if (txData.status !== "paid_escrow") {
+            await txDoc.ref.update({
+              status: "paid_escrow",
+              updatedAt: new Date().toISOString(),
+              mpesaReceiptNumber: invoice_id || "IS-REC-" + Math.random().toString(36).substr(2, 6).toUpperCase()
+            });
+
+            if (txData.buyerId) {
+              await db.collection("notifications").add({
+                userId: txData.buyerId,
+                title: "Payment Received",
+                message: `Your payment of KES ${txData.amount} is secured in HudumaLink Escrow. Status: paid_escrow.`,
+                type: "success",
+                read: false,
+                link: `/profile`,
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+        }
+      }
+      return res.json({ success: true, message: "Re-routed webhook acknowledged." });
+    } catch (err) {
+      console.error("Re-route webhook error:", err);
+      res.status(500).json({ error: "Fail" });
+    }
+  });
+
+  // API Route: Initiate Escrow Release
+  app.post("/api/release-payment", verifyUser, async (req: any, res: any) => {
+    const { transactionId } = req.body;
+    const userId = req.user.uid;
+
+    try {
+      if (!transactionId) {
+        return res.status(400).json({ error: "Missing transactionId" });
+      }
+
+      const txRef = db.collection("transactions").doc(transactionId);
+      const txDoc = await txRef.get();
+      if (!txDoc.exists) {
+        return res.status(404).json({ error: "Transaction/order not found" });
+      }
+
+      const txData = txDoc.data() || {};
+      
+      // Safety: Authorization check
+      if (txData.buyerId !== userId && txData.sellerId !== userId && req.user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized view list release action" });
+      }
+
+      if (txData.status !== "paid_escrow") {
+        return res.status(400).json({ error: `Cannot release non-escrow payment. Current status is '${txData.status}'` });
+      }
+
+      const sellerRef = db.collection("users").doc(txData.sellerId);
+      const sellerDoc = await sellerRef.get();
+      if (!sellerDoc.exists) {
+        return res.status(404).json({ error: "Seller profile not registered" });
+      }
+      const sellerData = sellerDoc.data() || {};
+      const sellerPhone = sellerData.phoneNumber || txData.phoneNumber || "";
+      if (!sellerPhone) {
+        return res.status(400).json({ error: "Seller does not have registered phone number" });
+      }
+
+      // Calculate commission (Services: 10%, Goods: Tiered)
+      let itemType: 'product' | 'service' = txData.type || 'service';
+      if (!txData.type && txData.listingId) {
+        const listingDoc = await db.collection("listings").doc(txData.listingId).get();
+        if (listingDoc.exists) {
+          itemType = (listingDoc.data() || {}).type || 'service';
+        }
+      }
+
+      const amount = txData.amount || 0;
+      const { commission, sellerAmount } = calculateSellerCommission(amount, itemType);
+
+      // Trigger IntaSend payout transfer WITH requires_approval = 'YES'
+      const payoutResult = await initiateIntasendPayoutPending(
+        sellerData.displayName || "Seller Vendor",
+        sellerPhone,
+        sellerAmount,
+        `HudumaLink Release Escrow Order: ${transactionId}`
+      );
+
+      if (!payoutResult.success) {
+        return res.status(502).json({ error: "Upstream payout reservation failed" });
+      }
+
+      const transferId = payoutResult.trackingId;
+
+      await txRef.update({
+        status: "pending_release",
+        transferId: transferId,
+        commission: commission,
+        sellerAmount: sellerAmount,
+        updatedAt: new Date().toISOString()
+      });
+
+      // Send Notification
+      await db.collection("notifications").add({
+        userId: txData.sellerId,
+        title: "Escrow release pending administrative approval",
+        message: `Payout of KES ${sellerAmount} is reserved for release (commission KES ${commission} deducted). Static files waiting validation.`,
+        type: "info",
+        read: false,
+        link: `/profile`,
+        createdAt: new Date().toISOString()
+      });
+
+      return res.json({
+        success: true,
+        message: "Escrow release payout dispatched with requires_approval='YES'. pending_release status.",
+        transferId,
+        commission,
+        sellerAmount
+      });
+    } catch (error: any) {
+      console.error("Release payment endpoint error:", error);
+      return res.status(500).json({ error: error.message || "Release initiation error." });
+    }
+  });
+
+  // API Route: Approve Payout by Administrative Authority
+  app.post("/api/approve-payout", verifyAdmin, async (req: any, res: any) => {
+    const { transactionId, transferId } = req.body;
+
+    try {
+      let txDoc = null;
+      if (transactionId) {
+        txDoc = await db.collection("transactions").doc(transactionId).get();
+      } else if (transferId) {
+        const querySnap = await db.collection("transactions").where("transferId", "==", transferId).limit(1).get();
+        if (!querySnap.empty) {
+          txDoc = querySnap.docs[0];
+        }
+      }
+
+      if (!txDoc || !txDoc.exists) {
+        return res.status(404).json({ error: "Matching transaction/escrow order not found." });
+      }
+
+      const txData = txDoc.data() || {};
+      const fileId = transferId || txData.transferId;
+
+      if (!fileId) {
+        return res.status(400).json({ error: "No active transfer associated with transaction." });
+      }
+
+      if (txData.status !== "pending_release") {
+        return res.status(400).json({ error: `Transaction status is '${txData.status}', not 'pending_release'.` });
+      }
+
+      // Finalize approve payout on IntaSend!
+      const approvalResult = await approveIntasendPayout(fileId);
+      const trackingReceipt = approvalResult.receiptNumber;
+
+      await txDoc.ref.update({
+        status: "completed",
+        receiptNumber: trackingReceipt,
+        updatedAt: new Date().toISOString()
+      });
+
+      // Credit seller's local wallet
+      const sellerRef = db.collection("users").doc(txData.sellerId);
+      await db.runTransaction(async (dbTx) => {
+        const sellerSnap = await dbTx.get(sellerRef);
+        const sellerData = sellerSnap.data() || {};
+        const prevEarnings = sellerData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+        const newEarnings = {
+          totalVolume: (prevEarnings.totalVolume || 0) + (txData.sellerAmount || txData.amount),
+          withdrawableBalance: (prevEarnings.withdrawableBalance || 0) + (txData.sellerAmount || txData.amount),
+          pendingHoldBalance: prevEarnings.pendingHoldBalance || 0
+        };
+
+        dbTx.update(sellerRef, {
+          escrowBalance: admin.firestore.FieldValue.increment(txData.sellerAmount || txData.amount),
+          earnings: newEarnings,
+          updatedAt: new Date().toISOString()
+        });
+      });
+
+      // Add notifications
+      await db.collection("notifications").add({
+        userId: txData.sellerId,
+        title: "Escrow Release Approved!",
+        message: `A payout of KES ${txData.sellerAmount} was approved and disbursed. Ref: ${trackingReceipt}`,
+        type: "success",
+        read: false,
+        link: `/profile`,
+        createdAt: new Date().toISOString()
+      });
+
+      await db.collection("notifications").add({
+        userId: txData.buyerId,
+        title: "Order Completed",
+        message: `Escrow payment of KES ${txData.amount} has been successfully settled.`,
+        type: "success",
+        read: false,
+        link: `/profile`,
+        createdAt: new Date().toISOString()
+      });
+
+      return res.json({
+        success: true,
+        message: "Manually payout approval completed successfully.",
+        receiptNumber: trackingReceipt,
+        status: "completed"
+      });
+    } catch (err: any) {
+      console.error("Admin payout approval failed:", err);
+      return res.status(500).json({ error: err.message || "Approval execution error" });
+    }
+  });
+
+  // API Route: Raise Conflict/Dispute on Order
+  app.post("/api/raise-dispute", verifyUser, async (req: any, res: any) => {
+    const { transactionId, disputeReason, details } = req.body;
+    const userId = req.user.uid;
+
+    try {
+      if (!transactionId) {
+        return res.status(400).json({ error: "Missing transactionId" });
+      }
+
+      const txRef = db.collection("transactions").doc(transactionId);
+      const txDoc = await txRef.get();
+      if (!txDoc.exists) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+
+      const txData = txDoc.data() || {};
+      if (txData.status !== "paid_escrow" && txData.status !== "pending_release") {
+        return res.status(400).json({ error: `Cannot dispute. Current status is ${txData.status}.` });
+      }
+
+      // Update Order fields to dispute freeze mode
+      await txRef.update({
+        status: "disputed",
+        disputeReason: disputeReason || "Dispute",
+        disputeDetails: details || "",
+        updatedAt: new Date().toISOString()
+      });
+
+      // Add to Admin dispute tracking log
+      await db.collection("disputes").add({
+        transactionId,
+        buyerId: txData.buyerId,
+        sellerId: txData.sellerId,
+        reason: disputeReason || "Conflict",
+        details: details || "",
+        createdAt: new Date().toISOString(),
+        status: "open"
+      });
+
+      // Notify other recipient
+      const notifiedPart = userId === txData.buyerId ? txData.sellerId : txData.buyerId;
+      await db.collection("notifications").add({
+        userId: notifiedPart,
+        title: "Dispute Raised on Order",
+        message: `A dispute was formally initialized. Escrow balance is frozen. Reason: ${disputeReason}`,
+        type: "warning",
+        read: false,
+        link: `/profile`,
+        createdAt: new Date().toISOString()
+      });
+
+      return res.json({
+        success: true,
+        message: "Dispute registered. Payment is successfully locked.",
+        status: "disputed"
+      });
+    } catch (err: any) {
+      console.error("Error raising dispute:", err);
+      return res.status(500).json({ error: err.message || "Failed to raise dispute" });
+    }
+  });
+
+  // API Route: Resolve dispute (approve payout or issue refund via IntaSend Refund API)
+  app.post("/api/resolve-dispute", verifyAdmin, async (req: any, res: any) => {
+    const { transactionId, decision, resolutionNotes } = req.body;
+
+    try {
+      if (!transactionId || !decision) {
+        return res.status(400).json({ error: "Missing parameters" });
+      }
+
+      const txRef = db.collection("transactions").doc(transactionId);
+      const txDoc = await txRef.get();
+      if (!txDoc.exists) {
+        return res.status(404).json({ error: "Transaction not located." });
+      }
+
+      const txData = txDoc.data() || {};
+      if (txData.status !== "disputed") {
+        return res.status(400).json({ error: "This order is not in disputed status." });
+      }
+
+      if (decision === "release") {
+        let fileId = txData.transferId;
+
+        // Initiate transfer if it doesn't already exist
+        if (!fileId) {
+          const sellerRef = db.collection("users").doc(txData.sellerId);
+          const sellerDoc = await sellerRef.get();
+          if (!sellerDoc.exists) {
+            return res.status(404).json({ error: "Seller profile not registered." });
+          }
+          const sellerData = sellerDoc.data() || {};
+          const sellerPhone = sellerData.phoneNumber || txData.phoneNumber || "";
+
+          let itemType: 'product' | 'service' = txData.type || 'service';
+          const { commission, sellerAmount } = calculateSellerCommission(txData.amount, itemType);
+
+          const payoutInitResult = await initiateIntasendPayoutPending(
+            sellerData.displayName || "Seller User",
+            sellerPhone,
+            sellerAmount,
+            `Dispute Settlement: Escrow Release for ${transactionId}`
+          );
+
+          if (!payoutInitResult.success) {
+            return res.status(502).json({ error: "Unable to provision settlement payout on IntaSend." });
+          }
+
+          fileId = payoutInitResult.trackingId;
+          await txRef.update({
+            transferId: fileId,
+            commission,
+            sellerAmount
+          });
+        }
+
+        const approveResult = await approveIntasendPayout(fileId);
+
+        await txRef.update({
+          status: "completed",
+          disputeResolution: "released_to_seller",
+          adminVerdictNotes: resolutionNotes || "Admin decided to release funds to provider.",
+          updatedAt: new Date().toISOString()
+        });
+
+        // Notify
+        await db.collection("notifications").add({
+          userId: txData.sellerId,
+          title: "🔑 Dispute Resolved: Funds Disbursed",
+          message: `The active dispute has been settled in your favor. KES ${txData.sellerAmount || txData.amount} is added to your account balance.`,
+          type: "success",
+          read: false,
+          link: `/profile`,
+          createdAt: new Date().toISOString()
+        });
+
+        await db.collection("notifications").add({
+          userId: txData.buyerId,
+          title: "⚖️ Dispute Settled",
+          message: `The dispute was resolved. All transaction funds have been disbursed to the seller.`,
+          type: "info",
+          read: false,
+          link: `/profile`,
+          createdAt: new Date().toISOString()
+        });
+
+        return res.json({
+          success: true,
+          message: "Dispute resolved in favor of the seller. Escrow release executed.",
+          status: "completed"
+        });
+
+      } else if (decision === "refund") {
+        const paymentIntent = txData.paymentIntentId || txData.checkoutRequestId;
+        if (!paymentIntent) {
+          return res.status(400).json({ error: "Payment Intent metadata is missing. Cannot issue automated refund." });
+        }
+
+        const refundResult = await refundIntasendPayment(
+          paymentIntent,
+          txData.amount || 0,
+          resolutionNotes || "Dispute Settle: Refunded to buyer"
+        );
+
+        if (!refundResult.success) {
+          return res.status(502).json({ error: "IntaSend Refund engine returned error." });
+        }
+
+        await txRef.update({
+          status: "refunded",
+          disputeResolution: "refunded_to_buyer",
+          adminVerdictNotes: resolutionNotes || "Dispute settled. Full refund issued.",
+          updatedAt: new Date().toISOString()
+        });
+
+        // Notify
+        await db.collection("notifications").add({
+          userId: txData.buyerId,
+          title: "💸 Dispute Settle: Refund Issued",
+          message: `Dispute has been settled in your favor! KES ${txData.amount} has been refunded to your card/M-Pesa.`,
+          type: "success",
+          read: false,
+          link: `/profile`,
+          createdAt: new Date().toISOString()
+        });
+
+        await db.collection("notifications").add({
+          userId: txData.sellerId,
+          title: "⚖️ Dispute Settled: Refund Processed",
+          message: `Administrative ruling has issued a full transaction refund of KES ${txData.amount} to the customer.`,
+          type: "warning",
+          read: false,
+          link: `/profile`,
+          createdAt: new Date().toISOString()
+        });
+
+        return res.json({
+          success: true,
+          message: "Dispute settled in favor of the buyer. IntaSend refund processed.",
+          status: "refunded"
+        });
+
+      } else {
+        return res.status(400).json({ error: "Invalid resolution verdict." });
+      }
+    } catch (err: any) {
+      console.error("Dispute resolution error:", err);
+      return res.status(500).json({ error: err.message || "Failed to resolve dispute." });
+    }
+  });
+
+  // API Route: Withdraw wallet balance via IntaSend
+  app.post("/api/withdraw-request", verifyUser, async (req: any, res: any) => {
+    const grossAmount = Number(req.body.grossAmount || req.body.amount);
+    const userId = req.user.uid;
+
+    if (isNaN(grossAmount) || grossAmount <= 0) {
+      return res.status(400).json({ error: "Invalid withdrawal requested amount." });
+    }
+
+    if (grossAmount < 100) {
+      return res.status(400).json({ error: "Platform policy: Minimum withdrawal limit is KES 100." });
+    }
+
+    try {
+      await unlockPendingBalances(userId);
+
+      const userRef = db.collection("users").doc(userId);
+      const userDoc = await userRef.get();
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: "User profile not registered." });
+      }
+
+      const userData = userDoc.data() || {};
+      const rawPhone = req.body.phoneNumber || userData.phoneNumber;
+      if (!rawPhone) {
+        return res.status(400).json({ error: "M-Pesa registered phone number is missing." });
+      }
+
+      let formattedPhone = rawPhone.replace(/\D/g, "");
+      if (formattedPhone.startsWith("0")) {
+        formattedPhone = "254" + formattedPhone.slice(1);
+      } else if (formattedPhone.startsWith("7") || formattedPhone.startsWith("1")) {
+        formattedPhone = "254" + formattedPhone;
+      }
+
+      if (!formattedPhone.startsWith("254") || (formattedPhone.length !== 12)) {
+        return res.status(400).json({ error: "Invalid phone number format." });
+      }
+
+      // Subtract withdrawal fees (standard charge KES 15)
+      const withdrawalFee = 15;
+      const netPayoutAmount = grossAmount - withdrawalFee;
+
+      if (netPayoutAmount <= 0) {
+        return res.status(400).json({ error: "Total amount is smaller than withdrawal processing fees." });
+      }
+
+      if (userData.walletFrozenUntil && new Date(userData.walletFrozenUntil) > new Date()) {
+        return res.status(403).json({ error: "Your wallet balance withdrawals are frozen." });
+      }
+
+      const withdrawalRef = db.collection("withdrawals").doc();
+
+      // Transact in Firestore database first
+      await db.runTransaction(async (transaction) => {
+        const refreshedUserDoc = await transaction.get(userRef);
+        const refreshedUserData = refreshedUserDoc.data() || {};
+        const prevEarnings = refreshedUserData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+        const withdrawable = prevEarnings.withdrawableBalance ?? refreshedUserData.escrowBalance ?? 0;
+
+        if (withdrawable < grossAmount) {
+          throw new Error(`Insufficient funds. Available withdrawable is KES ${withdrawable.toFixed(2)}.`);
+        }
+
+        const newEarnings = {
+          ...prevEarnings,
+          withdrawableBalance: Math.max(0, (prevEarnings.withdrawableBalance || 0) - grossAmount),
+        };
+
+        transaction.update(userRef, {
+          escrowBalance: admin.firestore.FieldValue.increment(-grossAmount),
+          earnings: newEarnings,
+          updatedAt: new Date().toISOString()
+        });
+
+        transaction.set(withdrawalRef, {
+          userId,
+          amount: grossAmount,
+          fee: withdrawalFee,
+          netPayout: netPayoutAmount,
+          phoneNumber: formattedPhone,
+          status: "processing",
+          method: "mpesa-intasend",
+          createdAt: new Date().toISOString()
+        });
+      });
+
+      let isUpstreamSuccess = true;
+      let trackingReceipt = "IS-WD-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+
+      if (INTASEND_SEC_KEY !== "IS_SEC_test_mock" && process.env.INTASEND_SECRET_KEY) {
+        try {
+          const payoutResult = await dispatchIntasendPayout(
+            userData.displayName || "Seller Vendor",
+            formattedPhone,
+            netPayoutAmount,
+            "HudumaLink Seller Wallet Outbound"
+          );
+          if (payoutResult && payoutResult.success) {
+            trackingReceipt = payoutResult.receiptNumber;
+          } else {
+            isUpstreamSuccess = false;
+          }
+        } catch (intasendError: any) {
+          console.error("Upstream withdrawal fail:", intasendError.response?.data || intasendError.message);
+          isUpstreamSuccess = false;
+        }
+      } else {
+        console.log(`[SIMULATION WD] IntaSend payout: Recipient=${formattedPhone}, net payout KES ${netPayoutAmount}`);
+      }
+
+      if (isUpstreamSuccess) {
+        await withdrawalRef.update({
+          status: "completed",
+          receiptNumber: trackingReceipt,
+          updatedAt: new Date().toISOString()
+        });
+
+        await db.collection("notifications").add({
+          userId,
+          title: "IntaSend Mobile Withdrawal Accomplished",
+          message: `Payout of KES ${grossAmount} processed. KES ${netPayoutAmount} sent to ${formattedPhone} after KES ${withdrawalFee} processing fee. Ref: ${trackingReceipt}`,
+          type: "success",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        return res.json({
+          success: true,
+          withdrawalId: withdrawalRef.id,
+          receiptNumber: trackingReceipt,
+          amount: grossAmount,
+          deductedAmount: grossAmount,
+          fee: withdrawalFee
+        });
+      } else {
+        // Rollback transaction balance
+        await db.runTransaction(async (rollbackTx) => {
+          const refreshedUserDoc = await rollbackTx.get(userRef);
+          const refreshedUserData = refreshedUserDoc.data() || {};
+          const prevEarnings = refreshedUserData.earnings || { totalVolume: 0, withdrawableBalance: 0, pendingHoldBalance: 0 };
+          const newEarnings = {
+            ...prevEarnings,
+            withdrawableBalance: Math.max(0, (prevEarnings.withdrawableBalance || 0) + grossAmount),
+          };
+
+          rollbackTx.update(userRef, {
+            escrowBalance: admin.firestore.FieldValue.increment(grossAmount),
+            earnings: newEarnings,
+            updatedAt: new Date().toISOString()
+          });
+
+          rollbackTx.update(withdrawalRef, {
+            status: "failed",
+            failReason: "Upstream payout engine failed.",
+            updatedAt: new Date().toISOString()
+          });
+        });
+
+        return res.status(502).json({ error: "Failed to disburse withdrawal payout via IntaSend." });
+      }
+    } catch (err: any) {
+      console.error("Withdrawal API route failure:", err);
+      return res.status(500).json({ error: err.message || "Internal server withdrawal error" });
     }
   });
 

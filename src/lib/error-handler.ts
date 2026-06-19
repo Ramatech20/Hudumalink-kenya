@@ -138,3 +138,47 @@ export const handleAuthError = (error: any): AppError => {
   toast.error(message);
   return appError;
 };
+
+// Monitoring Logger Mock (for Sentry, LogRocket)
+export const logger = {
+  error: (context: string, payload: { error: string; timestamp: Date }) => {
+    console.error(`[Monitoring Logger] Context: ${context} | Error: ${payload.error} | Timestamp: ${payload.timestamp.toISOString()}`);
+  }
+};
+
+/**
+ * Standard app-wide error handler
+ */
+export const handleAppError = (error: unknown, context: string, customMessage?: string) => {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
+  // Log to monitoring service mock
+  logger.error(context, { error: errorMessage, timestamp: new Date() });
+  
+  // Show user-friendly toast
+  const userFriendlyMsg = customMessage || errorMessage || 'An unexpected error occurred';
+  toast.error(userFriendlyMsg);
+  
+  return { success: false, message: errorMessage };
+};
+
+/**
+ * Exponential backoff retry utility for network requests
+ */
+export async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delay = 1000
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries <= 1) {
+      throw error;
+    }
+    console.warn(`Operation failed, retrying in ${delay}ms... (${retries - 1} attempts left)`);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    return retryWithBackoff(fn, retries - 1, delay * 2);
+  }
+}
+

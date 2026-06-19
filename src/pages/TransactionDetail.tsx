@@ -309,21 +309,22 @@ const TransactionDetail = () => {
 
   const simulateClientSidePayment = async () => {
     if (!id || !transaction) return;
-    const generatedReceipt = 'MOCK' + Math.random().toString(36).substr(2, 9).toUpperCase();
+    const generatedReceipt = 'IS-REC-MOCK-' + Math.random().toString(36).substr(2, 9).toUpperCase();
     
     const { doc, updateDoc, collection, addDoc } = await import('firebase/firestore');
     
     await updateDoc(doc(db, 'transactions', id), {
-      status: 'deposited',
+      status: 'paid_escrow',
       updatedAt: new Date().toISOString(),
-      mpesaReceiptNumber: generatedReceipt
+      mpesaReceiptNumber: generatedReceipt,
+      paymentIntentId: 'IS-MOCK-INV-' + Math.random().toString(36).substr(2, 9).toUpperCase()
     });
 
     try {
       await addDoc(collection(db, 'notifications'), {
         userId: transaction.buyerId,
-        title: 'Payment Successful (Sandbox Simulation)',
-        message: `Your simulated payment of KES ${transaction.amount} has been deposited into Escrow.`,
+        title: 'Payment Secured',
+        message: `Your payment of KES ${transaction.amount} has been secured in Escrow. Status: paid_escrow.`,
         type: 'success',
         read: false,
         link: `/profile`,
@@ -333,8 +334,8 @@ const TransactionDetail = () => {
       if (transaction.sellerId) {
         await addDoc(collection(db, 'notifications'), {
           userId: transaction.sellerId,
-          title: 'Payment Deposited (Sandbox Simulation)',
-          message: `A simulated payment of KES ${transaction.amount} has been deposited into Escrow for your listing.`,
+          title: 'Escrow Secured',
+          message: `Escrow payment of KES ${transaction.amount} is secured. Deliver your services safely!`,
           type: 'success',
           read: false,
           link: `/profile`,
@@ -345,27 +346,31 @@ const TransactionDetail = () => {
       console.warn('Simulation notification skipped:', notifErr);
     }
 
-    toast.success('Simulation completed! Payment deposited.');
+    toast.success('Simulation completed! Payment secured.');
   };
 
   const handleSimulatePayment = async () => {
     if (!id) return;
     setSimulating(true);
     try {
-      const response = await fetch('/api/mpesa/simulate-callback', {
+      const response = await fetch('/api/webhook/intasend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: id })
+        body: JSON.stringify({ 
+          api_ref: id,
+          invoice_id: 'IS-MOCK-INV-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+          state: 'COMPLETE'
+        })
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        toast.success('M-Pesa payment simulation successful! Status updated.');
+        toast.success('IntaSend escrow webhook simulation successful! Status updated.');
       } else {
-        console.warn('Backend payment simulation callback failed, executing direct client-side fallback update:', data.error);
+        console.warn('Backend payment simulation webhook callback failed, executing direct client-side fallback update:', data.error);
         await simulateClientSidePayment();
       }
     } catch (err: any) {
-      console.warn('Backend payment simulation network error, executing direct client-side fallback update:', err);
+      console.warn('Backend payment simulation error, executing direct client-side fallback update:', err);
       try {
         await simulateClientSidePayment();
       } catch (fallbackErr: any) {
@@ -471,13 +476,17 @@ const TransactionDetail = () => {
   const hoursSinceDelivery = deliveredAtTime ? (Date.now() - deliveredAtTime) / (1000 * 60 * 60) : 0;
   const canRequestRelease = hoursSinceDelivery >= 48;
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+    pending_payment: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
     deposited: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    paid_escrow: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
     delivered: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/30 font-bold',
+    pending_release: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/30 font-bold',
     released: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-500/20',
     completed: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-500/20',
     disputed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+    refunded: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-500/10',
     cancelled: 'bg-gray-100 text-gray-800 dark:bg-neutral-800 dark:text-gray-400'
   };
 
@@ -820,7 +829,7 @@ const TransactionDetail = () => {
             </div>
           )}
 
-          {isBuyer && transaction.status === 'deposited' && (
+          {isBuyer && (transaction.status === 'deposited' || transaction.status === 'paid_escrow') && (
             <div className="bg-primary/5 border border-primary/10 rounded-3xl p-8 space-y-4">
               <div className="flex items-start space-x-4">
                 <div className="p-3 bg-primary/10 rounded-2xl">
@@ -847,7 +856,7 @@ const TransactionDetail = () => {
           )}
 
           {/* Seller / Service Provider: Payment Request / Delivery Workflow */}
-          {!isBuyer && (user?.uid === transaction.sellerId) && (transaction.status === 'deposited' || transaction.status === 'delivered') && (
+          {!isBuyer && (user?.uid === transaction.sellerId) && (transaction.status === 'deposited' || transaction.status === 'paid_escrow' || transaction.status === 'delivered') && (
             <div className="bg-white dark:bg-neutral-900 border border-gray-150/50 dark:border-neutral-800 rounded-3xl p-8 space-y-6 shadow-sm">
               <div className="flex items-start space-x-4">
                 <div className="p-3 bg-primary/10 rounded-2xl">
@@ -861,7 +870,7 @@ const TransactionDetail = () => {
                 </div>
               </div>
 
-              {transaction.status === 'deposited' ? (
+              {(transaction.status === 'deposited' || transaction.status === 'paid_escrow') ? (
                 <div className="space-y-4 pt-2">
                   <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 text-xs text-primary dark:text-primary leading-relaxed font-semibold">
                     💡 Ready to request delivery? Marking this order as Delivered starts HudumaLink's official grace periods.
@@ -1016,7 +1025,7 @@ const TransactionDetail = () => {
           )}
 
           {/* Administrative Manual Escrow Override Option */}
-          {(user?.role === 'admin' || user?.email === 'ramadhanwambia83@gmail.com') && (transaction.status === 'deposited' || transaction.status === 'delivered') && (
+          {(user?.role === 'admin' || user?.email === 'ramadhanwambia83@gmail.com') && (transaction.status === 'deposited' || transaction.status === 'paid_escrow' || transaction.status === 'delivered') && (
             <div className="bg-orange-500/5 border border-orange-500/20 rounded-3xl p-8 space-y-5">
               <div className="flex items-start space-x-4">
                 <div className="p-3 bg-orange-500/10 rounded-2xl">

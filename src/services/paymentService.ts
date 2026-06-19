@@ -1,6 +1,5 @@
-import { collection, addDoc, updateDoc, doc, increment, getDoc, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
-import { Transaction, Listing, User } from '../types';
 import { toast } from 'sonner';
 
 export interface PaymentRequest {
@@ -19,21 +18,28 @@ export interface PaymentRequest {
 }
 
 /**
- * Handles the M-Pesa STK Push and escrow transaction creation.
+ * Handles IntaSend checkout link creation and escrow transaction creation.
  */
 export const initiateEscrowPayment = async (request: PaymentRequest): Promise<string | null> => {
   try {
-    // 1. Create the transaction in Firestore with 'pending' status
+    const authUser = auth.currentUser;
+    const email = authUser?.email || 'customer@hudumalink.co.ke';
+    const displayName = authUser?.displayName || 'HudumaLink Customer';
+    const nameParts = displayName.split(' ');
+    const firstName = nameParts[0] || 'Customer';
+    const lastName = nameParts[1] || 'Guest';
+
+    // 1. Create the transaction in Firestore with 'pending_payment' status
     const transactionData: any = {
       listingId: request.listingId,
       buyerId: request.buyerId,
       sellerId: request.sellerId,
       amount: request.amount,
       tipAmount: request.tipAmount,
-      status: 'pending',
+      status: 'pending_payment',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      paymentMethod: 'mpesa',
+      paymentMethod: 'intasend',
       phoneNumber: request.phoneNumber,
     };
 
@@ -69,27 +75,39 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
     }
     const transactionId = docRef.id;
 
-    // 2. Call backend to initiate STK Push
+    // 2. Call backend to create IntaSend checkout link
     try {
-      const response = await fetch('/api/mpesa/stkpush', {
+      const idToken = authUser ? await authUser.getIdToken() : '';
+      const response = await fetch('/api/create-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(idToken ? { 'Authorization': `Bearer ${idToken}` } : {})
+        },
         body: JSON.stringify({
-          phoneNumber: request.phoneNumber,
-          amount: request.amount,
-          accountReference: `ORDER-${transactionId.substring(0, 5)}`,
-          transactionDesc: `Escrow for ${request.listingTitle}`,
-          transactionId: transactionId
+          transactionId: transactionId,
+          amount: request.amount + (request.tipAmount || 0),
+          email: email,
+          firstName: firstName,
+          lastName: lastName,
+          phone: request.phoneNumber,
+          redirectUrl: `${window.location.origin}/transactions/${transactionId}`
         })
       });
       
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to initiate STK Push');
+        throw new Error(data.error || 'Failed to create checkout link');
       }
-    } catch (apiError) {
-      console.error('API Error initiating STK Push:', apiError);
-      // We continue since the transaction was created, but warn the user
+
+      if (data.url) {
+        toast.success('Redirecting to secure IntaSend checkout gateway...');
+        // Execute redirect
+        window.location.href = data.url;
+      }
+    } catch (apiError: any) {
+      console.error('API Error generating checkout:', apiError);
+      toast.error('Payment channel error: ' + apiError.message);
     }
 
     return transactionId;
@@ -105,19 +123,17 @@ export const initiateEscrowPayment = async (request: PaymentRequest): Promise<st
 };
 
 /**
- * Handles the payment confirmation callback (Simulation for dev).
+ * Handles the payment confirmation callback (Simulation placeholder check).
  */
 export const processPaymentSuccess = async (transactionId: string) => {
-  // In production, this is handled by /api/mpesa/callback
-  // We'll keep a mock version for UI simulation if needed, but it should ideally call an admin-authorized API
-  console.log(`Simulation: Payment success for ${transactionId}`);
+  console.log(`IntaSend Webhook handles payment confirmation for ${transactionId}`);
 };
 
 /**
  * Releases funds from escrow to the seller.
- * Calls backend for secure settlement.
+ * Calls backend to calculate commission, deduct and initiate transfer withrequires_approval = 'YES'.
  */
-export const releaseEscrowFunds = async (transactionId: string) => {
+export const releaseEscrowFunds = async (transactionId: string): Promise<boolean> => {
   try {
     const authUser = auth.currentUser;
     if (!authUser) {
@@ -125,88 +141,27 @@ export const releaseEscrowFunds = async (transactionId: string) => {
       return false;
     }
 
-    const txRef = doc(db, 'transactions', transactionId);
-    
-    const result = await runTransaction(db, async (transaction) => {
-      const txDoc = await transaction.get(txRef);
-      if (!txDoc.exists()) {
-        throw new Error('Transaction not found');
-      }
-
-      const txData = txDoc.data();
-      if (!txData) {
-        throw new Error('Data empty or invalid');
-      }
-
-      if (txData.status === 'completed' || txData.status === 'released') {
-        throw new Error('Transaction is already completed');
-      }
-
-      // 1. Convert Transaction status to completed/released
-      transaction.update(txRef, {
-        status: 'released',
-        releasedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-
-      // 2. Increment seller's escrowBalance directly!
-      const sellerRef = doc(db, 'users', txData.sellerId);
-      transaction.update(sellerRef, {
-        escrowBalance: increment(txData.amount),
-        completedPaymentsCount: increment(1),
-        updatedAt: new Date().toISOString()
-      });
-
-      // Merge on public profile
-      const publicRef = doc(db, 'users_public', txData.sellerId);
-      transaction.set(publicRef, {
-        completedPaymentsCount: increment(1),
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
-      // Create hold ledger or other records
-      const holdLedgerRef = doc(collection(db, 'hold_ledgers'));
-      transaction.set(holdLedgerRef, {
-        userId: txData.sellerId,
-        transactionId: transactionId,
-        amount: txData.amount,
-        releaseTime: new Date().toISOString(),
-        status: 'completed',
-        createdAt: new Date().toISOString()
-      });
-
-      // Create notifications for buyer and seller
-      const sellerNotifRef = doc(collection(db, 'notifications'));
-      transaction.set(sellerNotifRef, {
-        userId: txData.sellerId,
-        title: 'Funds Released!',
-        message: `The buyer has confirmed delivery. KES ${txData.amount} has been added to your escrow balance.`,
-        type: 'success',
-        read: false,
-        createdAt: new Date().toISOString()
-      });
-
-      const buyerNotifRef = doc(collection(db, 'notifications'));
-      transaction.set(buyerNotifRef, {
-        userId: txData.buyerId,
-        title: 'Transaction Confirmed',
-        message: `You have successfully released KES ${txData.amount} to the service provider.`,
-        type: 'success',
-        read: false,
-        createdAt: new Date().toISOString()
-      });
-
-      return true;
+    const idToken = await authUser.getIdToken();
+    const response = await fetch('/api/release-payment', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ transactionId })
     });
 
-    if (result) {
-      toast.success('Funds released successfully!');
-      return true;
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to request Escrow release');
     }
-    return false;
+
+    toast.success('Satisfaction confirmed! Payout transfer created and awaits administrator final review.');
+    return true;
   } catch (error: any) {
-    console.error('Error in releaseEscrowFunds client-side:', error);
-    toast.error('Failed to release funds: ' + error.message);
+    console.error('Error in releaseEscrowFunds:', error);
+    toast.error('Release failed: ' + error.message);
     return false;
   }
 };
+

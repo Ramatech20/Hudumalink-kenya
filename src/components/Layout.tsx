@@ -181,11 +181,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     let phoneNumber = user.phoneNumber;
     if (!phoneNumber) {
-      phoneNumber = window.prompt('Please enter your M-Pesa phone number (e.g., 2547XXXXXXXX):') || '';
+      phoneNumber = window.prompt('Please enter your phone number (e.g., 2547XXXXXXXX):') || '';
     }
 
-    if (!phoneNumber || phoneNumber.length < 10) {
-      toast.error('A valid M-Pesa phone number is required to checkout');
+    if (!phoneNumber || phoneNumber.length < 9) {
+      toast.error('A valid phone number is required to checkout');
       return;
     }
 
@@ -209,10 +209,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         sellerId: sellerId,
         sellerName: sellerName || 'Vendor',
         amount: totalAmount,
-        status: 'pending',
+        status: 'pending_payment',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        paymentMethod: 'mpesa',
+        paymentMethod: 'intasend',
         phoneNumber: phoneNumber.replace(/\+/g, ''),
         items: cartItems.map(item => ({
           id: item.listing.id,
@@ -231,60 +231,47 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const docRef = await addDoc(dbCollection, transactionData);
       const newTransactionId = docRef.id;
 
-      // Call server STK Push
+      // Call server to create checkout link
       try {
-        await fetch('/api/mpesa/stkpush', {
+        const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+        const response = await fetch('/api/create-payment', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
           body: JSON.stringify({
-            phoneNumber: phoneNumber.replace(/\+/g, ''),
+            transactionId: newTransactionId,
             amount: totalAmount,
-            accountReference: `ORDER-${newTransactionId.substring(0, 5)}`,
-            transactionDesc: `Escrow for ${transactionData.listingTitle}`,
-            transactionId: newTransactionId
+            email: user.email || 'customer@hudumalink.co.ke',
+            firstName: user.displayName?.split(' ')[0] || 'Customer',
+            lastName: user.displayName?.split(' ')[1] || 'Guest',
+            phone: phoneNumber.replace(/\+/g, ''),
+            redirectUrl: `${window.location.origin}/transactions/${newTransactionId}`
           })
         });
-      } catch (err) {
-        console.error('Failed to dispatch Mpesa push notification, proceeding:', err);
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to create checkout link');
+        }
+
+        if (data.url) {
+          toast.success('Redirecting to secure IntaSend checkout gateway...');
+          clearCart();
+          setIsCartOpen(false);
+          window.location.href = data.url;
+          return;
+        }
+      } catch (err: any) {
+        console.error('Failed to dispatch payment creation:', err);
+        toast.error('Payment channel error: ' + err.message);
       }
 
-      toast.success('STK Push sent successfully! Enter your M-Pesa PIN on your mobile phone.');
-      
-      // Clear cart
+      // Fallback navigate
       clearCart();
       setIsCartOpen(false);
-
-      // Navigate to order transaction details screen
       navigate(`/transactions/${newTransactionId}`);
-
-      // Auto deposit process payment simulation matching the paymentService flow
-      setTimeout(async () => {
-        try {
-          // Update transaction client-side / server-side simulation
-          await fetch(`/api/transactions/release-milestone`, { method: 'POST' }).catch(() => {}); // silent wake up helper
-          
-          const txRef = doc(db, 'transactions', newTransactionId);
-          await updateDoc(txRef, {
-            status: 'deposited',
-            updatedAt: new Date().toISOString()
-          });
-
-          // Notify seller
-          const sellerNotificationRef = doc(collection(db, 'notifications'));
-          await setDoc(sellerNotificationRef, {
-            userId: sellerId,
-            title: 'New Multi-item Order Received',
-            message: `Checkout cart containing ${transactionData.items.length} items (KES ${totalAmount}) has been paid. Funds are held in escrow.`,
-            type: 'info',
-            read: false,
-            createdAt: new Date().toISOString(),
-            link: `/transactions/${newTransactionId}`
-          });
-        } catch (simError) {
-          console.error('Simulation update error:', simError);
-        }
-      }, 10000);
-
     } catch (e: any) {
       console.error('Checkout failed:', e);
       toast.error(e.message || 'Escrow checkout submission failed. Please try again.');
