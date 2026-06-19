@@ -62,7 +62,9 @@ const Auth = () => {
         throw error;
       }
       
+      let isNewUser = false;
       if (!userDoc.exists()) {
+        isNewUser = true;
         const newReferralCode = user.uid.substring(0, 6).toUpperCase();
         const isAdminEmail = user.email === 'ramadhanwambia83@gmail.com';
         
@@ -79,6 +81,8 @@ const Auth = () => {
             escrowBalance: 0,
             emailVerified: user.emailVerified,
             createdAt: new Date().toISOString(),
+            needsOnboarding: true,
+            isOnboardingCompleted: false,
           }, { merge: true });
 
           // Create public referral code mapping
@@ -91,8 +95,15 @@ const Auth = () => {
           return;
         }
       }
-      toast.success('Successfully signed in!');
-      navigate('/');
+
+      const deservesOnboarding = isNewUser || userDoc.data()?.needsOnboarding === true;
+      if (deservesOnboarding) {
+        toast.success('Welcome! Please set up your role and phone number to complete onboarding.');
+        navigate('/onboarding');
+      } else {
+        toast.success('Successfully signed in!');
+        navigate('/');
+      }
     } catch (error: any) {
       if (!error.operationType) {
         handleAuthError(error);

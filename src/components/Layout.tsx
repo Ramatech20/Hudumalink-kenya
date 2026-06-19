@@ -28,6 +28,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const prevChatsRef = useRef<{ [chatId: string]: number }>({});
 
   useEffect(() => {
+    if (user && user.needsOnboarding) {
+      const publicPaths = ['/onboarding', '/auth', '/terms', '/privacy', '/safety', '/cookies', '/escrow-policy'];
+      if (!publicPaths.includes(location.pathname)) {
+        navigate('/onboarding');
+      }
+    }
+  }, [user, location.pathname, navigate]);
+
+  useEffect(() => {
     if (!user || !user.uid) {
       setUnreadNotifications(0);
       return;

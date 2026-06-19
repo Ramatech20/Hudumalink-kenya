@@ -117,8 +117,23 @@ const Profile = () => {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Security bounds verification: 30 days of registration and email activation
+  const registrationDate = user?.createdAt ? new Date(user.createdAt) : null;
+  const daysRegistered = registrationDate 
+    ? Math.floor((Date.now() - registrationDate.getTime()) / (1000 * 60 * 60 * 24)) 
+    : 0;
+  const isRegistered30Days = daysRegistered >= 30;
+  const isEmailVerified = !!(user?.emailVerified || auth.currentUser?.emailVerified);
+  const canApplyForProvider = isRegistered30Days && isEmailVerified;
+
   const handleBecomeProvider = async () => {
     if (!user || !agreeToTerms || !selectedRequestedRole) return;
+
+    if (!canApplyForProvider) {
+      toast.error('Application Blocked: You must be registered for at least 30 days and have your email activated on HudumaLink Kenya.');
+      return;
+    }
+
     setSubmittingRoleChange(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), {
@@ -272,21 +287,51 @@ const Profile = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8 p-6 bg-gradient-to-r from-primary/10 to-primary/5 rounded-[2.5rem] border border-primary/20 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-primary/5"
         >
-          <div className="flex items-center gap-5 text-center md:text-left">
-            <div className="p-4 bg-primary/10 rounded-3xl text-primary">
-              <Zap className="w-8 h-8 text-primary animate-bounce" />
+          <div className="flex items-center gap-5 text-center md:text-left flex-1">
+            <div className={`p-4 rounded-3xl ${canApplyForProvider ? 'bg-primary/10 text-primary' : 'bg-amber-100 dark:bg-amber-950/40 text-amber-600'}`}>
+              <Zap className={`w-8 h-8 ${canApplyForProvider ? 'text-primary animate-bounce' : 'text-amber-600'}`} />
             </div>
-            <div>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">Become a Verified Provider!</h3>
+            <div className="flex-1">
+              <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                Become a Verified Provider!
+                {!canApplyForProvider && (
+                  <span className="bg-amber-500/10 text-amber-700 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Restricted
+                  </span>
+                )}
+              </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Monetize your services and list physical products securely with HudumaLink escrow protection bounds.
               </p>
+              {!canApplyForProvider && (
+                <div className="mt-3 p-3 bg-amber-500/5 rounded-2xl border border-amber-500/20 text-xs text-amber-800 dark:text-amber-400 font-semibold space-y-1">
+                  <p className="font-extrabold text-[10px] uppercase tracking-widest text-amber-900 dark:text-amber-300">HudumaLink Eligibility Policy Mandate:</p>
+                  <p className="flex items-center gap-2">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    30 Days Registration: {isRegistered30Days ? '✅ Completed' : `⏳ Required (Current: ${daysRegistered}/30 days registered)`}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    Email Activation: {isEmailVerified ? '✅ Completed' : '⏳ Action Required (Verify your email in the sidebar)'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           <button 
             type="button"
-            onClick={() => setShowBecomeProviderModal(true)}
-            className="w-full md:w-auto px-6 py-3.5 bg-primary text-white text-xs font-black rounded-xl hover:bg-opacity-95 transition shadow-lg shadow-primary/10 whitespace-nowrap cursor-pointer"
+            onClick={() => {
+              if (canApplyForProvider) {
+                setShowBecomeProviderModal(true);
+              } else {
+                toast.error("Application restricted until compliance constraints are met!");
+              }
+            }}
+            className={`w-full md:w-auto px-6 py-3.5 text-xs font-black rounded-xl transition shadow-lg whitespace-nowrap cursor-pointer ${
+              canApplyForProvider 
+                ? 'bg-primary text-white hover:bg-opacity-95 shadow-primary/10 shadow-lg' 
+                : 'bg-gray-100 dark:bg-neutral-800/80 text-gray-400 dark:text-neutral-600 border border-gray-200 dark:border-neutral-800 pointer-events-none opacity-60'
+            }`}
           >
             Apply for Seller/Provider Node
           </button>

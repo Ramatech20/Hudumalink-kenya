@@ -57,6 +57,8 @@ export interface User {
   requestedRole?: 'provider' | 'seller';
   roleRequestCreatedAt?: string;
   roleRequestProcessedAt?: string;
+  needsOnboarding?: boolean;
+  isOnboardingCompleted?: boolean;
   metadata?: UserMetadata;
   is2faEnabled?: boolean;
   twoFaMethod?: 'sms' | 'authenticator';

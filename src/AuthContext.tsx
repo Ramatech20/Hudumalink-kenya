@@ -163,6 +163,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               completedPaymentsCount: 0,
               createdAt: new Date().toISOString(),
               deviceFingerprint: fingerprint,
+              needsOnboarding: firebaseUser.providerData.some(p => p.providerId === 'google.com'),
+              isOnboardingCompleted: false,
             };
             try {
               await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });

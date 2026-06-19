@@ -25,6 +25,7 @@ import TransactionDetail from './pages/TransactionDetail';
 import Careers from './pages/Careers';
 import Offers from './pages/Offers';
 import Referrals from './pages/Referrals';
+import Onboarding from './pages/Onboarding';
 import { About, Contact, Terms, Privacy, Safety, FAQ, EscrowPolicy, Cookies } from './pages/StaticPages';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -51,6 +52,7 @@ export default function App() {
                   <Route path="/listings" element={<Listings />} />
                   <Route path="/listing/:id" element={<ListingDetail />} />
                   <Route path="/auth" element={<Auth />} />
+                  <Route path="/onboarding" element={<PrivateRoute><Onboarding /></PrivateRoute>} />
                   <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
                   <Route path="/referrals" element={<PrivateRoute><Referrals /></PrivateRoute>} />
                   <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
