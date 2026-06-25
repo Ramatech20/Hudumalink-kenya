@@ -2180,7 +2180,7 @@ const Admin = () => {
                       </span>
                     </div>
 
-                    <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-xl mb-4 border border-gray-100 dark:border-neutral-800 text-xs text-gray-600 dark:text-gray-450 space-y-2">
+                    <div className="bg-gray-50 dark:bg-neutral-800/50 p-4 rounded-xl mb-4 border border-gray-100 dark:border-neutral-800 text-xs text-gray-600 dark:text-neutral-400 space-y-2">
                       <div className="flex justify-between">
                         <span>Requested Upgrade Type:</span>
                         <strong className="text-primary capitalize font-black">{u.requestedRole || 'None'}</strong>
@@ -2307,7 +2307,7 @@ const Admin = () => {
                           <span className="text-[10px] text-gray-400 uppercase tracking-widest font-black block">Seller / Service Provider (Claimant)</span>
                           <div>
                             <p className="font-bold text-gray-900 dark:text-white mb-0.5">{req.sellerName || 'Service Provider'}</p>
-                            <p className="text-xs text-gray-450 font-mono mb-2">{req.sellerId}</p>
+                            <p className="text-xs text-neutral-400 font-mono mb-2">{req.sellerId}</p>
                             <a 
                               href={`tel:${req.sellerPhone}`} 
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-xs font-extrabold transition-colors mt-1"
@@ -2321,7 +2321,7 @@ const Admin = () => {
                           <span className="text-[10px] text-gray-400 uppercase tracking-widest font-black block">Buyer / Customer Details (Unresponsive)</span>
                           <div>
                             <p className="font-bold text-gray-900 dark:text-white mb-0.5">{req.buyerName || 'Client'}</p>
-                            <p className="text-xs text-gray-450 font-mono mb-2">{req.buyerId}</p>
+                            <p className="text-xs text-neutral-400 font-mono mb-2">{req.buyerId}</p>
                             <a 
                               href={`tel:${req.buyerPhone}`} 
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-xs font-extrabold transition-colors mt-1"

@@ -22,6 +22,7 @@ export interface User {
   rating?: number;
   reviewCount?: number;
   isVerified?: boolean;
+  theme?: 'light' | 'dark' | 'system';
   isPhoneVerified?: boolean;
   isOnline?: boolean;
   lastSeen?: string;
@@ -131,6 +132,7 @@ export interface Listing {
   };
   tipEnabled?: boolean;
   originalPrice?: number;
+  condition?: 'brand-new' | 'like-new' | 'excellent' | 'good' | 'fair' | 'refurbished' | 'second-hand';
   offerText?: string;
   giftText?: string;
   isOffer?: boolean;
@@ -319,6 +321,7 @@ export interface ExtendedUser extends User {
   alertsSms: boolean;
   alertsEmail: boolean;
   disbursementMethod: 'mpesa' | 'bank';
+  theme?: 'light' | 'dark' | 'system';
   isFlagged: boolean;
   flagReason?: string;
 }

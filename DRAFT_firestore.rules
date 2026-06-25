@@ -220,6 +220,8 @@ service cloud.firestore {
                       ('type' in incoming() && incoming().type == 'promotion') ||
                       // Standard transactions check price if listing exists
                       (!exists(/databases/$(database)/documents/listings/$(incoming().listingId)) ||
+                       !('price' in get(/databases/$(database)/documents/listings/$(incoming().listingId)).data) ||
+                       get(/databases/$(database)/documents/listings/$(incoming().listingId)).data.price == null ||
                        incoming().amount >= get(/databases/$(database)/documents/listings/$(incoming().listingId)).data.price)
                     );
       

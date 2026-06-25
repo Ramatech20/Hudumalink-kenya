@@ -184,6 +184,7 @@ export default function Offers() {
                 promotionTier={listing.promotionTier as any}
                 originalPrice={listing.originalPrice}
                 onActionClick={(id) => handleCardClick(id)}
+                condition={listing.type === 'product' ? listing.condition : undefined}
               />
             );
           })}

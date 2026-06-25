@@ -739,7 +739,7 @@ const TransactionDetail = () => {
                           )}
                         </>
                       ) : (
-                        <p className="text-xs text-gray-450 italic bg-gray-50 dark:bg-neutral-800 p-3 rounded-xl border border-gray-100 dark:border-neutral-800">
+                        <p className="text-xs text-neutral-400 italic bg-gray-50 dark:bg-neutral-800 p-3 rounded-xl border border-gray-100 dark:border-neutral-800">
                           Waiting for administrative review.
                         </p>
                       )}
@@ -941,7 +941,7 @@ const TransactionDetail = () => {
                       </p>
                       {transaction.paymentRequestProof && (
                         <div className="p-3 bg-white dark:bg-neutral-900 border border-amber-500/10 rounded-xl">
-                          <span className="text-[9px] text-gray-450 uppercase font-black block tracking-wider mb-1">Your Submitted Evidence Proof</span>
+                          <span className="text-[9px] text-neutral-400 uppercase font-black block tracking-wider mb-1">Your Submitted Evidence Proof</span>
                           <p className="text-xs text-neutral-800 dark:text-neutral-200 italic">"{transaction.paymentRequestProof}"</p>
                         </div>
                       )}

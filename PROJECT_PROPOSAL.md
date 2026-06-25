@@ -4,12 +4,12 @@
 ---
 
 ## 1. Abstract / Executive Summary
-HudumaLink Kenya is a localized digital marketplace platform designed to bridge the trust gap between informal service providers ("fundis"), small-scale sellers, and consumers across Kenya’s 47 counties. Unlike generic classifieds, HudumaLink integrates a mandatory **M-Pesa Escrow System** and a robust **KYC (Know Your Customer)** verification process. This ensures that payments are only released when milestones are met, effectively eliminating the prevalent "payment-before-service" scams. The platform aims to formalize the gig economy, providing a safe harbor for youth and skilled professionals to trade services and products with high integrity.
+HudumaLink Kenya is a localized digital marketplace platform designed to bridge the trust gap between informal service providers ("fundis"), small-scale sellers, and consumers across Kenya’s 47 counties. Unlike generic classifieds, HudumaLink integrates a mandatory **IntaSend Escrow System** (enabling frictionless M-Pesa STK Push & Card deposits) and a robust **KYC (Know Your Customer)** verification process. This ensures that payments are only released when milestones are met, effectively eliminating the prevalent "payment-before-service" scams. The platform aims to formalize the gig economy, providing a safe harbor for youth and skilled professionals to trade services and products with high integrity.
 
 ---
 
 ## 2. Introduction & Background
-Kenya’s informal sector, often referred to as the "Jua Kali" sector, employs over 80% of the working population. However, digital transition in this sector has been marred by a lack of specialized platforms. Currently, most trades occur on social media (Facebook/WhatsApp), which lack consumer protection mechanisms. HudumaLink Kenya introduces a structured environment where local expertise meets modern digital security, tailored specifically for the Kenyan context using familiar tools like M-Pesa.
+Kenya’s informal sector, often referred to as the "Jua Kali" sector, employs over 80% of the working population. However, digital transition in this sector has been marred by a lack of specialized platforms. Currently, most trades occur on social media (Facebook/WhatsApp), which lack consumer protection mechanisms. HudumaLink Kenya introduces a structured environment where local expertise meets modern digital security, tailored specifically for the Kenyan context using familiar tools like M-Pesa powered securely by IntaSend.
 
 ---
 
@@ -26,7 +26,7 @@ The digital marketplace in Kenya faces three critical hurdles:
 To develop a secure, trust-based marketplace that facilitates seamless transactions between local service providers, product sellers, and customers within Kenya.
 
 ### Specific Objectives:
-*   To implement a **Milestone-based Escrow System** using M-Pesa to protect financial transactions.
+*   To implement a **Milestone-based Escrow System** using **IntaSend Secure Payments** to protect financial transactions.
 *   To design a **National ID-linked KYC system** to verify the identity of all service providers.
 *   To create a **Location-Aware Search Engine** that allows users to find services within their specific county or town.
 *   To provide a **Real-time Communication Channel** for negotiation and project tracking.
@@ -34,7 +34,7 @@ To develop a secure, trust-based marketplace that facilitates seamless transacti
 ---
 
 ## 5. Literature Review
-The project draws inspiration from global platforms like *Upwork* and *Fiverr* but adapts them to the local storefront model of *Jiji*. Research indicates that localized payment solutions (like M-Pesa) significantly increase the adoption of e-commerce in Sub-Saharan Africa. HudumaLink fills the gap between "Global Freelancing" and "Local Classifieds" by adding a much-needed layer of **Escrow Protection** and **Hyper-Local Discovery**.
+The project draws inspiration from global platforms like *Upwork* and *Fiverr* but adapts them to the local storefront model of *Jiji*. Research indicates that localized payment solutions (like M-Pesa) significantly increase the adoption of e-commerce in Sub-Saharan Africa. HudumaLink fills the gap between "Global Freelancing" and "Local Classifieds" by adding a much-needed layer of **Escrow Protection** and **Hyper-Local Discovery** powered by IntaSend's robust API.
 
 ---
 
@@ -56,7 +56,7 @@ The system follows an **Agile Development Methodology**, allowing for iterative 
 
 ## 7. System Features & Requirements
 *   **User Verification (KYC)**: Upload and approval of National ID and selfies.
-*   **M-Pesa Escrow SIM**: Simulated STK push for deposits and automated payouts.
+*   **IntaSend Escrow Payments**: Integration supporting real-time M-Pesa STK push deposits and automated B2C instant disbursements / user cash-outs.
 *   **Dispute Center**: An administrative interface to handle conflicts between parties.
 *   **Multilingual Support**: English and Swahili interface options.
 *   **AI Virtual Assistant**: Gemini-powered bot for 24/7 user support.
@@ -70,7 +70,7 @@ The project follows a phased rollout strategy over 12 weeks:
 |------|-------|----------------|
 | 1-3  | Foundation | Authentication, User Profiles, Basic Listings |
 | 4-6  | Security | KYC Module, Firestore Rule Hardening, Admin Dashboard |
-| 7-9  | Transaction | M-Pesa Escrow Logic, Wallet Management, Chat |
+| 7-9  | Transaction | IntaSend Escrow Logic, Wallet Management, Chat |
 | 10-11| Testing | Beta testing with 100 users, Bug fixes, Optimizations |
 | 12   | Launch | Public release, Marketing kickoff |
 
@@ -92,7 +92,7 @@ The project follows a phased rollout strategy over 12 weeks:
 *   **Backend & DB**: Firebase Auth, Firestore, Cloud Storage.
 *   **Intelligence**: Google Gemini API (AI Chatbot).
 *   **Maps & Location**: Browser Geolocation API.
-*   **Payment Gateway**: M-Pesa Daraja API (API Sandbox for Testing).
+*   **Payment Gateway**: IntaSend Secure Payments Gateway (M-Pesa & Card Checkout plus automated B2C pay-outs).
 
 ---
 

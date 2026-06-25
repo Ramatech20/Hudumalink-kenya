@@ -3,8 +3,9 @@ import { useLanguage } from '../../LanguageContext';
 import { ExtendedUser } from '../../types';
 import { KENYAN_COUNTIES, TOWNS } from '../../constants';
 import { 
-  ShieldCheck, Lock, MapPin, Loader2, Save, X, User as UserIcon, Bell, CreditCard 
+  ShieldCheck, Lock, MapPin, Loader2, Save, X, User as UserIcon, Bell, CreditCard, Moon, Sun, Monitor
 } from 'lucide-react';
+import { useTheme } from '../../ThemeContext';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 
@@ -88,6 +89,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({
   onCancel,
 }) => {
   const { t } = useLanguage();
+  const { theme: currentTheme, setTheme: changeTheme } = useTheme();
 
   const handleGeoLocationFill = () => {
     if (navigator.geolocation) {
@@ -374,95 +376,85 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({
         </div>
       </div>
 
-      {/* 3. Disbursement Account Settings & VAT Segment */}
+
+
+      {/* Theme Preference Segment */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-gray-100 dark:border-neutral-800 shadow-sm">
-        <h3 className="text-lg font-black text-gray-900 dark:text-gray-100 mb-6 flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-primary" />
-          Disbursement Channels & KRA / VAT Compliance
+        <h3 className="text-lg font-black text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+          {currentTheme === 'dark' ? <Moon className="w-5 h-5 text-primary" /> : <Sun className="w-5 h-5 text-primary" />}
+          Theme Preference
         </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-6 font-medium">
+          Personalize your visual workspace. Toggle or synchronize the application appearance instantly.
+        </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <label className="block text-xs font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Default Disbursement Method</label>
-            <select 
-              value={disbursementMethod}
-              onChange={(e) => setDisbursementMethod(e.target.value as 'mpesa' | 'bank')}
-              className="w-full bg-slate-50 dark:bg-neutral-800 border-0 focus:ring-2 focus:ring-primary p-4 rounded-2xl text-sm font-semibold transition"
-            >
-              <option value="mpesa">Safaricom M-Pesa</option>
-              <option value="bank">Kenyan Bank Transfer</option>
-            </select>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Light Mode */}
+          <button
+            type="button"
+            onClick={() => changeTheme('light')}
+            className={cn(
+              "flex flex-col items-center justify-center p-6 rounded-2xl border text-center transition-all cursor-pointer group focus:outline-none focus:ring-2 focus:ring-primary/40",
+              currentTheme === 'light'
+                ? "border-primary bg-primary/[0.03] text-primary"
+                : "border-gray-100 dark:border-neutral-800 bg-slate-50/50 dark:bg-neutral-800/10 text-gray-500 dark:text-gray-400 hover:bg-slate-100/50 dark:hover:bg-neutral-800/30"
+            )}
+          >
+            <div className={cn(
+              "w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors",
+              currentTheme === 'light' ? "bg-primary/10" : "bg-gray-100 dark:bg-neutral-800 group-hover:bg-gray-200 dark:group-hover:bg-neutral-700"
+            )}>
+              <Sun className="w-6 h-6 text-amber-500" />
+            </div>
+            <span className="text-sm font-bold block">Light Mode ☀️</span>
+            <span className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1 block">Clean and bright contrast</span>
+          </button>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-widest mb-2">KRA PIN (Kenya Revenue Authority)</label>
-            <input 
-              type="text"
-              placeholder="e.g. A012345678B"
-              value={kraPin}
-              onChange={(e) => setKraPin(e.target.value.toUpperCase())}
-              className="w-full bg-slate-50 dark:bg-neutral-800 border-0 focus:ring-2 focus:ring-primary p-4 rounded-2xl text-sm font-semibold transition font-mono"
-            />
-          </div>
+          {/* Dark Mode */}
+          <button
+            type="button"
+            onClick={() => changeTheme('dark')}
+            className={cn(
+              "flex flex-col items-center justify-center p-6 rounded-2xl border text-center transition-all cursor-pointer group focus:outline-none focus:ring-2 focus:ring-primary/40",
+              currentTheme === 'dark'
+                ? "border-primary bg-primary/[0.03] text-primary"
+                : "border-gray-100 dark:border-neutral-800 bg-slate-50/50 dark:bg-neutral-800/10 text-gray-500 dark:text-gray-400 hover:bg-slate-100/50 dark:hover:bg-neutral-800/30"
+            )}
+          >
+            <div className={cn(
+              "w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors",
+              currentTheme === 'dark' ? "bg-primary/10" : "bg-gray-100 dark:bg-neutral-800 group-hover:bg-gray-200 dark:group-hover:bg-neutral-700"
+            )}>
+              <Moon className="w-6 h-6 text-purple-400" />
+            </div>
+            <span className="text-sm font-bold block">Dark Mode 🌙</span>
+            <span className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1 block">Elegant, eye-friendly layout</span>
+          </button>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Wallet M-Pesa Number</label>
-            <input 
-              type="text"
-              placeholder="e.g. 07XXXXXXXX"
-              value={walletMpesaNumber}
-              onChange={(e) => setWalletMpesaNumber(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-neutral-800 border-0 focus:ring-2 focus:ring-primary p-4 rounded-2xl text-sm font-semibold transition font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Disbursement Bank Name</label>
-            <input 
-              type="text"
-              placeholder="e.g. Equity Bank, KCB"
-              value={walletBankName}
-              onChange={(e) => setWalletBankName(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-neutral-800 border-0 focus:ring-2 focus:ring-primary p-4 rounded-2xl text-sm font-semibold transition"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Bank Account Legal Name</label>
-            <input 
-              type="text"
-              value={walletAccountName}
-              onChange={(e) => setWalletAccountName(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-neutral-800 border-0 focus:ring-2 focus:ring-primary p-4 rounded-2xl text-sm font-semibold transition"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Bank Account Number</label>
-            <input 
-              type="text"
-              placeholder="Account Number"
-              value={walletAccountNumber}
-              onChange={(e) => setWalletAccountNumber(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-neutral-800 border-0 focus:ring-2 focus:ring-primary p-4 rounded-2xl text-sm font-semibold transition font-mono"
-            />
-          </div>
-        </div>
-
-        <div className="p-4 bg-amber-500/5 rounded-2xl border border-amber-500/20 text-left">
-          <label className="flex items-start gap-3 cursor-pointer select-none">
-            <input 
-              type="checkbox"
-              checked={agreeVatTurnover}
-              onChange={(e) => setAgreeVatTurnover(e.target.checked)}
-              className="mt-1 text-amber-600 focus:ring-amber-500 border-neutral-300 rounded"
-            />
-            <span className="text-xs text-amber-800 dark:text-amber-400 leading-normal">
-              I agree that HudumaLink will deduct VAT and withhold withholding taxes directly from my sales payout if my monthly platform gross turnover surpasses the legal KES 416,667 threshold.
-            </span>
-          </label>
+          {/* System Default */}
+          <button
+            type="button"
+            onClick={() => changeTheme('system')}
+            className={cn(
+              "flex flex-col items-center justify-center p-6 rounded-2xl border text-center transition-all cursor-pointer group focus:outline-none focus:ring-2 focus:ring-primary/40",
+              currentTheme === 'system'
+                ? "border-primary bg-primary/[0.03] text-primary"
+                : "border-gray-100 dark:border-neutral-800 bg-slate-50/50 dark:bg-neutral-800/10 text-gray-500 dark:text-gray-400 hover:bg-slate-100/50 dark:hover:bg-neutral-800/30"
+            )}
+          >
+            <div className={cn(
+              "w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors",
+              currentTheme === 'system' ? "bg-primary/10" : "bg-gray-100 dark:bg-neutral-800 group-hover:bg-gray-200 dark:group-hover:bg-neutral-700"
+            )}>
+              <Monitor className="w-6 h-6 text-blue-500" />
+            </div>
+            <span className="text-sm font-bold block">System Default 💻</span>
+            <span className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1 block">Follows device settings</span>
+          </button>
         </div>
       </div>
+
+
 
       {/* 4. Notification Preferences Segment */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-gray-100 dark:border-neutral-800 shadow-sm">

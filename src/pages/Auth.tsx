@@ -96,7 +96,8 @@ const Auth = () => {
         }
       }
 
-      const deservesOnboarding = isNewUser || userDoc.data()?.needsOnboarding === true;
+      const userProfile = userDoc.data();
+      const deservesOnboarding = isNewUser || (userProfile?.needsOnboarding === true && !userProfile?.phoneNumber);
       if (deservesOnboarding) {
         toast.success('Welcome! Please set up your role and phone number to complete onboarding.');
         navigate('/onboarding');
@@ -326,7 +327,7 @@ const Auth = () => {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-450 mt-1">
+                <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1">
                   Please use your exact legal name as it appears on your official documents (ID, passport, or driver's license) for account verification.
                 </p>
               </div>

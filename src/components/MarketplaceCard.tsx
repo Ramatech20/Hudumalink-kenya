@@ -21,6 +21,7 @@ export interface MarketplaceCardProps {
   type?: 'service' | 'product';
   badgeLabel?: string;
   onActionClick?: (id: string, e: React.MouseEvent) => void;
+  condition?: string;
 }
 
 export const MarketplaceCard: React.FC<MarketplaceCardProps> = memo(({
@@ -41,8 +42,22 @@ export const MarketplaceCard: React.FC<MarketplaceCardProps> = memo(({
   originalPrice,
   type = 'service',
   badgeLabel,
-  onActionClick
+  onActionClick,
+  condition
 }) => {
+  const conditionLabels: Record<string, string> = {
+    'brand-new': 'Brand New',
+    'like-new': 'Like New',
+    'excellent': 'Excellent',
+    'good': 'Good',
+    'fair': 'Fair',
+    'refurbished': 'Refurbished',
+    'second-hand': 'Second Hand',
+    'new': 'Brand New',
+  };
+  const isNewCondition = condition === 'brand-new' || condition === 'like-new' || condition === 'new';
+  const conditionLabel = condition ? (conditionLabels[condition] || condition.replace('-', ' ').toUpperCase()) : '';
+
   const finalImage = imageUrl || 'https://images.unsplash.com/photo-1549488344-1f9b8d2bd1f3?auto=format&fit=crop&w=800&q=80';
   const hasDiscount = originalPrice && originalPrice > price;
   const discountPercent = hasDiscount ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
@@ -95,6 +110,16 @@ export const MarketplaceCard: React.FC<MarketplaceCardProps> = memo(({
 
         {/* Top-Right Badges: Rating/Type */}
         <div className="absolute top-1 right-1 sm:top-2 sm:right-2 flex flex-col gap-1 items-end z-10 pointer-events-none">
+          {condition && (
+            <span className={cn(
+              "backdrop-blur-md border px-1.5 py-0.5 rounded text-[7px] sm:text-[9px] font-black uppercase shrink-0",
+              isNewCondition 
+                ? "bg-green-950/80 text-green-400 border-green-500/30" 
+                : "bg-orange-950/80 text-orange-400 border-orange-500/30"
+            )}>
+              {conditionLabel}
+            </span>
+          )}
           {category && (
             <span className="bg-slate-950/85 backdrop-blur-md border border-slate-800 text-slate-300 px-1.5 py-0.5 rounded text-[7px] sm:text-[9px] font-bold uppercase shrink-0">
               {category}
@@ -140,6 +165,14 @@ export const MarketplaceCard: React.FC<MarketplaceCardProps> = memo(({
           
           {/* Metadata features line inside footer content */}
           <div className="hidden sm:flex items-center gap-2 mt-1 px-0.5 text-[10px] text-slate-400 font-medium">
+            {condition && (
+              <span className={cn(
+                "px-1.5 py-0.5 rounded font-black text-[9px] uppercase",
+                isNewCondition ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+              )}>
+                {conditionLabel}
+              </span>
+            )}
             <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">{deliverySpeed}</span>
             <span>•</span>
             <span>{completedJobs} completed</span>

@@ -98,6 +98,7 @@ export function ProviderListings({ authorId, currentListingId }: ProviderListing
               promotionTier={item.promotionTier}
               originalPrice={item.originalPrice}
               type={item.type}
+              condition={item.type === 'product' ? item.condition : undefined}
             />
           </div>
         ))}

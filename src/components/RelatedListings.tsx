@@ -130,6 +130,7 @@ export function RelatedListings({ category, currentListingId, county }: RelatedL
                 promotionTier={item.promotionTier}
                 originalPrice={item.originalPrice}
                 type={item.type}
+                condition={item.type === 'product' ? item.condition : undefined}
               />
             </div>
           ))}
@@ -165,6 +166,7 @@ export function RelatedListings({ category, currentListingId, county }: RelatedL
                   promotionTier={item.promotionTier}
                   originalPrice={item.originalPrice}
                   type={item.type}
+                  condition={item.type === 'product' ? item.condition : undefined}
                 />
               </div>
             ))}

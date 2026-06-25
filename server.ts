@@ -389,32 +389,6 @@ async function startServer() {
     };
   };
 
-  const getMpesaToken = async () => {
-    const consumerKey = process.env.MPESA_CONSUMER_KEY;
-    const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
-    
-    if (!consumerKey || !consumerSecret) {
-      throw new Error("M-Pesa credentials not found in environment");
-    }
-
-    const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
-    
-    try {
-      const response = await axios.get(
-        "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
-        {
-          headers: {
-            Authorization: `Basic ${auth}`,
-          },
-        }
-      );
-      return response.data.access_token;
-    } catch (error: any) {
-      console.error("Error getting M-Pesa token:", error.response?.data || error.message);
-      throw error;
-    }
-  };
-
 // Middleware to verify user token (Identity Isolation)
 const verifyUser = async (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization;

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, User, LogOut, Menu, X, PlusCircle, MessageSquare, Heart, Moon, Sun, Shield, AlertCircle, Bell, Facebook, Instagram, MessageCircle, ShoppingCart, Plus, Minus, Trash2, Loader2, Gift } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
+import { useTheme } from '../ThemeContext';
 import { useCart } from '../CartContext';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { cn } from '../lib/utils';
@@ -28,7 +29,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const prevChatsRef = useRef<{ [chatId: string]: number }>({});
 
   useEffect(() => {
-    if (user && user.needsOnboarding) {
+    if (user && user.needsOnboarding && !user.phoneNumber) {
       const publicPaths = ['/onboarding', '/auth', '/terms', '/privacy', '/safety', '/cookies', '/escrow-policy'];
       if (!publicPaths.includes(location.pathname)) {
         navigate('/onboarding');
@@ -144,12 +145,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       setRefreshing(false);
     }
   };
-  const [isDarkMode, setIsDarkMode] = useState(true);
-
-  useEffect(() => {
-    document.documentElement.classList.add('dark');
-    localStorage.setItem('theme', 'dark');
-  }, []);
+  const { theme, resolvedTheme, setTheme } = useTheme();
 
   const handleResendVerification = async () => {
     if (!auth.currentUser) return;

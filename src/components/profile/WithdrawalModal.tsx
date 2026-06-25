@@ -98,7 +98,7 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
 
           {/* Amount Inputs */}
           <div>
-            <label className="block text-xs font-bold text-gray-450 dark:text-neutral-500 uppercase tracking-widest mb-2.5">
+            <label className="block text-xs font-bold text-gray-500 dark:text-neutral-500 uppercase tracking-widest mb-2.5">
               Enter Withdrawal Gross Amount
             </label>
             <div className="relative">
@@ -117,7 +117,7 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-gray-450 mt-1.5 leading-tight">
+            <p className="text-[10px] text-gray-500 mt-1.5 leading-tight">
               Platform reserve constraint: Minimum KES 100 withdrawal.
             </p>
           </div>
@@ -175,7 +175,7 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
               <Smartphone className="w-5 h-5" />
               <div>
                 <p className="text-xs font-black">Safaricom M-Pesa</p>
-                <p className="text-[9px] text-gray-450 mt-0.5 font-normal">Daraja dynamic tiers</p>
+                <p className="text-[9px] text-gray-500 mt-0.5 font-normal">Daraja dynamic tiers</p>
               </div>
             </button>
 
@@ -191,7 +191,7 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
               <Landmark className="w-5 h-5" />
               <div>
                 <p className="text-xs font-black">Bank Transfer</p>
-                <p className="text-[9px] text-gray-450 mt-0.5 font-normal">KES 50 flat levy</p>
+                <p className="text-[9px] text-gray-500 mt-0.5 font-normal">KES 50 flat levy</p>
               </div>
             </button>
           </div>

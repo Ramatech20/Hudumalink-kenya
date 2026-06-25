@@ -587,7 +587,7 @@ const Profile = () => {
                             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                               {w.method === 'mpesa' ? `M-Pesa Ledger Pin: ${w.details?.phoneNumber || 'N/A'}` : `Bank: ${w.details?.bankName || 'N/A'}`}
                             </p>
-                            <p className="text-[10px] text-gray-450 mt-1">{formatDate(w.createdAt)}</p>
+                            <p className="text-[10px] text-neutral-400 mt-1">{formatDate(w.createdAt)}</p>
                           </div>
                           <div className={cn(
                             "px-2.5 py-1 rounded-full text-[9px] font-bold uppercase",

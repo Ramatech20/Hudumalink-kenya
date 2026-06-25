@@ -349,6 +349,7 @@ const Listings = () => {
                   promotionTier={listing.promotionTier as any}
                   originalPrice={listing.originalPrice}
                   onActionClick={handleCardAction}
+                  condition={listing.type === 'product' ? listing.condition : undefined}
                 />
               ))}
             </MarketplaceGrid>

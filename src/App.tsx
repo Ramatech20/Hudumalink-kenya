@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './AuthContext';
 import { LanguageProvider } from './LanguageContext';
+import { ThemeProvider } from './ThemeContext';
 import { CartProvider } from './CartContext';
 import { Layout } from './components/Layout';
 import ScrollToTop from './components/ScrollToTop';
@@ -41,13 +42,14 @@ export default function App() {
   return (
     <HelmetProvider>
       <ErrorBoundary>
-        <LanguageProvider>
-          <AuthProvider>
-            <CartProvider>
-              <Router>
-              <ScrollToTop />
-              <Layout>
-                <Routes>
+        <ThemeProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <CartProvider>
+                <Router>
+                <ScrollToTop />
+                <Layout>
+                  <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/listings" element={<Listings />} />
                   <Route path="/listing/:id" element={<ListingDetail />} />
@@ -80,6 +82,7 @@ export default function App() {
           </CartProvider>
         </AuthProvider>
         </LanguageProvider>
+        </ThemeProvider>
       </ErrorBoundary>
     </HelmetProvider>
   );

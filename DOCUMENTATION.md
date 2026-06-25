@@ -61,8 +61,8 @@ The system leverages Firebase for a serverless, scalable, and secure backend.
 
 ### User Features:
 - **KYC Verification**: Users can upload National ID and a selfie for verification. Verified status increases trust and visibility.
-- **Escrow System**: Secure payment flow where funds are held by HudumaLink until the buyer confirms receipt.
-- **Withdrawals**: Users can request to withdraw their escrow balance via M-Pesa (KES 15 fee) or Bank Transfer (KES 50 fee). Minimum withdrawal is KES 100.
+- **Escrow System**: Secure payment flow utilizing **IntaSend Secure Payments** where funds are held by HudumaLink until the buyer confirms receipt.
+- **Withdrawals (B2C Cash-Out)**: Users can instantly withdraw their escrow earnings directly to their Safaricom M-Pesa line or Bank Account via the integrated IntaSend Payouts engine (minimum withdrawal KES 100). Only standard network payment transaction charges apply.
 - **Social Media Integration**: Added links for WhatsApp, Facebook, Instagram, TikTok, and X (formerly Twitter) in the footer.
 - **AI Chatbot**: Implemented a floating AI Assistant powered by Google Gemini for site navigation and safety tips.
 - **Social Sharing**: Built-in sharing functionality for listings via Web Share API (WhatsApp, Facebook, etc.) or direct link copying.

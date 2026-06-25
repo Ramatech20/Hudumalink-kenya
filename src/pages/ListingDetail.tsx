@@ -30,6 +30,27 @@ import { ReviewsSection } from '../components/ReviewsSection';
 import { RelatedListings } from '../components/RelatedListings';
 import { ProviderListings } from '../components/ProviderListings';
 
+const getConditionLabelAndStyle = (cond: string) => {
+  switch (cond) {
+    case 'brand-new':
+      return { label: 'Brand New', style: "bg-green-500/10 border border-green-500/20 text-green-400" };
+    case 'like-new':
+      return { label: 'Like New', style: "bg-teal-500/10 border border-teal-500/20 text-teal-400" };
+    case 'excellent':
+      return { label: 'Excellent', style: "bg-cyan-500/10 border border-cyan-500/20 text-cyan-400" };
+    case 'good':
+      return { label: 'Good', style: "bg-blue-500/10 border border-blue-500/20 text-blue-400" };
+    case 'fair':
+      return { label: 'Fair', style: "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400" };
+    case 'refurbished':
+      return { label: 'Refurbished', style: "bg-purple-500/10 border border-purple-500/20 text-purple-400" };
+    case 'second-hand':
+      return { label: 'Second Hand', style: "bg-orange-500/10 border border-orange-500/20 text-orange-400" };
+    default:
+      return { label: cond.replace('-', ' '), style: "bg-slate-500/10 border border-slate-500/20 text-slate-400" };
+  }
+};
+
 const ListingDetail = () => {
   const { t } = useLanguage();
   const { id } = useParams();
@@ -104,6 +125,7 @@ const ListingDetail = () => {
   const [manageImages, setManageImages] = useState<string[]>([]);
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [manageStock, setManageStock] = useState('');
+  const [manageCondition, setManageCondition] = useState<'brand-new' | 'like-new' | 'excellent' | 'good' | 'fair' | 'refurbished' | 'second-hand'>('brand-new');
   const [manageStatus, setManageStatus] = useState<'active' | 'pending' | 'sold' | 'removed'>('active');
   const [manageIsOffer, setManageIsOffer] = useState(false);
   const [manageOfferDuration, setManageOfferDuration] = useState('24');
@@ -319,6 +341,7 @@ const ListingDetail = () => {
           setManageImages(listingData.images || []);
           setNewImageFiles([]);
           setManageStock(listingData.stock !== undefined && listingData.stock !== null ? listingData.stock.toString() : '0');
+          setManageCondition(listingData.condition || 'brand-new');
           setManageStatus(listingData.status || 'active');
           setManageIsOffer(listingData.isOffer || false);
           setManageOfferDuration('24');
@@ -434,6 +457,7 @@ const ListingDetail = () => {
         description: manageDescription,
         price: updatedPrice !== undefined ? updatedPrice : null,
         originalPrice: updatedOriginalPrice !== undefined ? updatedOriginalPrice : null,
+        condition: listing?.type === 'product' ? manageCondition : null,
         offerText: manageOfferText || null,
         giftText: manageGiftText || null,
         isOffer: manageIsOffer,
@@ -454,6 +478,7 @@ const ListingDetail = () => {
           description: manageDescription,
           price: updatedPrice,
           originalPrice: updatedOriginalPrice,
+          condition: prev.type === 'product' ? manageCondition : undefined,
           offerText: manageOfferText,
           giftText: manageGiftText,
           isOffer: manageIsOffer,
@@ -784,6 +809,17 @@ const ListingDetail = () => {
                   <span className="text-emerald-400 uppercase tracking-wider">{listing.category}</span>
                   <span className="text-slate-700">•</span>
                   <span className="text-slate-400 uppercase tracking-wider">{listing.type}</span>
+                  {listing.type === 'product' && listing.condition && (
+                    <>
+                      <span className="text-slate-700">•</span>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider",
+                        getConditionLabelAndStyle(listing.condition).style
+                      )}>
+                        {getConditionLabelAndStyle(listing.condition).label}
+                      </span>
+                    </>
+                  )}
                   {listing.isPromoted && (
                     <>
                       <span className="text-slate-700">•</span>
@@ -1101,6 +1137,39 @@ const ListingDetail = () => {
                         />
                       </div>
                     </div>
+
+                    {listing?.type === 'product' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-mono font-bold text-slate-400 uppercase mb-1.5">Stock Level</label>
+                          <input
+                            type="number"
+                            required
+                            min={0}
+                            value={manageStock}
+                            onChange={(e) => setManageStock(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-200 outline-none text-xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-mono font-bold text-slate-400 uppercase mb-1.5">Item Condition</label>
+                          <select
+                            value={manageCondition}
+                            onChange={(e) => setManageCondition(e.target.value as any)}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-200 outline-none text-xs font-bold"
+                          >
+                            <option value="brand-new">Brand New (Mombasa/Nairobi Unopened)</option>
+                            <option value="like-new">Like New (Open Box)</option>
+                            <option value="excellent">Excellent Condition</option>
+                            <option value="good">Good (Used & Trusted)</option>
+                            <option value="fair">Fair Condition</option>
+                            <option value="refurbished">Refurbished (Certified Vendor)</option>
+                            <option value="second-hand">Second Hand (Standard)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="col-span-full p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl space-y-3">
                       <div className="flex items-center justify-between">

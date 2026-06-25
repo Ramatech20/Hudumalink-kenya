@@ -25,7 +25,7 @@ const Onboarding = () => {
     if (user) {
       setDisplayName(user.displayName || '');
       // If the user somehow completed onboarding, send them back
-      if (user.isOnboardingCompleted && !user.needsOnboarding) {
+      if ((user.isOnboardingCompleted && !user.needsOnboarding) || user.phoneNumber) {
         navigate('/');
       }
     }
@@ -190,7 +190,7 @@ const Onboarding = () => {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
             />
-            <p className="text-[10px] text-gray-500 dark:text-gray-450 mt-1.5 font-medium">
+            <p className="text-[10px] text-gray-500 dark:text-neutral-400 mt-1.5 font-medium">
               Please enter your legal name as it appears on official documents (National ID, Passport, etc.) for validation.
             </p>
           </div>
@@ -279,7 +279,7 @@ const Onboarding = () => {
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
             />
-            <p className="text-[10px] text-gray-500 dark:text-gray-450 mt-1.5 font-medium">
+            <p className="text-[10px] text-gray-500 dark:text-neutral-400 mt-1.5 font-medium">
               Necessary for receiving payout releases, escrow refunds, and verification protocols.
             </p>
           </div>
