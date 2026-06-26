@@ -27,7 +27,20 @@ import Careers from './pages/Careers';
 import Offers from './pages/Offers';
 import Referrals from './pages/Referrals';
 import Onboarding from './pages/Onboarding';
-import { About, Contact, Terms, Privacy, Safety, FAQ, EscrowPolicy, Cookies } from './pages/StaticPages';
+import { About, Contact } from './pages/StaticPages';
+import { 
+  TermsPage, 
+  PrivacyPage, 
+  EscrowPolicyPage, 
+  CookiesPage, 
+  SafetyPage, 
+  FAQPage,
+  BuyerRulesPage,
+  SellerRulesPage,
+  ProviderStandardsPage,
+  ProhibitedItemsPage,
+  DisputePolicyPage
+} from './pages/PolicyCenter';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -67,12 +80,17 @@ export default function App() {
                   <Route path="/transactions/:id" element={<PrivateRoute><TransactionDetail /></PrivateRoute>} />
                   <Route path="/about" element={<About />} />
                   <Route path="/contact" element={<Contact />} />
-                  <Route path="/terms" element={<Terms />} />
-                  <Route path="/privacy" element={<Privacy />} />
-                  <Route path="/escrow-policy" element={<EscrowPolicy />} />
-                  <Route path="/cookies" element={<Cookies />} />
-                  <Route path="/safety" element={<Safety />} />
-                  <Route path="/faq" element={<FAQ />} />
+                  <Route path="/terms" element={<TermsPage />} />
+                  <Route path="/privacy" element={<PrivacyPage />} />
+                  <Route path="/escrow-policy" element={<EscrowPolicyPage />} />
+                  <Route path="/cookies" element={<CookiesPage />} />
+                  <Route path="/safety" element={<SafetyPage />} />
+                  <Route path="/faq" element={<FAQPage />} />
+                  <Route path="/buyer-rules" element={<BuyerRulesPage />} />
+                  <Route path="/seller-rules" element={<SellerRulesPage />} />
+                  <Route path="/provider-standards" element={<ProviderStandardsPage />} />
+                  <Route path="/prohibited-items" element={<ProhibitedItemsPage />} />
+                  <Route path="/dispute-policy" element={<DisputePolicyPage />} />
                   <Route path="/careers" element={<Careers />} />
                   <Route path="/offers" element={<Offers />} />
                 </Routes>
