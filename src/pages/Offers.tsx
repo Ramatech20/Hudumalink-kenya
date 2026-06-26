@@ -93,19 +93,19 @@ export default function Offers() {
   };
 
   return (
-    <div id="offers-deals-hub-root" className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 text-white bg-slate-950 min-h-screen">
+    <div id="offers-deals-hub-root" className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 text-gray-900 dark:text-white bg-gray-50 dark:bg-neutral-950 min-h-screen">
       
       {/* Editorial Header Block */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-6 mb-6 border-b border-slate-800 gap-4">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-6 mb-6 border-b border-gray-200 dark:border-neutral-800 gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-rose-500/15 rounded-2xl border border-rose-500/30 text-rose-400 shrink-0">
+          <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/25 text-rose-600 dark:text-rose-400 shrink-0">
             <Percent className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-3xl font-black uppercase tracking-tight text-slate-100 font-sans">
+            <h1 className="text-xl sm:text-3xl font-black uppercase tracking-tight text-gray-900 dark:text-slate-100 font-sans">
               Limited-Time Deals Hub
             </h1>
-            <p className="text-xs text-rose-400 font-bold flex items-center gap-1 mt-0.5">
+            <p className="text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1 mt-0.5">
               <Flame className="w-3.5 h-3.5 animate-bounce" />
               Direct discount prices on verified listings. Secure Escrow guaranteed.
             </p>
@@ -114,7 +114,7 @@ export default function Offers() {
 
         {/* Counter sticker label info */}
         <div className="flex items-center gap-2">
-          <span className="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300">
+          <span className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-600 dark:text-neutral-300">
             {filteredListings.length} deal campaigns live
           </span>
           {user?.role !== 'customer' && (
@@ -128,14 +128,14 @@ export default function Offers() {
         </div>
       </div>
 
-      {/* Jumia Inspired Category Navigation Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
-        <div className="flex items-center gap-1.5 text-xs font-black text-slate-400">
-          <Filter className="w-3.5 h-3.5 text-emerald-400" />
+      {/* Category Navigation Filters */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 p-3 rounded-2xl shadow-xs">
+        <div className="flex items-center gap-1.5 text-xs font-black text-gray-500 dark:text-neutral-400">
+          <Filter className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
           <span>FILTER DEALS:</span>
         </div>
         
-        <div className="flex bg-slate-950 p-1 rounded-xl gap-1 border border-slate-800 select-none">
+        <div className="flex bg-gray-100 dark:bg-neutral-950 p-1 rounded-xl gap-1 border border-gray-200 dark:border-neutral-850 select-none">
           {[
             { id: 'all', val: 'All Offers ⚡' },
             { id: 'product', val: 'Products & Goods 📦' },
@@ -146,8 +146,8 @@ export default function Offers() {
               onClick={() => setFilterType(typeItem.id as any)}
               className={`px-3 py-2 rounded-lg text-[10px] sm:text-xs font-black transition-all uppercase tracking-wide ${
                 filterType === typeItem.id
-                  ? 'bg-rose-600/15 border border-rose-500/30 text-rose-400 font-black shadow'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
+                  ? 'bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 font-black shadow-xs'
+                  : 'text-gray-500 dark:text-neutral-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-200 dark:hover:bg-neutral-900 border border-transparent'
               }`}
             >
               {typeItem.val}
@@ -193,11 +193,11 @@ export default function Offers() {
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="py-16 text-center bg-slate-900 border border-slate-800 rounded-2xl p-6"
+          className="py-16 text-center bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm"
         >
           <Percent className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
-          <h3 className="text-lg font-black uppercase text-slate-100 tracking-tight">No Active Hot Deals Available</h3>
-          <p className="text-slate-400 mt-2 max-w-sm mx-auto text-xs sm:text-sm leading-relaxed">
+          <h3 className="text-lg font-black uppercase text-gray-900 dark:text-slate-100 tracking-tight">No Active Hot Deals Available</h3>
+          <p className="text-gray-500 dark:text-neutral-400 mt-2 max-w-sm mx-auto text-xs sm:text-sm leading-relaxed">
             All current listings are at their regular rate tags. If you are an active merchant, list special deals to show here with extra priority badges!
           </p>
           {user?.role !== 'customer' && (
@@ -214,21 +214,21 @@ export default function Offers() {
       )}
 
       {/* Escrow Fintech Trust Banner */}
-      <div id="escrow-assurance-trust-card" className="mt-12 p-5 bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 rounded-2xl text-white flex flex-col md:flex-row items-center justify-between gap-5 shadow-lg">
+      <div id="escrow-assurance-trust-card" className="mt-12 p-5 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-3xl text-gray-900 dark:text-white flex flex-col md:flex-row items-center justify-between gap-5 shadow-xs">
         <div className="flex items-start gap-3.5">
-          <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20 shrink-0">
+          <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
             <ShieldCheck className="w-7 h-7" />
           </div>
           <div>
-            <h4 className="font-extrabold text-sm uppercase tracking-wide text-slate-100">Direct M-Pesa Escrow Assurance</h4>
-            <p className="text-[11px] text-slate-400 mt-1 max-w-xl leading-relaxed">
+            <h4 className="font-extrabold text-sm uppercase tracking-wide text-gray-900 dark:text-slate-100">Direct M-Pesa Escrow Assurance</h4>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-1 max-w-xl leading-relaxed">
               All flash-sale and hot discount payments on HudumaLink are secured via Escrow. Funds remain shielded in holding until you confirm product delivery or completed service milestone execution!
             </p>
           </div>
         </div>
         <Link
           to="/escrow-policy"
-          className="w-full md:w-auto px-5 py-2.5 border border-slate-800 hover:bg-slate-800 rounded-xl text-[10px] font-black tracking-widest text-center uppercase text-slate-300 transition-all shrink-0"
+          className="w-full md:w-auto px-5 py-2.5 border border-gray-200 dark:border-neutral-800 hover:bg-gray-100 dark:hover:bg-neutral-850 rounded-xl text-[10px] font-black tracking-widest text-center uppercase text-gray-700 dark:text-slate-300 transition-all shrink-0"
         >
           Verify How Escrow Works
         </Link>

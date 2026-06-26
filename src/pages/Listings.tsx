@@ -5,7 +5,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { handleGeneralError } from '../lib/error-handler';
 import { Listing } from '../types';
 import { formatPrice, cn, getDistance } from '../lib/utils';
-import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap, Tag, DollarSign, ShoppingBag, ShieldCheck, Flame } from 'lucide-react';
+import { Search, MapPin, Filter, SlidersHorizontal, X, ChevronRight, ChevronLeft, Loader2, Zap, Tag, DollarSign, ShoppingBag, ShieldCheck, Flame, Layers } from 'lucide-react';
 import { KENYAN_COUNTIES, CATEGORIES, TOWNS } from '../constants';
 import { motion } from 'motion/react';
 import { ListingSkeleton } from '../components/Skeleton';
@@ -287,7 +287,7 @@ const Listings = () => {
       <select 
         value={sortBy}
         onChange={(e) => setSortBy(e.target.value)}
-        className="text-xs font-black bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl text-emerald-400 outline-none cursor-pointer focus:border-emerald-500"
+        className="text-xs font-bold bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 px-3 py-2 rounded-xl text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer focus:border-emerald-500 shadow-xs"
       >
         <option value="newest">🛡️ Sort by Newest</option>
         <option value="price_low font-sans">💵 Price: Low to High</option>
@@ -297,7 +297,7 @@ const Listings = () => {
       {sortBy === 'distance' && !userLocation && (
         <button 
           onClick={handleGetLocation}
-          className="text-[10px] bg-slate-800 px-2 py-1 border border-slate-700 hover:text-white rounded-lg font-black text-emerald-400"
+          className="text-[10px] bg-gray-100 dark:bg-neutral-800 hover:bg-gray-200 dark:hover:bg-neutral-700 px-2.5 py-1.5 border border-gray-200 dark:border-neutral-750 text-emerald-600 dark:text-emerald-400 rounded-lg font-bold"
         >
           {locating ? 'LOCATING...' : 'GPS'}
         </button>
@@ -309,14 +309,14 @@ const Listings = () => {
   const mainGridElement = (
     <div className="space-y-4">
       {/* Real-time search keyword search area */}
-      <div className="relative w-full max-w-lg mb-4">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center shrink-0">
-          <Search className="w-4 h-4 text-slate-400" />
+      <div className="relative w-full max-w-lg mb-6 shadow-xs rounded-2xl">
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center shrink-0 pointer-events-none">
+          <Search className="w-4 h-4 text-gray-400 dark:text-neutral-500" />
         </span>
         <input 
           type="text" 
           placeholder={t('listings.search_placeholder') || "Search plumbers, laptops, farm produce..."} 
-          className="w-full text-xs pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-transparent text-slate-100 placeholder:text-slate-500 transition-colors"
+          className="w-full text-xs pl-11 pr-4 py-3.5 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 text-gray-900 dark:text-neutral-100 placeholder:text-gray-400 dark:placeholder:text-neutral-500 transition-all font-medium"
           value={qParam}
           onChange={(e) => updateSearchValue(e.target.value)}
         />
@@ -357,27 +357,27 @@ const Listings = () => {
             <motion.div 
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              className="py-16 text-center bg-slate-900 rounded-[2rem] border border-slate-800 shadow-xl px-4"
+              className="py-16 text-center bg-white dark:bg-neutral-900 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm px-6"
             >
               <div className="bg-emerald-500/10 w-16 h-16 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20">
-                <Search className="w-7 h-7 text-emerald-400" />
+                <Search className="w-7 h-7 text-emerald-500 dark:text-emerald-400" />
               </div>
-              <h3 className="text-xl sm:text-2xl font-black text-slate-100 uppercase tracking-tight">No active listings match</h3>
-              <p className="text-slate-400 mt-2 max-w-sm mx-auto text-xs sm:text-sm leading-relaxed">
+              <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-slate-100 uppercase tracking-tight">No active listings match</h3>
+              <p className="text-gray-500 dark:text-neutral-400 mt-2 max-w-sm mx-auto text-xs sm:text-sm leading-relaxed">
                 Adjust your filters or query to find active sellers across standard Kenyan counties.
               </p>
               
               <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button 
                   onClick={handleClearFilters}
-                  className="w-full sm:w-auto px-6 py-3 bg-emerald-700 text-white rounded-xl text-xs font-black uppercase hover:scale-[1.03] transition-all shadow-md shadow-emerald-950/40 border border-emerald-600/30"
+                  className="w-full sm:w-auto px-6 py-3 bg-emerald-650 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase hover:scale-[1.03] transition-all shadow-md shadow-emerald-950/40 border border-emerald-600/30"
                 >
                   Reset all filters
                 </button>
                 {user?.role !== 'customer' && (
                   <Link 
                     to="/create-listing"
-                    className="w-full sm:w-auto px-6 py-3 bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-black uppercase hover:bg-slate-755 border border-slate-700 transition-all text-center"
+                    className="w-full sm:w-auto px-6 py-3 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 hover:text-gray-950 dark:hover:text-white rounded-xl text-xs font-black uppercase hover:bg-gray-200 dark:hover:bg-neutral-700 border border-gray-200 dark:border-neutral-700 transition-all text-center"
                   >
                     Post listing gig
                   </Link>
@@ -392,11 +392,11 @@ const Listings = () => {
               <button 
                 onClick={() => fetchListings()}
                 disabled={loadingMore}
-                className="px-8 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl font-bold text-xs uppercase tracking-wider text-slate-200 transition-all disabled:opacity-50 flex items-center justify-center mx-auto"
+                className="px-8 py-3 bg-white dark:bg-neutral-900 hover:bg-gray-50 dark:hover:bg-neutral-800 border border-gray-200 dark:border-neutral-800 hover:border-gray-300 dark:hover:border-neutral-700 rounded-xl font-bold text-xs uppercase tracking-wider text-gray-700 dark:text-slate-200 transition-all disabled:opacity-50 flex items-center justify-center mx-auto shadow-xs"
               >
                 {loadingMore ? (
                   <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin text-emerald-400" />
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin text-emerald-500 dark:text-emerald-400" />
                     Loading More...
                   </>
                 ) : (
@@ -410,6 +410,27 @@ const Listings = () => {
     </div>
   );
 
+  // Dynamic header options based on listings page context
+  const dynamicHeader = {
+    product: {
+      title: t('nav.marketplace') || "Biashara Marketplace",
+      description: "Explore premium physical products, electronics, clothing, and local farm produce with secure Escrow protection.",
+      accentColor: "emerald" as const,
+      icon: <ShoppingBag className="w-5 h-5" />
+    },
+    service: {
+      title: t('nav.services') || "Professional Services & Trades",
+      description: "Hire certified local service professionals, plumbers, mechanics, electricians, and technicians with secured milestone Escrow.",
+      accentColor: "indigo" as const,
+      icon: <Zap className="w-5 h-5" />
+    }
+  }[typeParam as 'product' | 'service'] || {
+    title: "Biashara Discovery Hub",
+    description: "Find verified local merchants and talented trade professionals across all 47 Kenyan counties, backed by secure Escrow.",
+    accentColor: "emerald" as const,
+    icon: <Layers className="w-5 h-5" />
+  };
+
   return (
     <MarketplaceLayout
       sidebarContent={sidebarElement}
@@ -418,6 +439,10 @@ const Listings = () => {
       sortByContent={sortByContent}
       activeFiltersCount={activeFiltersCount}
       onResetFilters={handleClearFilters}
+      title={dynamicHeader.title}
+      description={dynamicHeader.description}
+      accentColor={dynamicHeader.accentColor}
+      icon={dynamicHeader.icon}
     />
   );
 };

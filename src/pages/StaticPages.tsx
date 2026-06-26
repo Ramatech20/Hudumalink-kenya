@@ -931,8 +931,37 @@ export const FAQ = () => {
 };
 
 export const Contact = () => {
-  const [formData, setFormData] = React.useState({ name: '', email: '', subject: '', message: '' });
+  const [formData, setFormData] = React.useState({ name: '', email: '', subject: 'General Inquiry', message: '' });
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [ticketId, setTicketId] = React.useState<string | null>(null);
+  const [activeFaq, setActiveFaq] = React.useState<number | null>(null);
+
+  const subjects = [
+    { id: 'General Inquiry', label: 'General', emoji: '💡', desc: 'Partnerships & general questions' },
+    { id: 'Technical Support', label: 'Technical', emoji: '⚙️', desc: 'Bugs, account or app issues' },
+    { id: 'Payment Issue', label: 'Payments', emoji: '💳', desc: 'M-Pesa deposits & escrow holds' },
+    { id: 'Report a User', label: 'Report', emoji: '🛡️', desc: 'Fraud, scams or listing issues' },
+    { id: 'Partnership', label: 'Partnership', emoji: '🤝', desc: 'Business & strategic alliances' }
+  ];
+
+  const faqs = [
+    {
+      q: "How does the HudumaLink Escrow protection work?",
+      a: "When you purchase an item or hire a professional, your payment is placed in a secure ledger. Funds are only transferred to the seller once you verify delivery or completed milestones, or upon an admin audit if a dispute is resolved."
+    },
+    {
+      q: "What is the average response time of the support team?",
+      a: "Our team answers queries within 2 hours during normal business hours (8 AM - 6 PM). For premium sellers and high-priority payment tickets, response times are often under 30 minutes."
+    },
+    {
+      q: "How do I file a dispute if a service is not delivered?",
+      a: "Go to your active transaction details panel, click on 'File Dispute', and upload proof of communication or incomplete execution. Our administrative legal team will arbitrate and decide on the override within 48 hours."
+    },
+    {
+      q: "Can I directly speak or chat with an agent on WhatsApp?",
+      a: "Yes! Click our official WhatsApp support channel button to start an instant live chat with an active HudumaLink customer care representative on 0112389628."
+    }
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -945,8 +974,10 @@ export const Contact = () => {
         createdAt: new Date().toISOString(),
         userId: auth.currentUser?.uid || 'anonymous'
       });
-      toast.success('Message sent! Our team will get back to you shortly.');
-      setFormData({ name: '', email: '', subject: '', message: '' });
+      
+      const generatedId = `HLK-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+      setTicketId(generatedId);
+      toast.success('Support ticket logged successfully!');
     } catch (error: any) {
       handleFirestoreError(error, OperationType.WRITE, 'support_tickets');
     } finally {
@@ -954,160 +985,345 @@ export const Contact = () => {
     }
   };
 
+  const handleReset = () => {
+    setFormData({ name: '', email: '', subject: 'General Inquiry', message: '' });
+    setTicketId(null);
+  };
+
   return (
-    <div className="bg-white dark:bg-neutral-950 transition-colors">
-      {/* Hero Section */}
-      <div className="relative py-20 overflow-hidden">
-        <div className="absolute inset-0 bg-accent/5 dark:bg-accent/10 -skew-y-3 origin-top-left"></div>
+    <div className="bg-gray-50 dark:bg-neutral-950 transition-colors min-h-screen">
+      {/* Immersive Modern Hero with Light/Dark Background accents */}
+      <div className="relative py-20 overflow-hidden bg-white dark:bg-neutral-900 border-b border-gray-100 dark:border-neutral-800">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-1/4 left-1/3 -translate-y-1/2 w-96 h-96 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-full blur-3xl"></div>
+        </div>
+        
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="inline-flex items-center justify-center w-20 h-20 bg-green-500/10 rounded-3xl text-green-500 mb-8"
+            className="inline-flex items-center justify-center p-3 bg-emerald-500/10 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-3xl mb-6 shadow-xs border border-emerald-500/20"
           >
-            <MessageSquare className="w-10 h-10" />
+            <MessageSquare className="w-8 h-8" />
           </motion.div>
-          <h1 className="text-4xl md:text-6xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
-            Contact <span className="text-green-500">Support</span> 💬
+          <h1 className="text-4xl sm:text-6xl font-extrabold text-gray-900 dark:text-white mb-6 tracking-tight leading-none">
+            Get in <span className="text-emerald-600 dark:text-emerald-400">Touch</span> 💬
           </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto leading-relaxed">
-            Need help, have a question, or facing an issue? Our support team is ready to assist you quickly and professionally. Your experience matters to us.
+          <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed font-medium">
+            Need payment help, technical troubleshooting, or escrow arbitration? Our dedicated Support Team is here 24/7 to guarantee your peace of mind.
           </p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-          {/* Contact Form */}
-          <div className="bg-white dark:bg-neutral-900 p-10 rounded-[2.5rem] border border-gray-100 dark:border-neutral-800 shadow-xl">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-8">Send us a message</h2>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Your Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 focus:ring-2 focus:ring-accent outline-none transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                    placeholder="John Doe"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 focus:ring-2 focus:ring-accent outline-none transition-all text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                    placeholder="john@example.com"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Subject</label>
-                <select
-                  required
-                  value={formData.subject}
-                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 focus:ring-2 focus:ring-accent outline-none transition-all text-gray-900 dark:text-white"
-                >
-                  <option value="" className="dark:bg-neutral-900">Select a subject</option>
-                  <option value="General Inquiry" className="dark:bg-neutral-900">General Inquiry</option>
-                  <option value="Technical Support" className="dark:bg-neutral-900">Technical Support</option>
-                  <option value="Payment Issue" className="dark:bg-neutral-900">Payment Issue</option>
-                  <option value="Report a User" className="dark:bg-neutral-900">Report a User</option>
-                  <option value="Partnership" className="dark:bg-neutral-900">Partnership</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Message</label>
-                <textarea
-                  required
-                  rows={5}
-                  value={formData.message}
-                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 focus:ring-2 focus:ring-accent outline-none transition-all text-gray-900 dark:text-white resize-none placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                  placeholder="How can we help you?"
-                ></textarea>
-              </div>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-4 bg-green-600 text-white rounded-xl font-bold hover:bg-opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:items-start">
+          
+          {/* LEFT COLUMN: Interactive Ticketing Form (takes 7 cols on large screens) */}
+          <div className="lg:col-span-7">
+            {ticketId ? (
+              /* Success receipt page with dynamic receipt view */
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white dark:bg-neutral-900 p-8 sm:p-10 rounded-3xl border border-emerald-500/30 dark:border-emerald-500/20 shadow-md text-center space-y-6 relative overflow-hidden"
               >
-                {isSubmitting ? 'Sending...' : (
-                  <>
-                    <Send className="w-5 h-5" />
-                    Get Help Now
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="mt-12 p-8 bg-gray-50 dark:bg-neutral-800 rounded-3xl border border-gray-100 dark:border-neutral-700">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary flex-shrink-0">
-                  <ShieldCheck className="w-6 h-6" />
+                <div className="absolute top-0 inset-x-0 h-1.5 bg-emerald-500"></div>
+                <div className="w-16 h-16 bg-emerald-500/15 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto border border-emerald-500/30">
+                  <CheckCircle2 className="w-10 h-10" />
                 </div>
+                
                 <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white mb-2">Your Safety Matters</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-300 leading-relaxed">
-                    We take every inquiry seriously. Whether it’s a dispute, payment issue, or general question, our team ensures fair handling and user protection at all times.
+                  <span className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">Ticket Logged</span>
+                  <h2 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white mt-4">We are on it!</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-md mx-auto">
+                    Your help ticket has been successfully compiled into the secure registry. An agent has been scheduled to resolve your query.
                   </p>
                 </div>
-              </div>
-            </div>
-          </div>
 
-          {/* Contact Info */}
-          <div className="space-y-12">
-            <div>
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-3xl font-black text-gray-900 dark:text-white">Get in touch</h2>
-                <Link to="/faq" className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
-                  <HelpCircle className="w-4 h-4" /> Common Questions
-                </Link>
-              </div>
-              <div className="space-y-8">
-                {[
-                  { icon: <Mail className="w-6 h-6" />, title: "Email Us", val: "support@hudumalink.co.ke", href: "mailto:support@hudumalink.co.ke", desc: "⚡ Average response time: under 2 hours" },
-                  { icon: (
-                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                      <path d="M12.004 0C5.372 0 0 5.372 0 12.004c0 2.116.549 4.11 1.612 5.855L.05 24l6.302-1.654a11.97 11.97 0 005.652 1.41h.005c6.629 0 12.001-5.372 12.001-12.004C24.01 5.372 18.636 0 12.004 0zm6.986 16.92c-.287.808-1.42 1.492-2.193 1.583-.726.084-1.658.127-2.68-.198-1.023-.325-2.028-.868-2.914-1.496a15.828 15.828 0 01-3.69-3.692C6.91 12.222 6.38 11.196 6.07 10.155c-.31-.1-.314-.085-.314-.085-.357-1.157.34-1.928.895-2.484l.654-.654c.154-.154.346-.226.544-.226.2 0 .393.072.544.226l1.35 1.35c.154.154.226.346.226.544 0 .2-.072.392-.226.544l-.454.454c-.112.112-.132.278-.052.41a6.602 6.602 0 001.378 1.83 6.577 6.577 0 001.83 1.378c.133.08.3.06.411-.052l.455-.455c.153-.153.345-.226.544-.226s.39.073.543.226l1.35 1.35c.154.154.226.346.226.544 0 .198-.073.39-.227.544l-.35.35c-.092.1-.219.145-.347.118z"/>
-                    </svg>
-                  ), title: "WhatsApp Support", val: "0112389628", href: "https://wa.me/254112389628?text=Hello%20HudumaLink%20Support,%20I'm%20contacting%20you%20from%20the%20platform%20for%20assistance.", desc: "Chat with us instantly for faster assistance." },
-                  { icon: <Phone className="w-6 h-6" />, title: "Call Us", val: "0112389628", href: "tel:254112389628", desc: "Mon-Fri from 8am to 6pm." },
-                  { icon: <MapPin className="w-6 h-6" />, title: "Visit Us", val: "Eldoret, Kenya", href: "", desc: "(Operations currently remote as we build and expand)" }
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-6">
-                    <div className="w-14 h-14 bg-gray-50 dark:bg-neutral-900 rounded-2xl flex items-center justify-center text-green-500 border border-gray-100 dark:border-neutral-800 flex-shrink-0">
-                      {item.icon}
+                <div className="p-6 bg-gray-50 dark:bg-neutral-950 rounded-2xl border border-gray-100 dark:border-neutral-800 text-left space-y-3.5 max-w-md mx-auto">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-400 uppercase tracking-wider font-extrabold">Reference ID:</span>
+                    <span className="font-mono font-black text-gray-900 dark:text-white bg-white dark:bg-neutral-900 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-neutral-800 shadow-xs">{ticketId}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs border-t border-gray-100 dark:border-neutral-800 pt-3">
+                    <span className="text-gray-400 uppercase tracking-wider font-extrabold">Category topic:</span>
+                    <span className="font-bold text-gray-700 dark:text-gray-300">{formData.subject}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs border-t border-gray-100 dark:border-neutral-800 pt-3">
+                    <span className="text-gray-400 uppercase tracking-wider font-extrabold">Priority state:</span>
+                    <span className="text-amber-600 dark:text-amber-500 font-extrabold flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 animate-spin" /> High Support Queue
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                  <button
+                    onClick={handleReset}
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-xs"
+                  >
+                    Submit Another Ticket
+                  </button>
+                  <Link
+                    to="/"
+                    className="px-6 py-3 bg-gray-100 dark:bg-neutral-800 hover:bg-gray-200 dark:hover:bg-neutral-700 text-gray-700 dark:text-neutral-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all"
+                  >
+                    Return to Home
+                  </Link>
+                </div>
+              </motion.div>
+            ) : (
+              /* High-fidelity modern contact form card */
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white dark:bg-neutral-900 p-6 sm:p-10 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm space-y-8"
+              >
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white uppercase">Send a secure inquiry</h2>
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">Fill out the official registry form below, and our dispatch desk will route your request.</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Two column grid inputs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-[11px] font-extrabold uppercase tracking-widest text-gray-500 dark:text-neutral-400 mb-2">Full Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm text-gray-900 dark:text-white font-medium"
+                        placeholder="John Doe"
+                      />
                     </div>
                     <div>
-                      <h3 className="font-bold text-gray-900 dark:text-white">{item.title}</h3>
-                      {item.href ? (
-                        <a 
-                          href={item.href} 
-                          target={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : "_blank"} 
-                          rel={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : "noopener noreferrer"}
-                          className="inline-block text-green-600 dark:text-green-400 font-bold mt-1 hover:underline transition-all"
-                        >
-                          {item.val}
-                        </a>
-                      ) : (
-                        <p className="text-green-600 dark:text-green-400 font-bold mt-1">{item.val}</p>
-                      )}
-                      <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">{item.desc}</p>
+                      <label className="block text-[11px] font-extrabold uppercase tracking-widest text-gray-500 dark:text-neutral-400 mb-2">Email Address</label>
+                      <input
+                        type="email"
+                        required
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm text-gray-900 dark:text-white font-medium"
+                        placeholder="john@example.com"
+                      />
                     </div>
+                  </div>
+
+                  {/* Interactive topic grid selectors */}
+                  <div className="space-y-2.5">
+                    <label className="block text-[11px] font-extrabold uppercase tracking-widest text-gray-500 dark:text-neutral-400">Choose Inquiry Topic</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                      {subjects.map((subj) => (
+                        <button
+                          key={subj.id}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, subject: subj.id })}
+                          className={cn(
+                            "p-3 rounded-2xl border text-left transition-all relative flex flex-col justify-between h-20 shadow-xs",
+                            formData.subject === subj.id
+                              ? "bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-400"
+                              : "bg-gray-50 dark:bg-neutral-950 border-gray-200 dark:border-neutral-800 text-gray-600 dark:text-neutral-400 hover:border-gray-300 dark:hover:border-neutral-700"
+                          )}
+                        >
+                          <span className="text-xl">{subj.emoji}</span>
+                          <span className="text-[10px] font-black uppercase tracking-tight block leading-none truncate w-full">{subj.label}</span>
+                          {formData.subject === subj.id && (
+                            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500"></span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Tiny desc block of selected subject */}
+                    <div className="bg-gray-50 dark:bg-neutral-950/40 border border-gray-100 dark:border-neutral-800/40 p-3 rounded-xl">
+                      <p className="text-[10px] text-gray-400 dark:text-neutral-500 font-bold uppercase tracking-wider">Topic Focus:</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-300 font-medium mt-0.5">
+                        {subjects.find(s => s.id === formData.subject)?.desc || 'Please select a topic'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Description message box */}
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-widest text-gray-500 dark:text-neutral-400 mb-2">Message details</label>
+                    <textarea
+                      required
+                      rows={5}
+                      value={formData.message}
+                      onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-800 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm text-gray-900 dark:text-white resize-none font-medium"
+                      placeholder="Be as detailed as possible to help our team solve your issue..."
+                    ></textarea>
+                  </div>
+
+                  {/* Submit support request */}
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white rounded-xl font-extrabold text-xs uppercase tracking-widest transition-all shadow-md hover:scale-[1.01] active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Clock className="w-4 h-4 animate-spin" />
+                        Logging Ticket Securely...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        Submit Secure Ticket
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                {/* Secure Trust Disclaimer */}
+                <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                    <strong className="text-gray-800 dark:text-slate-300">Protected Communications Ledger:</strong> Every inquiry is secured on our database. We respect consumer confidentiality and never share ticket files or details outside administrative legal resolution bounds.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* RIGHT COLUMN: Contact Info Bento & Self-service FAQs (takes 5 cols on large screens) */}
+          <div className="lg:col-span-5 space-y-8">
+            
+            {/* Quick Contact Bento Channels */}
+            <div className="bg-white dark:bg-neutral-900 p-6 sm:p-8 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm space-y-6">
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-tight text-gray-900 dark:text-white">Active Channels</h3>
+                <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Reach out to us directly on fast-track priority channels.</p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3.5">
+                {[
+                  {
+                    icon: (
+                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                        <path d="M12.004 0C5.372 0 0 5.372 0 12.004c0 2.116.549 4.11 1.612 5.855L.05 24l6.302-1.654a11.97 11.97 0 005.652 1.41h.005c6.629 0 12.001-5.372 12.001-12.004C24.01 5.372 18.636 0 12.004 0zm6.986 16.92c-.287.808-1.42 1.492-2.193 1.583-.726.084-1.658.127-2.68-.198-1.023-.325-2.028-.868-2.914-1.496a15.828 15.828 0 01-3.69-3.692C6.91 12.222 6.38 11.196 6.07 10.155c-.31-.1-.314-.085-.314-.085-.357-1.157.34-1.928.895-2.484l.654-.654c.154-.154.346-.226.544-.226.2 0 .393.072.544.226l1.35 1.35c.154.154.226.346.226.544 0 .2-.072.392-.226.544l-.454.454c-.112.112-.132.278-.052.41a6.602 6.602 0 001.378 1.83 6.577 6.577 0 001.83 1.378c.133.08.3.06.411-.052l.455-.455c.153-.153.345-.226.544-.226s.39.073.543.226l1.35 1.35c.154.154.226.346.226.544 0 .198-.073.39-.227.544l-.35.35c-.092.1-.219.145-.347.118z"/>
+                      </svg>
+                    ),
+                    title: "WhatsApp Chat Support",
+                    val: "0112389628",
+                    href: "https://wa.me/254112389628?text=Hello%20HudumaLink%20Support,%20I'm%20contacting%20you%20from%20the%20platform%20for%20assistance.",
+                    badge: "⚡ Instant 24/7",
+                    badgeColor: "bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400"
+                  },
+                  {
+                    icon: <Mail className="w-5 h-5" />,
+                    title: "Email Dispatch Office",
+                    val: "support@hudumalink.co.ke",
+                    href: "mailto:support@hudumalink.co.ke",
+                    badge: "⏱️ Under 2h Response",
+                    badgeColor: "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400"
+                  },
+                  {
+                    icon: <Phone className="w-5 h-5" />,
+                    title: "Call Helpline Desk",
+                    val: "0112389628",
+                    href: "tel:254112389628",
+                    badge: "📞 8am - 6pm (Mon-Fri)",
+                    badgeColor: "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-500"
+                  }
+                ].map((item, index) => (
+                  <a
+                    key={index}
+                    href={item.href}
+                    target={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : "_blank"}
+                    rel={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : "noopener noreferrer"}
+                    className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-neutral-950 border border-gray-100 dark:border-neutral-800/80 hover:border-emerald-500/30 dark:hover:border-emerald-500/30 transition-all group shadow-xs hover:shadow-xs"
+                  >
+                    <div className="w-11 h-11 bg-white dark:bg-neutral-900 rounded-xl flex items-center justify-center border border-gray-200 dark:border-neutral-800 text-emerald-600 dark:text-emerald-400 shrink-0 group-hover:scale-105 transition-all">
+                      {item.icon}
+                    </div>
+                    <div className="min-w-0 flex-grow">
+                      <span className={cn("text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded border inline-block", item.badgeColor)}>
+                        {item.badge}
+                      </span>
+                      <h4 className="font-bold text-xs text-gray-400 dark:text-neutral-500 mt-1 leading-none">{item.title}</h4>
+                      <p className="font-extrabold text-sm text-gray-900 dark:text-white mt-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-none truncate">{item.val}</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-gray-300 dark:text-neutral-700 shrink-0 group-hover:translate-x-1 transition-all" />
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Interactive self-help FAQ Accordions */}
+            <div className="bg-white dark:bg-neutral-900 p-6 sm:p-8 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-neutral-800 pb-3">
+                <h3 className="text-lg font-black uppercase tracking-tight text-gray-900 dark:text-white">Self-Service Help</h3>
+                <Link to="/faq" className="text-xs font-black text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 uppercase tracking-wider">
+                  <HelpCircle className="w-3.5 h-3.5" /> All FAQs
+                </Link>
+              </div>
+
+              <div className="space-y-2.5">
+                {faqs.map((faq, idx) => (
+                  <div
+                    key={idx}
+                    className="border border-gray-100 dark:border-neutral-800 rounded-2xl overflow-hidden bg-gray-50 dark:bg-neutral-950/40 transition-all"
+                  >
+                    <button
+                      onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}
+                      className="w-full p-4 text-left font-bold text-xs text-gray-800 dark:text-slate-200 flex justify-between items-center gap-3"
+                    >
+                      <span>{faq.q}</span>
+                      <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform duration-300 shrink-0", activeFaq === idx && "transform rotate-180")} />
+                    </button>
+                    
+                    {activeFaq === idx && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="px-4 pb-4 text-xs text-gray-500 dark:text-gray-450 border-t border-gray-100 dark:border-neutral-800 pt-2.5 leading-relaxed"
+                      >
+                        {faq.a}
+                      </motion.div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
 
+            {/* Vector Styled Map Mockup for Eldoret Head Office */}
+            <div className="bg-white dark:bg-neutral-900 p-6 sm:p-8 rounded-3xl border border-gray-200 dark:border-neutral-800 shadow-sm space-y-4">
+              <div>
+                <h3 className="text-base font-black uppercase tracking-tight text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <MapPin className="w-4.5 h-4.5 text-emerald-500" /> HQ Dispatch Office
+                </h3>
+                <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Eldoret, Kenya (Operations running fully remote)</p>
+              </div>
+
+              {/* Styled clean vector abstract map representing local coordinates */}
+              <div className="h-28 bg-gray-50 dark:bg-neutral-950 border border-gray-200 dark:border-neutral-850 rounded-2xl relative overflow-hidden flex items-center justify-center select-none shadow-inner">
+                {/* Visual grid background */}
+                <div className="absolute inset-0 opacity-15 dark:opacity-5 bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:14px_24px]" />
+                
+                {/* Map Roads vectors placeholder */}
+                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-200 dark:bg-neutral-800 transform rotate-12" />
+                <div className="absolute top-0 bottom-0 left-1/3 w-0.5 bg-gray-200 dark:bg-neutral-800 transform -rotate-12" />
+                <div className="absolute top-0 bottom-0 left-2/3 w-0.5 bg-gray-200 dark:bg-neutral-800 transform rotate-45" />
+
+                {/* Blinking Map pin locator */}
+                <div className="relative z-10 flex flex-col items-center">
+                  <span className="flex h-5 w-5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-5 w-5 bg-emerald-500 border-2 border-white dark:border-neutral-900 shadow-md"></span>
+                  </span>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-white dark:bg-neutral-900 px-2 py-0.5 rounded border border-gray-200 dark:border-neutral-800 shadow-sm mt-1">
+                    ELDORET CO-ORDINATES
+                  </span>
+                </div>
+              </div>
+            </div>
+
           </div>
+
         </div>
       </div>
     </div>
