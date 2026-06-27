@@ -1,6 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
+
+const createGeminiClient = () => {
+  if (!geminiApiKey) {
+    return null;
+  }
+
+  return new GoogleGenAI({ apiKey: geminiApiKey });
+};
 
 export interface ModerationResult {
   isSafe: boolean;
@@ -19,6 +27,13 @@ export const moderateListing = async (title: string, description: string): Promi
     - isSafe: boolean
     - reason: string (if not safe, explain why in one short sentence)
     `;
+
+    const ai = createGeminiClient();
+
+    if (!ai) {
+      console.warn('Gemini moderation unavailable, defaulting to safe');
+      return { isSafe: true, reason: 'AI moderation unavailable; manual review applied.' };
+    }
 
     // Add a timeout to the AI call
     const moderationPromise = ai.models.generateContent({

@@ -288,6 +288,8 @@ const Listings = () => {
         value={sortBy}
         onChange={(e) => setSortBy(e.target.value)}
         className="text-xs font-bold bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 px-3 py-2 rounded-xl text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer focus:border-emerald-500 shadow-xs"
+        aria-label="Sort listings"
+        title="Sort listings"
       >
         <option value="newest">🛡️ Sort by Newest</option>
         <option value="price_low font-sans">💵 Price: Low to High</option>
@@ -308,18 +310,32 @@ const Listings = () => {
   // Main list grid content area slot
   const mainGridElement = (
     <div className="space-y-4">
-      {/* Real-time search keyword search area */}
-      <div className="relative w-full max-w-lg mb-6 shadow-xs rounded-2xl">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center shrink-0 pointer-events-none">
-          <Search className="w-4 h-4 text-gray-400 dark:text-neutral-500" />
-        </span>
-        <input 
-          type="text" 
-          placeholder={t('listings.search_placeholder') || "Search plumbers, laptops, farm produce..."} 
-          className="w-full text-xs pl-11 pr-4 py-3.5 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 text-gray-900 dark:text-neutral-100 placeholder:text-gray-400 dark:placeholder:text-neutral-500 transition-all font-medium"
-          value={qParam}
-          onChange={(e) => updateSearchValue(e.target.value)}
-        />
+      <div className="mb-6 rounded-[1.75rem] border border-gray-200/70 bg-white/90 p-4 shadow-[0_15px_45px_rgba(15,23,42,0.06)] backdrop-blur dark:border-neutral-800/80 dark:bg-neutral-900/90">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-400">Trusted marketplace</p>
+            <h2 className="mt-1 text-lg font-black text-gray-900 dark:text-white">Discover verified offers throughout Kenya</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {['Escrow protected', 'Verified vendors', 'Fast delivery'].map((pill) => (
+              <span key={pill} className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold text-gray-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-300">
+                {pill}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="relative mt-4 w-full max-w-2xl rounded-2xl border border-gray-200/70 bg-gray-50/70 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/70">
+          <span className="pointer-events-none absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center shrink-0">
+            <Search className="h-4 w-4 text-gray-400 dark:text-neutral-500" />
+          </span>
+          <input 
+            type="text" 
+            placeholder={t('listings.search_placeholder') || "Search plumbers, laptops, farm produce..."} 
+            className="w-full rounded-2xl border-0 bg-transparent py-3.5 pl-11 pr-4 text-xs font-medium text-gray-900 outline-none placeholder:text-gray-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+            value={qParam}
+            onChange={(e) => updateSearchValue(e.target.value)}
+          />
+        </div>
       </div>
 
       {loading ? (

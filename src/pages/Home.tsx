@@ -196,10 +196,23 @@ const Home = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-xl md:text-2xl text-gray-200 mb-12 max-w-3xl mx-auto font-medium leading-relaxed"
+            className="text-xl md:text-2xl text-gray-200 mb-8 max-w-3xl mx-auto font-medium leading-relaxed"
           >
             {t('hero.subtitle')}
           </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mb-10 flex flex-wrap items-center justify-center gap-2"
+          >
+            {['Escrow Protected', 'Verified Vendors', 'Fast Payments', 'All 47 Counties'].map((item) => (
+              <span key={item} className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-medium text-white/90 backdrop-blur">
+                {item}
+              </span>
+            ))}
+          </motion.div>
 
           <motion.form 
             initial={{ opacity: 0, y: 20 }}
@@ -224,6 +237,8 @@ const Home = () => {
                 className="bg-transparent py-3 text-gray-900 dark:text-gray-100 focus:outline-none w-full"
                 value={selectedCounty}
                 onChange={(e) => setSelectedCounty(e.target.value)}
+                aria-label="Select county"
+                title="Select county"
               >
                 <option value="" className="dark:bg-neutral-900">{t('hero.all_counties')}</option>
                 {KENYAN_COUNTIES.map(c => <option key={c} value={c} className="dark:bg-neutral-900">{c}</option>)}
@@ -317,9 +332,9 @@ const Home = () => {
             <Link 
               key={cat}
               to={`/listings?category=${cat}`}
-              className="group bg-white dark:bg-neutral-900 p-6 rounded-2xl border border-gray-100 dark:border-neutral-800 hover:border-primary dark:hover:border-primary hover:shadow-lg transition-all text-center"
+              className="group bg-white/90 dark:bg-neutral-900/90 p-6 rounded-[1.5rem] border border-gray-200/70 dark:border-neutral-800/80 hover:border-primary dark:hover:border-primary hover:-translate-y-1 hover:shadow-[0_20px_50px_rgba(15,23,42,0.08)] transition-all text-center"
             >
-              <div className="w-12 h-12 bg-gray-50 dark:bg-neutral-800 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-primary group-hover:text-white transition-colors">
+              <div className="w-12 h-12 bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-primary group-hover:text-white transition-colors">
                 {i < 5 ? <Briefcase className="w-6 h-6" /> : <ShoppingBag className="w-6 h-6" />}
               </div>
               <span className="font-semibold text-gray-900 dark:text-gray-100">{cat}</span>

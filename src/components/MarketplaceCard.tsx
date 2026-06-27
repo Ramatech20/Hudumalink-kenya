@@ -65,7 +65,7 @@ export const MarketplaceCard: React.FC<MarketplaceCardProps> = memo(({
   return (
     <div
       id={`marketplace-card-${id}`}
-      className="group flex flex-col w-full h-full max-h-[280px] sm:max-h-none rounded-2xl overflow-hidden border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-emerald-500 dark:hover:border-emerald-500 hover:-translate-y-1.5 transition-all duration-300 shadow-xs hover:shadow-md select-none text-gray-900 dark:text-white relative"
+      className="group relative flex h-full max-h-[280px] w-full flex-col overflow-hidden rounded-[1.6rem] border border-gray-200/70 bg-white/90 text-gray-900 shadow-[0_14px_35px_rgba(15,23,42,0.06)] transition-all duration-300 select-none hover:-translate-y-1.5 hover:border-emerald-500 hover:shadow-[0_22px_50px_rgba(15,23,42,0.10)] dark:border-neutral-800/80 dark:bg-neutral-900/90 dark:text-white sm:max-h-none"
     >
       {/* 4. Aspect-ratio Thumbnail / Media Section */}
       <div className="relative w-full aspect-square overflow-hidden bg-gray-100 dark:bg-neutral-950 shrink-0">

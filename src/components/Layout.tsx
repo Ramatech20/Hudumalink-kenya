@@ -147,6 +147,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   };
   const { theme, resolvedTheme, setTheme } = useTheme();
 
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
+
   const handleResendVerification = async () => {
     if (!auth.currentUser) return;
     setResendingEmail(true);
@@ -296,8 +300,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div className="min-h-screen flex flex-col transition-colors duration-300">
       {/* Top Banner */}
-      <div className="bg-primary text-white py-1 px-4 text-center text-xs font-medium flex justify-between items-center">
-        <div className="flex-grow text-center">
+      <div className="bg-gradient-to-r from-primary via-emerald-900 to-neutral-950 text-white py-1.5 px-4 text-center text-xs font-semibold flex justify-between items-center">
+        <div className="flex-grow text-center tracking-wide">
           {t('footer.tagline')}
         </div>
         <div className="flex items-center space-x-2">
@@ -344,8 +348,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       )}
 
       {/* Navigation */}
-      <nav className="bg-white dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-800 sticky top-0 z-50 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <nav className="sticky top-0 z-50 border-b border-white/70 bg-white/80 backdrop-blur-xl dark:border-neutral-800/80 dark:bg-neutral-900/80 transition-colors">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             {/* Logo */}
             <Link to="/" className="flex items-center space-x-3 group">
@@ -384,7 +388,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </div>
 
             {/* Actions */}
-            <div className="hidden md:flex items-center space-x-4">
+            <div className="hidden md:flex items-center space-x-3">
+              <button
+                onClick={toggleTheme}
+                className="rounded-full border border-gray-200 bg-white/80 p-2.5 text-gray-600 transition-all hover:border-primary hover:text-primary dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-gray-300"
+                aria-label="Toggle theme"
+                title="Toggle theme"
+              >
+                {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
               {/* Universal Shopping Cart Trigger */}
               <button 
                 onClick={() => setIsCartOpen(true)} 
@@ -453,6 +465,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
             {/* Mobile Menu Button */}
             <div className="md:hidden flex items-center space-x-2">
+              <button
+                onClick={toggleTheme}
+                className="rounded-full border border-gray-200 bg-white/80 p-2 text-gray-600 transition-all hover:border-primary hover:text-primary dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-gray-300"
+                aria-label="Toggle theme"
+              >
+                {resolvedTheme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </button>
               <button 
                 onClick={() => setIsCartOpen(true)} 
                 className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors relative" 
@@ -647,6 +666,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                                 <button
                                   onClick={() => updateQuantity(item.listing.id, item.quantity - 1)}
                                   className="px-2 py-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-700 transition"
+                                  aria-label="Decrease quantity"
+                                  title="Decrease quantity"
                                 >
                                   <Minus className="w-3.5 h-3.5" />
                                 </button>
@@ -656,6 +677,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                                 <button
                                   onClick={() => updateQuantity(item.listing.id, item.quantity + 1)}
                                   className="px-2 py-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-700 transition"
+                                  aria-label="Increase quantity"
+                                  title="Increase quantity"
                                 >
                                   <Plus className="w-3.5 h-3.5" />
                                 </button>
@@ -723,8 +746,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </AnimatePresence>
 
       {/* Footer */}
-      <footer className="bg-accent text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <footer className="bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-white py-12">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="col-span-1 md:col-span-2">
               <span className="text-2xl font-bold tracking-tight text-white">
@@ -734,13 +757,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 The most trusted digital marketplace in Kenya. Connecting millions of buyers and sellers across all 47 counties.
               </p>
               <div className="mt-6 flex space-x-4">
-                <a href="https://facebook.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-primary transition-colors">
+                <a href="https://facebook.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-primary transition-colors" aria-label="Visit our Facebook page" title="Visit our Facebook page">
                   <Facebook className="w-5 h-5" />
                 </a>
-                <a href="https://instagram.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-secondary transition-colors">
+                <a href="https://instagram.com/hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-secondary transition-colors" aria-label="Visit our Instagram page" title="Visit our Instagram page">
                   <Instagram className="w-5 h-5" />
                 </a>
-                <a href="https://tiktok.com/@hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-black transition-colors">
+                <a href="https://tiktok.com/@hudumalink" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 rounded-full hover:bg-black transition-colors" aria-label="Visit our TikTok page" title="Visit our TikTok page">
                   <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
                     <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.17-2.89-.6-4.13-1.47V18.77a6.738 6.738 0 01-6.74 6.74c-1.4-.01-2.82-.44-3.99-1.25a6.744 6.744 0 01-2.75-5.49c-.01-1.4.44-2.82 1.25-3.99a6.744 6.744 0 015.49-2.75c.01 0 .01 0 .02 0v4.03c-1.49.06-2.71 1.28-2.77 2.77-.06 1.49 1.28 2.71 2.77 2.77 1.49.06 2.71-1.28 2.77-2.77V.02z" />
                   </svg>

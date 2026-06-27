@@ -36,7 +36,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
     <Link
       id={`listing-card-${id}`}
       to={`/listing/${id}`}
-      className="group flex flex-col h-full max-h-[260px] sm:max-h-none bg-white dark:bg-neutral-900 rounded-xl sm:rounded-2xl overflow-hidden border border-gray-100 dark:border-neutral-800 hover:shadow-xl transition-all select-none"
+      className="group flex h-full max-h-[260px] flex-col overflow-hidden rounded-[1.5rem] border border-gray-200/70 bg-white/90 shadow-[0_12px_35px_rgba(15,23,42,0.06)] transition-all duration-300 select-none hover:-translate-y-1 hover:shadow-[0_20px_50px_rgba(15,23,42,0.10)] dark:border-neutral-800/80 dark:bg-neutral-900/90 sm:max-h-none"
     >
       {/* Aspect-square Thumbnail Container */}
       <div className="relative w-full aspect-square overflow-hidden shrink-0">

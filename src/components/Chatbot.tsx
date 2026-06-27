@@ -4,7 +4,15 @@ import { MessageCircle, X, Send, Bot, AlertCircle, Sparkles } from 'lucide-react
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
+
+const createGeminiClient = () => {
+  if (!geminiApiKey) {
+    return null;
+  }
+
+  return new GoogleGenAI({ apiKey: geminiApiKey });
+};
 
 export const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -33,6 +41,13 @@ export const Chatbot = () => {
     setIsLoading(true);
 
     try {
+      const ai = createGeminiClient();
+
+      if (!ai) {
+        setMessages(prev => [...prev, { role: 'model', text: 'The AI assistant is currently unavailable. You can still browse the marketplace and contact support for help.' }]);
+        return;
+      }
+
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
@@ -72,6 +87,7 @@ CRITICAL SECURITY AND TECHNICAL BOUNDARIES:
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 p-4 bg-gradient-to-tr from-primary via-emerald-600 to-emerald-950 text-white rounded-full shadow-[0_8px_30px_rgba(16,185,129,0.3)] hover:scale-110 hover:shadow-[0_8px_30px_rgba(16,185,129,0.5)] transition-all duration-300 z-[60] flex items-center justify-center group"
         title="Open HudumaLink Assistant"
+        aria-label="Open HudumaLink Assistant"
       >
         <div className="relative">
           <Sparkles className="w-6 h-6 text-white group-hover:rotate-12 transition-transform duration-300 animate-pulse" />
@@ -118,6 +134,8 @@ CRITICAL SECURITY AND TECHNICAL BOUNDARIES:
               <button 
                 onClick={() => setIsOpen(false)} 
                 className="p-1.5 hover:bg-white/10 rounded-full transition-colors relative z-10 text-white/85 hover:text-white"
+                aria-label="Close chat assistant"
+                title="Close chat assistant"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -185,6 +203,8 @@ CRITICAL SECURITY AND TECHNICAL BOUNDARIES:
                 type="submit"
                 disabled={isLoading || !input.trim()}
                 className="p-3 bg-gradient-to-tr from-primary to-emerald-600 text-white rounded-xl hover:scale-105 hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center shrink-0 shadow-md shadow-primary/10"
+                aria-label="Send message"
+                title="Send message"
               >
                 <Send className="w-4 h-4" />
               </button>
